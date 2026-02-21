@@ -1,0 +1,22 @@
+{
+    "name": "PhysicsDrivenMovement.Tests.EditMode",
+    "rootNamespace": "PhysicsDrivenMovement.Tests.EditMode",
+    "references": [
+        "PhysicsDrivenMovement.Core",
+        "PhysicsDrivenMovement.Character"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "noEngineReferences": false
+}

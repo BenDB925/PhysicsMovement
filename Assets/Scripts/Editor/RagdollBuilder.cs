@@ -1,0 +1,520 @@
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEngine;
+using PhysicsDrivenMovement.Character;
+
+namespace PhysicsDrivenMovement.Editor
+{
+    /// <summary>
+    /// Editor utility that procedurally builds the PlayerRagdoll prefab from scratch.
+    /// Creates the 15-body humanoid hierarchy, adds Rigidbodies with correct masses,
+    /// shaped Colliders, ConfigurableJoints with anatomical angle limits, a
+    /// shared PhysicsMaterial, and primitive mesh renderers for each body part.
+    /// Each segment gets a child "Visual" GameObject with a MeshFilter + MeshRenderer
+    /// using sphere/capsule/cube primitives sized to match the physics collider.
+    /// Attach <see cref="RagdollSetup"/> at root.
+    /// Access via: Tools → PhysicsDrivenMovement → Build Player Ragdoll.
+    /// Collaborators: <see cref="RagdollSetup"/>.
+    /// </summary>
+    public static class RagdollBuilder
+    {
+        // ─── Body Segment Definition ─────────────────────────────────────────
+
+        private enum ColliderShape { Box, Capsule, Sphere }
+
+        /// <summary>Data bag describing one body segment.</summary>
+        private readonly struct SegmentDef
+        {
+            public readonly string  Name;
+            public readonly string  ParentName;
+            public readonly float   Mass;
+            public readonly Vector3 LocalPosition;
+
+            // Collider
+            public readonly ColliderShape Shape;
+            public readonly Vector3       BoxSize;     // for Box
+            public readonly float         CapsuleRadius;
+            public readonly float         CapsuleHeight;
+            public readonly int           CapsuleDir;  // 0=X, 1=Y, 2=Z
+            public readonly float         SphereRadius;
+
+            // Joint limits (degrees) — only used when ParentName != null.
+            // Angular X is the primary hinge / most limited axis.
+            public readonly float LowAngX;
+            public readonly float HighAngX;
+            public readonly float AngY;
+            public readonly float AngZ;
+
+            // Joint axis (primary) in child local space.
+            public readonly Vector3 JointAxis;
+            public readonly Vector3 JointSecondaryAxis;
+
+            public SegmentDef(
+                string name, string parent, float mass, Vector3 localPos,
+                ColliderShape shape,
+                Vector3 boxSize = default, float capsuleRadius = 0f,
+                float capsuleHeight = 0f, int capsuleDir = 1, float sphereRadius = 0f,
+                float lowAngX = -40f, float highAngX = 40f,
+                float angY = 30f, float angZ = 30f,
+                Vector3 jointAxis = default, Vector3 jointSecondaryAxis = default)
+            {
+                Name             = name;
+                ParentName       = parent;
+                Mass             = mass;
+                LocalPosition    = localPos;
+                Shape            = shape;
+                BoxSize          = boxSize;
+                CapsuleRadius    = capsuleRadius;
+                CapsuleHeight    = capsuleHeight;
+                CapsuleDir       = capsuleDir;
+                SphereRadius     = sphereRadius;
+                LowAngX          = lowAngX;
+                HighAngX         = highAngX;
+                AngY             = angY;
+                AngZ             = angZ;
+                JointAxis        = jointAxis == default ? Vector3.right : jointAxis;
+                JointSecondaryAxis = jointSecondaryAxis == default ? Vector3.up : jointSecondaryAxis;
+            }
+        }
+
+        // ─── Segment Table ─────────────────────────────────────────────────────
+        // DESIGN: Centre-positioning convention — each GameObject sits at the centre
+        //         of its body part. joint.anchor = zero; autoConfigureConnectedAnchor
+        //         = true so Unity resolves the connected anchor in parent space.
+        // Masses total ~49 kg; adjust Torso to reach desired total.
+
+        private static readonly SegmentDef[] Segments = new[]
+        {
+            // ── Core ────────────────────────────────────────────────────────────
+            new SegmentDef(
+                name: "Hips", parent: null, mass: 10f,
+                localPos: Vector3.zero,
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.26f, 0.20f, 0.15f)),
+
+            new SegmentDef(
+                name: "Torso", parent: "Hips", mass: 12f,
+                localPos: new Vector3(0f, 0.32f, 0f),
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.28f, 0.32f, 0.14f),
+                lowAngX: -40f, highAngX: 40f, angY: 30f, angZ: 25f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up),
+
+            new SegmentDef(
+                name: "Head", parent: "Torso", mass: 4f,
+                localPos: new Vector3(0f, 0.27f, 0f),
+                shape: ColliderShape.Sphere,
+                sphereRadius: 0.11f,
+                lowAngX: -40f, highAngX: 40f, angY: 35f, angZ: 20f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up),
+
+            // ── Left Arm ────────────────────────────────────────────────────────
+            new SegmentDef(
+                name: "UpperArm_L", parent: "Torso", mass: 2f,
+                localPos: new Vector3(-0.23f, 0.08f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
+                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up),
+
+            new SegmentDef(
+                name: "LowerArm_L", parent: "UpperArm_L", mass: 1.5f,
+                localPos: new Vector3(0f, -0.27f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "Hand_L", parent: "LowerArm_L", mass: 0.5f,
+                localPos: new Vector3(0f, -0.22f, 0f),
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            // ── Right Arm ───────────────────────────────────────────────────────
+            new SegmentDef(
+                name: "UpperArm_R", parent: "Torso", mass: 2f,
+                localPos: new Vector3(0.23f, 0.08f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
+                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up),
+
+            new SegmentDef(
+                name: "LowerArm_R", parent: "UpperArm_R", mass: 1.5f,
+                localPos: new Vector3(0f, -0.27f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "Hand_R", parent: "LowerArm_R", mass: 0.5f,
+                localPos: new Vector3(0f, -0.22f, 0f),
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            // ── Left Leg ────────────────────────────────────────────────────────
+            new SegmentDef(
+                name: "UpperLeg_L", parent: "Hips", mass: 4f,
+                localPos: new Vector3(-0.10f, -0.22f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
+                lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "LowerLeg_L", parent: "UpperLeg_L", mass: 2.5f,
+                localPos: new Vector3(0f, -0.38f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
+                lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "Foot_L", parent: "LowerLeg_L", mass: 1f,
+                localPos: new Vector3(0f, -0.35f, 0.07f),
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.10f, 0.07f, 0.22f),
+                lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            // ── Right Leg ───────────────────────────────────────────────────────
+            new SegmentDef(
+                name: "UpperLeg_R", parent: "Hips", mass: 4f,
+                localPos: new Vector3(0.10f, -0.22f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
+                lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "LowerLeg_R", parent: "UpperLeg_R", mass: 2.5f,
+                localPos: new Vector3(0f, -0.38f, 0f),
+                shape: ColliderShape.Capsule,
+                capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
+                lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+
+            new SegmentDef(
+                name: "Foot_R", parent: "LowerLeg_R", mass: 1f,
+                localPos: new Vector3(0f, -0.35f, 0.07f),
+                shape: ColliderShape.Box,
+                boxSize: new Vector3(0.10f, 0.07f, 0.22f),
+                lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+        };
+
+        // ─── Menu Entry ────────────────────────────────────────────────────────
+
+        [MenuItem("Tools/PhysicsDrivenMovement/Build Player Ragdoll")]
+        public static void BuildRagdollPrefab()
+        {
+            const string prefabPath   = "Assets/Prefabs/PlayerRagdoll.prefab";
+            const string materialPath = "Assets/PhysicsMaterials/Ragdoll.asset";
+            const string bodyMatPath  = "Assets/Materials/RagdollBody.mat";
+
+            // STEP 1: Create (or refresh) the physics material asset.
+            PhysicsMaterial physicsMat = CreateOrLoadPhysicsMaterial(materialPath);
+
+            // STEP 1b: Create (or refresh) the visual body material.
+            Material bodyMat = CreateOrLoadBodyMaterial(bodyMatPath);
+
+            // STEP 2: Build the GameObject hierarchy in memory.
+            var goMap = new Dictionary<string, GameObject>(Segments.Length);
+
+            GameObject rootGO = null;
+
+            foreach (SegmentDef seg in Segments)
+            {
+                GameObject go = new GameObject(seg.Name);
+
+                // STEP 2a: Add Rigidbody with correct mass and interpolation.
+                Rigidbody rb = go.AddComponent<Rigidbody>();
+                rb.mass             = seg.Mass;
+                rb.interpolation    = RigidbodyInterpolation.Interpolate;
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+                // STEP 2b: Add collider shaped to the body part.
+                AddCollider(go, seg, physicsMat);
+
+                // STEP 2c: Add a child Visual mesh so there is something to see.
+                AddMeshRenderer(go, seg, bodyMat);
+
+                // STEP 2d: Parent under correct segment.
+                if (seg.ParentName != null && goMap.TryGetValue(seg.ParentName, out GameObject parentGO))
+                {
+                    go.transform.SetParent(parentGO.transform, worldPositionStays: false);
+                }
+
+                go.transform.localPosition = seg.LocalPosition;
+                go.transform.localRotation = Quaternion.identity;
+
+                goMap[seg.Name] = go;
+
+                if (seg.ParentName == null)
+                {
+                    rootGO = go;
+                }
+            }
+
+            // STEP 3: Add ConfigurableJoints after all objects exist (connectedBody references need GOs).
+            foreach (SegmentDef seg in Segments)
+            {
+                if (seg.ParentName == null)
+                {
+                    continue;
+                }
+
+                ConfigureJoint(goMap[seg.Name], goMap[seg.ParentName].GetComponent<Rigidbody>(), seg);
+            }
+
+            // STEP 4: Add RagdollSetup to the root (Hips).
+            Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
+            rootGO.AddComponent<RagdollSetup>();
+
+            // STEP 5: Save as a prefab asset.
+            string directory = System.IO.Path.GetDirectoryName(prefabPath);
+            if (!AssetDatabase.IsValidFolder(directory))
+            {
+                AssetDatabase.CreateFolder(
+                    System.IO.Path.GetDirectoryName(directory),
+                    System.IO.Path.GetFileName(directory));
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(rootGO, prefabPath);
+            Object.DestroyImmediate(rootGO);
+
+            AssetDatabase.Refresh();
+            Debug.Log($"[RagdollBuilder] PlayerRagdoll prefab saved to '{prefabPath}'.");
+        }
+
+        // ─── Private Helpers ──────────────────────────────────────────────────
+
+        // ─── Primitive Mesh Cache ─────────────────────────────────────────────
+        // Avoids creating many temporary primitives during a single build pass.
+        private static readonly Dictionary<PrimitiveType, Mesh> s_meshCache = new();
+
+        private static Mesh GetPrimitiveMesh(PrimitiveType type)
+        {
+            if (s_meshCache.TryGetValue(type, out Mesh cached))
+                return cached;
+
+            GameObject temp = GameObject.CreatePrimitive(type);
+            Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
+            Object.DestroyImmediate(temp);
+            s_meshCache[type] = mesh;
+            return mesh;
+        }
+
+        /// <summary>
+        /// Adds a child "Visual" GameObject to <paramref name="go"/> carrying a
+        /// MeshFilter and MeshRenderer sized to visually match the physics collider.
+        /// A child is used so that its local scale does not affect sibling or child
+        /// segment positions in the hierarchy.
+        /// </summary>
+        private static void AddMeshRenderer(GameObject go, in SegmentDef seg, Material material)
+        {
+            GameObject visual = new GameObject("Visual");
+            visual.transform.SetParent(go.transform, worldPositionStays: false);
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+
+            MeshFilter   mf = visual.AddComponent<MeshFilter>();
+            MeshRenderer mr = visual.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = material;
+
+            switch (seg.Shape)
+            {
+                case ColliderShape.Box:
+                    // Unity cube primitive is 1×1×1 at scale 1.
+                    mf.sharedMesh = GetPrimitiveMesh(PrimitiveType.Cube);
+                    visual.transform.localScale = seg.BoxSize;
+                    break;
+
+                case ColliderShape.Capsule:
+                    // Unity capsule primitive: total height = 2, radius = 0.5 at scale 1.
+                    mf.sharedMesh = GetPrimitiveMesh(PrimitiveType.Capsule);
+                    float xzScale = seg.CapsuleRadius * 2f;
+                    float yScale  = seg.CapsuleHeight * 0.5f;
+                    switch (seg.CapsuleDir)
+                    {
+                        case 0: // X-axis
+                            visual.transform.localScale    = new Vector3(yScale, xzScale, xzScale);
+                            visual.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                            break;
+                        case 2: // Z-axis
+                            visual.transform.localScale    = new Vector3(xzScale, xzScale, yScale);
+                            visual.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                            break;
+                        default: // Y-axis (dir == 1)
+                            visual.transform.localScale = new Vector3(xzScale, yScale, xzScale);
+                            break;
+                    }
+                    break;
+
+                case ColliderShape.Sphere:
+                    // Unity sphere primitive: radius = 0.5 at scale 1.
+                    mf.sharedMesh = GetPrimitiveMesh(PrimitiveType.Sphere);
+                    float diameter = seg.SphereRadius * 2f;
+                    visual.transform.localScale = Vector3.one * diameter;
+                    break;
+
+                default:
+                    Debug.LogError($"[RagdollBuilder] Unknown ColliderShape on '{seg.Name}' — no visual added.");
+                    Object.DestroyImmediate(visual);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Creates or loads a simple lit material for the ragdoll body. Uses a warm
+        /// skin-tone colour so the character reads clearly in the Scene view.
+        /// </summary>
+        private static Material CreateOrLoadBodyMaterial(string assetPath)
+        {
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
+            if (mat != null)
+                return mat;
+
+            // URP Lit shader with a fallback to the Standard shader if URP is absent.
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard");
+
+            mat = new Material(shader)
+            {
+                name  = "RagdollBody",
+                color = new Color(0.85f, 0.69f, 0.55f), // warm skin tone
+            };
+
+            string directory = System.IO.Path.GetDirectoryName(assetPath);
+            if (!AssetDatabase.IsValidFolder(directory))
+            {
+                AssetDatabase.CreateFolder(
+                    System.IO.Path.GetDirectoryName(directory),
+                    System.IO.Path.GetFileName(directory));
+            }
+
+            AssetDatabase.CreateAsset(mat, assetPath);
+            return mat;
+        }
+
+        /// <summary>
+        /// Creates a new Ragdoll physics material or loads the existing one.
+        /// Static friction 0.6, dynamic friction 0.4, minimal bounciness.
+        /// </summary>
+        private static PhysicsMaterial CreateOrLoadPhysicsMaterial(string assetPath)
+        {
+            PhysicsMaterial mat = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(assetPath);
+            if (mat != null)
+            {
+                return mat;
+            }
+
+            mat = new PhysicsMaterial("Ragdoll")
+            {
+                staticFriction    = 0.6f,
+                dynamicFriction   = 0.4f,
+                bounciness        = 0f,
+                frictionCombine   = PhysicsMaterialCombine.Average,
+                bounceCombine     = PhysicsMaterialCombine.Average
+            };
+
+            AssetDatabase.CreateAsset(mat, assetPath);
+            return mat;
+        }
+
+        /// <summary>
+        /// Adds the correct collider component to <paramref name="go"/> based on the
+        /// segment definition, and assigns the shared <paramref name="physicsMat"/>.
+        /// </summary>
+        private static void AddCollider(GameObject go, in SegmentDef seg, PhysicsMaterial physicsMat)
+        {
+            Collider col;
+
+            switch (seg.Shape)
+            {
+                case ColliderShape.Box:
+                    BoxCollider box = go.AddComponent<BoxCollider>();
+                    box.size = seg.BoxSize;
+                    col = box;
+                    break;
+
+                case ColliderShape.Capsule:
+                    CapsuleCollider capsule = go.AddComponent<CapsuleCollider>();
+                    capsule.radius    = seg.CapsuleRadius;
+                    capsule.height    = seg.CapsuleHeight;
+                    capsule.direction = seg.CapsuleDir;
+                    col = capsule;
+                    break;
+
+                case ColliderShape.Sphere:
+                    SphereCollider sphere = go.AddComponent<SphereCollider>();
+                    sphere.radius = seg.SphereRadius;
+                    col = sphere;
+                    break;
+
+                default:
+                    Debug.LogError($"[RagdollBuilder] Unknown ColliderShape on '{seg.Name}'.");
+                    return;
+            }
+
+            col.material = physicsMat;
+        }
+
+        /// <summary>
+        /// Adds and configures a ConfigurableJoint on <paramref name="childGO"/>, connecting
+        /// it to <paramref name="parentRb"/>. Locks all linear axes, limits all angular axes
+        /// using anatomically derived angle limits from <paramref name="seg"/>.
+        /// </summary>
+        private static void ConfigureJoint(
+            GameObject childGO, Rigidbody parentRb, in SegmentDef seg)
+        {
+            ConfigurableJoint joint = childGO.AddComponent<ConfigurableJoint>();
+            joint.connectedBody = parentRb;
+
+            // Lock translation — ragdoll segments do not translate relative to their parent.
+            joint.xMotion = ConfigurableJointMotion.Locked;
+            joint.yMotion = ConfigurableJointMotion.Locked;
+            joint.zMotion = ConfigurableJointMotion.Locked;
+
+            // Limit rotation on all three axes with anatomical ranges.
+            joint.angularXMotion = ConfigurableJointMotion.Limited;
+            joint.angularYMotion = ConfigurableJointMotion.Limited;
+            joint.angularZMotion = ConfigurableJointMotion.Limited;
+
+            // Primary axis (X) — asymmetric limits allow one-directional joints (e.g. knee).
+            joint.lowAngularXLimit  = new SoftJointLimit { limit = seg.LowAngX };
+            joint.highAngularXLimit = new SoftJointLimit { limit = seg.HighAngX };
+
+            // Secondary axes — symmetric limits.
+            joint.angularYLimit = new SoftJointLimit { limit = seg.AngY };
+            joint.angularZLimit = new SoftJointLimit { limit = seg.AngZ };
+
+            // Joint orientation axes.
+            joint.axis          = seg.JointAxis;
+            joint.secondaryAxis = seg.JointSecondaryAxis;
+
+            // Auto-configure anchors so the joint pivot is at the child's origin
+            // (centre of body part) within parent space.
+            joint.anchor          = Vector3.zero;
+            joint.autoConfigureConnectedAnchor = true;
+
+            // DESIGN: enableCollision = false because RagdollSetup.DisableNeighboringCollisions
+            //         handles collision ignoring explicitly. Enabling it here would conflict.
+            joint.enableCollision = false;
+
+            // Enable preprocessing to improve joint solver stability under large forces.
+            joint.enablePreprocessing = true;
+
+            // Projection: snap bodies back if they drift beyond threshold (safety net).
+            joint.projectionMode          = JointProjectionMode.PositionAndRotation;
+            joint.projectionDistance      = 0.1f;
+            joint.projectionAngle         = 5f;
+        }
+    }
+}

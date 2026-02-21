@@ -1,0 +1,19 @@
+{
+    "name": "PhysicsDrivenMovement.Editor",
+    "rootNamespace": "PhysicsDrivenMovement.Editor",
+    "references": [
+        "PhysicsDrivenMovement.Core",
+        "PhysicsDrivenMovement.Character"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
