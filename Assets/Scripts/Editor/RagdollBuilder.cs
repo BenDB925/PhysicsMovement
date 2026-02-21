@@ -19,6 +19,8 @@ namespace PhysicsDrivenMovement.Editor
     /// </summary>
     public static class RagdollBuilder
     {
+        private const int DefaultPlayerPartsLayer = GameSettings.LayerPlayer1Parts;
+
         // ─── Body Segment Definition ─────────────────────────────────────────
 
         private enum ColliderShape { Box, Capsule, Sphere }
@@ -119,7 +121,7 @@ namespace PhysicsDrivenMovement.Editor
                 boxSize: new Vector3(0.28f, 0.32f, 0.14f),
                 lowAngX: -40f, highAngX: 40f, angY: 30f, angZ: 25f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
-                driveProfile: new JointDriveProfile(300f, 30f, 1000f)),
+                driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "Head", parent: "Torso", mass: 4f,
@@ -194,7 +196,7 @@ namespace PhysicsDrivenMovement.Editor
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(200f, 20f, 800f)),
+                driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "LowerLeg_L", parent: "UpperLeg_L", mass: 2.5f,
@@ -203,7 +205,7 @@ namespace PhysicsDrivenMovement.Editor
                 capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(150f, 15f, 600f)),
+                driveProfile: new JointDriveProfile(550f, 55f, 2200f)),
 
             new SegmentDef(
                 name: "Foot_L", parent: "LowerLeg_L", mass: 1f,
@@ -212,7 +214,7 @@ namespace PhysicsDrivenMovement.Editor
                 boxSize: new Vector3(0.10f, 0.07f, 0.22f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
+                driveProfile: new JointDriveProfile(350f, 35f, 1200f)),
 
             // ── Right Leg ───────────────────────────────────────────────────────
             new SegmentDef(
@@ -222,7 +224,7 @@ namespace PhysicsDrivenMovement.Editor
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(200f, 20f, 800f)),
+                driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "LowerLeg_R", parent: "UpperLeg_R", mass: 2.5f,
@@ -231,7 +233,7 @@ namespace PhysicsDrivenMovement.Editor
                 capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(150f, 15f, 600f)),
+                driveProfile: new JointDriveProfile(550f, 55f, 2200f)),
 
             new SegmentDef(
                 name: "Foot_R", parent: "LowerLeg_R", mass: 1f,
@@ -240,7 +242,7 @@ namespace PhysicsDrivenMovement.Editor
                 boxSize: new Vector3(0.10f, 0.07f, 0.22f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
-                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
+                driveProfile: new JointDriveProfile(350f, 35f, 1200f)),
         };
 
         // ─── Menu Entry ────────────────────────────────────────────────────────
@@ -266,6 +268,7 @@ namespace PhysicsDrivenMovement.Editor
             foreach (SegmentDef seg in Segments)
             {
                 GameObject go = new GameObject(seg.Name);
+                go.layer = DefaultPlayerPartsLayer;
 
                 // STEP 2a: Add Rigidbody with correct mass and interpolation.
                 Rigidbody rb = go.AddComponent<Rigidbody>();
@@ -310,6 +313,8 @@ namespace PhysicsDrivenMovement.Editor
             // STEP 4: Add RagdollSetup to the root (Hips).
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
             rootGO.AddComponent<RagdollSetup>();
+            rootGO.AddComponent<BalanceController>();
+            rootGO.AddComponent<DebugPushForce>();
 
             // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.
             AttachGroundSensor(goMap["Foot_L"]);
@@ -347,6 +352,8 @@ namespace PhysicsDrivenMovement.Editor
             // serialises it correctly into the prefab.
             using var so = new SerializedObject(sensor);
             so.FindProperty("_groundLayers").intValue = 1 << GameSettings.LayerEnvironment;
+            so.FindProperty("_castRadius").floatValue = 0.08f;
+            so.FindProperty("_castDistance").floatValue = 0.25f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -378,6 +385,7 @@ namespace PhysicsDrivenMovement.Editor
             visual.transform.SetParent(go.transform, worldPositionStays: false);
             visual.transform.localPosition = Vector3.zero;
             visual.transform.localRotation = Quaternion.identity;
+            visual.layer = go.layer;
 
             MeshFilter   mf = visual.AddComponent<MeshFilter>();
             MeshRenderer mr = visual.AddComponent<MeshRenderer>();

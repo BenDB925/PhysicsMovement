@@ -17,11 +17,11 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0.02f, 0.2f)]
         [Tooltip("Radius of the downward SphereCast. Should be slightly smaller than the foot width.")]
-        private float _castRadius = 0.06f;
+        private float _castRadius = 0.08f;
 
         [SerializeField, Range(0.05f, 0.5f)]
         [Tooltip("Maximum distance the cast travels below the foot origin to check for ground.")]
-        private float _castDistance = 0.12f;
+        private float _castDistance = 0.25f;
 
         [SerializeField]
         [Tooltip("Layer mask for surfaces that count as ground. Assign the Environment layer.")]
@@ -30,6 +30,7 @@ namespace PhysicsDrivenMovement.Character
         // ─── Private Fields ──────────────────────────────────────────────────
 
         private bool _isGrounded;
+        private Collider _footCollider;
 
         // ─── Public Properties ────────────────────────────────────────────────
 
@@ -41,17 +42,27 @@ namespace PhysicsDrivenMovement.Character
 
         // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
+        private void Awake()
+        {
+            if (!TryGetComponent(out _footCollider))
+            {
+                Debug.LogWarning($"[GroundSensor] '{name}' has no Collider. Falling back to transform-based cast origin.", this);
+            }
+        }
+
         private void FixedUpdate()
         {
-            // Cast downward from this foot's world position.
-            // world-down is used deliberately — an angled foot should still detect
-            // the ground that is directly beneath it in world space.
+            // Use the foot collider's world-space bounds to anchor the cast at the sole.
+            // This keeps the sensor stable even when the foot transform pivot is not
+            // exactly at the bottom of the collider.
+            Vector3 origin = GetCastOrigin();
+
             _isGrounded = Physics.SphereCast(
-                origin:    transform.position,
+                origin: origin,
                 radius:    _castRadius,
                 direction: Vector3.down,
                 hitInfo:   out _,
-                maxDistance: _castDistance,
+                maxDistance: _castDistance + _castRadius,
                 layerMask:   _groundLayers,
                 queryTriggerInteraction: QueryTriggerInteraction.Ignore);
         }
@@ -60,14 +71,30 @@ namespace PhysicsDrivenMovement.Character
 
         private void OnDrawGizmosSelected()
         {
-            // Draw the cast endpoint sphere to show the effective ground detection range.
+            // Draw the cast origin sphere and endpoint sphere to show the effective
+            // ground detection range.
+            Vector3 origin = GetCastOrigin();
+            Vector3 castEnd = origin + Vector3.down * (_castDistance + _castRadius);
+
             Gizmos.color = _isGrounded ? Color.green : Color.red;
-            Vector3 castEnd = transform.position + Vector3.down * _castDistance;
+            Gizmos.DrawWireSphere(origin, _castRadius);
             Gizmos.DrawWireSphere(castEnd, _castRadius);
 
             // Also draw a line from origin to endpoint for clarity.
             Gizmos.color = new Color(Gizmos.color.r, Gizmos.color.g, Gizmos.color.b, 0.5f);
-            Gizmos.DrawLine(transform.position, castEnd);
+            Gizmos.DrawLine(origin, castEnd);
+        }
+
+        private Vector3 GetCastOrigin()
+        {
+            if (_footCollider != null)
+            {
+                Bounds bounds = _footCollider.bounds;
+                float soleY = bounds.min.y;
+                return new Vector3(bounds.center.x, soleY + _castRadius + 0.002f, bounds.center.z);
+            }
+
+            return transform.position + Vector3.up * _castRadius;
         }
     }
 }

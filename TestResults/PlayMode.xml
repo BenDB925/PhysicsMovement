@@ -1,46 +1,195 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="4" result="Passed" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.0605452">
-  <test-suite type="TestSuite" id="1013" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.060545" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="24" result="Passed" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.5794309">
+  <test-suite type="TestSuite" id="1036" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="24" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.579431" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0">
     <properties>
       <property name="platform" value="PlayMode" />
     </properties>
-    <test-suite type="Assembly" id="1006" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="H:/Work/PhysicsDrivenMovementDemo/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.052790" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1029" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="H:/Work/PhysicsDrivenMovementDemo/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="24" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.572058" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="2300" />
+        <property name="_PID" value="35684" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="PlayMode" />
         <property name="EditorOnly" value="False" />
       </properties>
-      <test-suite type="TestSuite" id="1007" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.052077" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1030" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="24" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.571450" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-suite type="TestSuite" id="1008" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.051739" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1031" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="24" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.571100" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0">
           <properties />
-          <test-suite type="TestSuite" id="1009" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.051353" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestSuite" id="1032" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="24" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:11Z" duration="42.570657" total="24" passed="24" failed="0" inconclusive="0" skipped="0" asserts="0">
             <properties />
-            <test-suite type="TestFixture" id="1001" name="RagdollSetupTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.050113" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1001" name="BalanceControllerIntegrationTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" testcasecount="9" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:15:04Z" duration="36.031891" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-case id="1002" name="AllBodies_AfterAwake_ContainsHipsAndTorso" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.AllBodies_AfterAwake_ContainsHipsAndTorso" methodname="AllBodies_AfterAwake_ContainsHipsAndTorso" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1586472044" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.028805" asserts="0">
+              <test-case id="1002" name="Bug_GroundOnWrongLayer_CharacterFallsOver" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.Bug_GroundOnWrongLayer_CharacterFallsOver" methodname="Bug_GroundOnWrongLayer_CharacterFallsOver" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="987225973" result="Passed" start-time="2026-02-21 20:14:28Z" end-time="2026-02-21 20:14:30Z" duration="2.014767" asserts="0">
                 <properties>
                   <property name="_JOINTYPE" value="UnityCombinatorial" />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1003" name="NeighboringColliders_AfterAwake_CollisionIsIgnored" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.NeighboringColliders_AfterAwake_CollisionIsIgnored" methodname="NeighboringColliders_AfterAwake_CollisionIsIgnored" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="691337426" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.002093" asserts="0">
+              <test-case id="1008" name="GroundSensor_DetectsEnvironmentLayerGround" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_DetectsEnvironmentLayerGround" methodname="GroundSensor_DetectsEnvironmentLayerGround" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="806378110" result="Passed" start-time="2026-02-21 20:14:30Z" end-time="2026-02-21 20:14:32Z" duration="1.993389" asserts="0">
                 <properties>
                   <property name="_JOINTYPE" value="UnityCombinatorial" />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1004" name="RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" methodname="RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1236520774" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.001699" asserts="0">
+              <test-case id="1009" name="GroundSensor_DoesNotDetectWrongLayerGround" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_DoesNotDetectWrongLayerGround" methodname="GroundSensor_DoesNotDetectWrongLayerGround" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="72824954" result="Passed" start-time="2026-02-21 20:14:32Z" end-time="2026-02-21 20:14:34Z" duration="1.999410" asserts="0">
                 <properties>
                   <property name="_JOINTYPE" value="UnityCombinatorial" />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1005" name="UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" methodname="UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1931354689" result="Passed" start-time="2026-02-21 12:30:32Z" end-time="2026-02-21 12:30:32Z" duration="0.004045" asserts="0">
+              <test-case id="1005" name="ModeratePush_SwaysButRecovers" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.ModeratePush_SwaysButRecovers" methodname="ModeratePush_SwaysButRecovers" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="775073065" result="Passed" start-time="2026-02-21 20:14:34Z" end-time="2026-02-21 20:14:39Z" duration="4.999877" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1006" name="RepeatedSmallPushes_CharacterStaysStanding" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.RepeatedSmallPushes_CharacterStaysStanding" methodname="RepeatedSmallPushes_CharacterStaysStanding" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="455445815" result="Passed" start-time="2026-02-21 20:14:39Z" end-time="2026-02-21 20:14:47Z" duration="7.499868" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1010" name="SetFacingDirection_ThenPush_StillRecovers" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.SetFacingDirection_ThenPush_StillRecovers" methodname="SetFacingDirection_ThenPush_StillRecovers" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="1061229293" result="Passed" start-time="2026-02-21 20:14:47Z" end-time="2026-02-21 20:14:52Z" duration="5.499629" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1004" name="SmallPush_CausesWobble_ThenRecovers" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.SmallPush_CausesWobble_ThenRecovers" methodname="SmallPush_CausesWobble_ThenRecovers" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="428381539" result="Passed" start-time="2026-02-21 20:14:52Z" end-time="2026-02-21 20:14:57Z" duration="5.009783" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1003" name="StandsUpright_OnCorrectLayerGround_TiltBelow25Degrees" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.StandsUpright_OnCorrectLayerGround_TiltBelow25Degrees" methodname="StandsUpright_OnCorrectLayerGround_TiltBelow25Degrees" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="1066609181" result="Passed" start-time="2026-02-21 20:14:57Z" end-time="2026-02-21 20:14:59Z" duration="2.000063" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1007" name="StrongPush_KnocksCharacterDown" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.StrongPush_KnocksCharacterDown" methodname="StrongPush_KnocksCharacterDown" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests" runstate="Runnable" seed="90482863" result="Passed" start-time="2026-02-21 20:14:59Z" end-time="2026-02-21 20:15:04Z" duration="4.999681" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1011" name="BalanceControllerTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" testcasecount="9" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.128174" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1020" name="FixedUpdate_WhenFallen_DoesNotApplyTorque" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.FixedUpdate_WhenFallen_DoesNotApplyTorque" methodname="FixedUpdate_WhenFallen_DoesNotApplyTorque" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="193107042" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.011474" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1019" name="FixedUpdate_WhenUprightAndTilted_AppliesCorrectionTorque" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.FixedUpdate_WhenUprightAndTilted_AppliesCorrectionTorque" methodname="FixedUpdate_WhenUprightAndTilted_AppliesCorrectionTorque" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="1605472181" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.025078" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1016" name="IsFallen_Hysteresis_HoldsBetweenEnterAndExitThresholds" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.IsFallen_Hysteresis_HoldsBetweenEnterAndExitThresholds" methodname="IsFallen_Hysteresis_HoldsBetweenEnterAndExitThresholds" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="304499859" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.029676" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1015" name="IsFallen_WhenHipsTiltedAtThreshold_ReturnsFalse" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.IsFallen_WhenHipsTiltedAtThreshold_ReturnsFalse" methodname="IsFallen_WhenHipsTiltedAtThreshold_ReturnsFalse" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="1238625188" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.009727" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1014" name="IsFallen_WhenHipsTiltedBeyondThreshold_ReturnsTrue" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.IsFallen_WhenHipsTiltedBeyondThreshold_ReturnsTrue" methodname="IsFallen_WhenHipsTiltedBeyondThreshold_ReturnsTrue" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="1615086115" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.009960" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1013" name="IsFallen_WhenHipsUpright_ReturnsFalse" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.IsFallen_WhenHipsUpright_ReturnsFalse" methodname="IsFallen_WhenHipsUpright_ReturnsFalse" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="1753436953" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.009698" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1012" name="IsGrounded_WhenNoFootOnGround_ReturnsFalse" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.IsGrounded_WhenNoFootOnGround_ReturnsFalse" methodname="IsGrounded_WhenNoFootOnGround_ReturnsFalse" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="2056330164" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.009902" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1017" name="SetFacingDirection_WithValidDirection_DoesNotThrow" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.SetFacingDirection_WithValidDirection_DoesNotThrow" methodname="SetFacingDirection_WithValidDirection_DoesNotThrow" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="498705575" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.010699" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1018" name="SetFacingDirection_WithZeroVector_IsIgnoredSafely" fullname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests.SetFacingDirection_WithZeroVector_IsIgnoredSafely" methodname="SetFacingDirection_WithZeroVector_IsIgnoredSafely" classname="PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerTests" runstate="Runnable" seed="515649775" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:04Z" duration="0.009033" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1021" name="PlayerRagdollPrefabPlayModeTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests" classname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:11Z" duration="6.399869" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1023" name="PlayerRagdollPrefab_FromBackFall_RecoversToStanding" fullname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests.PlayerRagdollPrefab_FromBackFall_RecoversToStanding" methodname="PlayerRagdollPrefab_FromBackFall_RecoversToStanding" classname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests" runstate="Runnable" seed="1205994753" result="Passed" start-time="2026-02-21 20:15:04Z" end-time="2026-02-21 20:15:08Z" duration="4.199497" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1022" name="PlayerRagdollPrefab_OnEnvironmentGround_SettlesWithoutImmediateTopple" fullname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests.PlayerRagdollPrefab_OnEnvironmentGround_SettlesWithoutImmediateTopple" methodname="PlayerRagdollPrefab_OnEnvironmentGround_SettlesWithoutImmediateTopple" classname="PhysicsDrivenMovement.Tests.PlayMode.PlayerRagdollPrefabPlayModeTests" runstate="Runnable" seed="971182749" result="Passed" start-time="2026-02-21 20:15:08Z" end-time="2026-02-21 20:15:11Z" duration="2.199247" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1024" name="RagdollSetupTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-21 20:15:11Z" end-time="2026-02-21 20:15:11Z" duration="0.008656" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1025" name="AllBodies_AfterAwake_ContainsHipsAndTorso" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.AllBodies_AfterAwake_ContainsHipsAndTorso" methodname="AllBodies_AfterAwake_ContainsHipsAndTorso" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1279492734" result="Passed" start-time="2026-02-21 20:15:11Z" end-time="2026-02-21 20:15:11Z" duration="0.002705" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1026" name="NeighboringColliders_AfterAwake_CollisionIsIgnored" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.NeighboringColliders_AfterAwake_CollisionIsIgnored" methodname="NeighboringColliders_AfterAwake_CollisionIsIgnored" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="100658051" result="Passed" start-time="2026-02-21 20:15:11Z" end-time="2026-02-21 20:15:11Z" duration="0.001581" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1027" name="RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" methodname="RagdollWithNoJoints_AfterAwake_DoesNotThrowAndReturnsOneBody" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1808890966" result="Passed" start-time="2026-02-21 20:15:11Z" end-time="2026-02-21 20:15:11Z" duration="0.001429" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1028" name="UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" fullname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests.UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" methodname="UnconnectedColliders_AfterAwake_CollisionIsNotIgnored" classname="PhysicsDrivenMovement.Tests.PlayMode.RagdollSetupTests" runstate="Runnable" seed="1146418610" result="Passed" start-time="2026-02-21 20:15:11Z" end-time="2026-02-21 20:15:11Z" duration="0.001313" asserts="0">
                 <properties>
                   <property name="_JOINTYPE" value="UnityCombinatorial" />
                   <property name="retryIteration" value="0" />

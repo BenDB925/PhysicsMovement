@@ -144,6 +144,33 @@ Unity's CLI only supports one `-testPlatform` per invocation. To run both, execu
     -forgetProjectPath
 ```
 
+### Project Lock Guardrail (Critical)
+
+Unity can only open a project once. If two batch runs overlap (or an Editor instance is open), the second run often crashes with:
+
+- `It looks like another Unity instance is running with this project open.`
+- `Fatal Error!`
+- `Crash!!!`
+
+To avoid this, agents must follow this exact sequence:
+
+1. **Pre-check:** ensure no Unity process is running.
+
+   ```powershell
+   Get-Process -Name "Unity" -ErrorAction SilentlyContinue
+   ```
+
+2. **Run EditMode and wait for completion.**
+3. **Run PlayMode and wait for completion.**
+4. **Never run multiple Unity test invocations in parallel** (including parallel tool calls).
+5. **Always verify fresh XML timestamps** after each run; do not trust stale results.
+
+If a run crashes due to lock contention, stop all Unity processes and rerun sequentially:
+
+```powershell
+Get-Process -Name "Unity" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+```
+
 ---
 
 ## 5 — Parse Test Results (NUnit XML)
@@ -295,6 +322,7 @@ When following the **Development Workflow** from `CODING_STANDARDS.md`:
 1. **The user must close the Unity Editor** before the agent can run batch-mode tests on the same project. Alert the user if Unity is already open.
 2. **Large projects** may take several minutes to import on first batch-mode launch. Use the `-logFile` to monitor progress.
 3. **Add `TestResults/` to `.gitignore`** to avoid committing generated XML/log files.
+4. **Do not launch EditMode and PlayMode at the same time.** They must be strictly sequential in one project workspace.
 
 ---
 

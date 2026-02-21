@@ -21,7 +21,7 @@
 │  GameSettings.Awake()   ─── configures Time, Physics, layers      │
 │                                                                    │
 │  RagdollSetup.Awake()   ─── disables neighbour collisions         │
-│  BalanceController ★    ─── PD torque → upright pose              │
+│  BalanceController      ─── PD torque → upright pose              │
 │  GroundSensor           ─── foot ground detection                 │
 │  PlayerMovement ★       ─── input → AddForce on Hips              │
 │  LegAnimator ★          ─── procedural walk cycle                 │
@@ -94,6 +94,16 @@
 | **Public Surface** | `IsGrounded: bool` — read by `BalanceController`. |
 | **Collaborators** | Read by `BalanceController`; attached by `RagdollBuilder` (Editor). |
 | **Phase** | 2B |
+
+### `Character.BalanceController` — `Assets/Scripts/Character/BalanceController.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on the Hips; applies a PD torque every FixedUpdate to keep the character upright and facing the desired direction. |
+| **Why** | Active ragdolls need a continuous corrective torque to counteract gravity and perturbations; a PD controller is the standard technique (no integral windup risk). |
+| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `SetFacingDirection(Vector3)` — consumed by `PlayerMovement` and `CharacterState` (Phase 3). |
+| **Collaborators** | Reads `GroundSensor.IsGrounded`; forces applied to Hips `Rigidbody`. |
+| **Phase** | 2C |
 
 ---
 
