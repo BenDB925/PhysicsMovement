@@ -126,6 +126,22 @@ $logFile      = "$projectPath\TestResults\PlayMode.log"
 
 ## 4 — Run All Tests (EditMode + PlayMode)
 
+### Preferred command (lock-safe)
+
+Use the repo script below as the default path. It force-stops lingering Unity processes, clears known lock artifacts, runs platforms sequentially, verifies fresh XML output, and retries once if it detects an infra/lock race.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ".\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform All -NoGraphicsForEditMode
+```
+
+Exit codes:
+
+- `0` = all requested test platforms passed
+- `2` = tests executed but one or more failed
+- `10` = infrastructure issue (lock/stale XML/no results)
+
+### Manual commands (fallback)
+
 Unity's CLI only supports one `-testPlatform` per invocation. To run both, execute two sequential commands:
 
 ```powershell
@@ -170,6 +186,16 @@ If a run crashes due to lock contention, stop all Unity processes and rerun sequ
 ```powershell
 Get-Process -Name "Unity" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 ```
+
+Common log signature for this lock race:
+
+- `HandleProjectAlreadyOpenInAnotherInstance`
+
+Operator action:
+
+1. Close any open Unity Editor instance for this project.
+2. Ensure no stray `Unity` process remains.
+3. Re-run EditMode then PlayMode sequentially (or run `Tools/Run-UnityTests.ps1` with `-Platform All`).
 
 ---
 
@@ -225,6 +251,8 @@ else { Write-Host "TESTS FAILED — check results file"; exit 1 }
 ## 6 — Complete Copy-Paste Script
 
 Below is a self-contained PowerShell script that agents can use. Adapt paths as needed.
+
+> If you only need to run tests reliably, prefer `Tools/Run-UnityTests.ps1` from §4 instead of maintaining an inline ad-hoc script.
 
 ```powershell
 # === Configuration ===
@@ -289,6 +317,7 @@ Show-TestResults "PlayMode" "$outDir\PlayMode.xml"
 |---------|----------|
 | **Unity exits with code 1 but no XML file** | Check the log file (`-logFile`). Usually a compile error. Search for `error CS` in the log. |
 | **"Unity is already running"** | Only one Unity instance can open a project at a time. The user must close the Unity Editor before the agent can run tests in batch mode, **or** use a separate copy of the project. |
+| **`HandleProjectAlreadyOpenInAnotherInstance` in log** | This is the same project lock race in batch mode. Close all Unity instances/processes for this project, then rerun tests strictly sequentially (EditMode, then PlayMode). |
 | **PlayMode tests hang** | Add a timeout: use `-quit` (but note: `-quit` can cause issues if tests haven't finished). Better: set `-testSettingsFile` with a timeout. |
 | **No tests found** | Ensure test assemblies have `.asmdef` files referencing `UnityEngine.TestRunner` and `UnityEditor.TestRunner`, and that the test scripts have `[Test]` or `[UnityTest]` attributes. |
 | **`-nographics` causes PlayMode failures** | Some PlayMode tests need a GPU. Remove `-nographics` for PlayMode runs. |

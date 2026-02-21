@@ -104,6 +104,21 @@ Hips (root, no joint)
 
 **Deliverable:** The ragdoll stands up on its own and recovers from light pushes.
 
+### Phase 2E — Stability Hardening & Verification
+
+> **Goal:** Lock in the new standing behavior with production-scene validation and stronger regression tests so future tuning doesn't reintroduce startup collapse.
+
+| Task | Details |
+|------|---------|
+| 2.8 | **Code tidy and safety pass.** Keep debug tuning helpers but ensure they are safe by default (disabled in normal play), and align comments/docs with runtime behavior. |
+| 2.9 | **Real-scene PlayMode validation.** Add a PlayMode test that loads `Arena_01` and validates the in-scene `PlayerRagdoll` startup behavior over time (not only synthetic test rigs). |
+| 2.10 | **Long-run stability regression.** Add a longer-duration stability test (20–30 seconds of physics) tracking max tilt, min hips height, grounded/fallen frame counts, and ensuring recoverable behavior. |
+| 2.11 | **State-transition stress test.** Strengthen push tests to assert explicit transitions (`Standing → Fallen → Standing` where appropriate) instead of tilt-only assertions. |
+| 2.12 | **Test isolation hardening.** Ensure all tests restore global physics and collision settings (`Time.fixedDeltaTime`, solver iterations, layer collision masks) in teardown to avoid cross-test contamination. |
+| 2.13 | **Repeatability sweep.** Add a repeated-run test scenario (same setup, multiple runs) to catch non-deterministic regressions in startup settle and recovery. |
+
+**Deliverable:** Phase 2 has robust unit/integration/prefab/scene coverage and can detect regressions in startup standing behavior before manual QA.
+
 ---
 
 ### Phase 3 — Locomotion
@@ -504,6 +519,58 @@ Below is each task formatted as a standalone brief you can hand to an agent. Eac
    - Lift off ground → `IsGrounded = false`, balance torque reduces: ✓/✗
 
 **Output:** `DebugPushForce.cs`, verified prefab, tuning log comment in `BalanceController.cs`.
+
+---
+
+### AGENT CARD: Phase 2E — Stability Hardening & Real Scene Coverage
+
+**Context:** The character now stands, but this area has had heavy iteration and is vulnerable to regressions. We need a professional hardening pass focused on test quality and production-scene confidence.
+
+**Dependencies:** Phase 2D complete.
+
+**Instructions:**
+
+1. **Add real-scene PlayMode test suite** at `Assets/Tests/PlayMode/Character/Arena01BalanceStabilityTests.cs`.
+   - Load scene `Arena_01` in PlayMode (single mode).
+   - Locate the active `BalanceController` from the in-scene `PlayerRagdoll` instance.
+   - Fail with clear message if no instance is found.
+   - Run for at least `2000` fixed frames (20s at 100 Hz).
+   - Track and assert:
+     - `maxTilt` remains below catastrophic threshold (e.g., `< 75°`),
+     - `minHipsHeight` stays above seated-collapse floor (project-calibrated threshold),
+     - `fallenFrameCount` remains bounded (recoverable behavior, not persistent down state),
+     - final state has at least one grounded foot.
+
+2. **Strengthen strong-force integration expectation** in `Assets/Tests/PlayMode/Character/BalanceControllerIntegrationTests.cs`.
+   - Replace purely tilt-based “strong push” assertion with transition-aware checks:
+     - must exhibit destabilisation,
+     - must either enter `IsFallen` at least once or exceed a high-tilt threshold,
+     - if recovery is expected under current tuning, verify it within a bounded window.
+   - Keep threshold wording resilient to wobble-style gameplay (avoid overfitting to a single numeric outcome).
+
+3. **Add repeatability regression test** in prefab or scene-level PlayMode tests.
+   - Repeat spawn-settle-observe sequence at least 3 times in one test class.
+   - Record per-run metrics (max tilt, min hips height, fallen frames).
+   - Assert all runs remain within safety bounds.
+
+4. **Enforce test hygiene** across Phase 2 PlayMode tests.
+   - Snapshot and restore global physics settings and layer-collision toggles in setup/teardown.
+   - Ensure each test cleans up spawned objects/scenes to prevent state bleed.
+
+5. **Document known CI caveat** (project-open lock race) in test-running notes.
+   - Explicitly note that batch test runs require no second Unity instance.
+   - Include expected failure signature (`HandleProjectAlreadyOpenInAnotherInstance`) and operator action.
+
+**Test criteria:**
+- New `Arena_01` PlayMode tests pass reliably in clean batch runs.
+- Existing Phase 2 tests remain green.
+- Failures produce actionable messages (which metric exceeded threshold and by how much).
+
+**Output:**
+- `Assets/Tests/PlayMode/Character/Arena01BalanceStabilityTests.cs`
+- Updated `BalanceControllerIntegrationTests.cs` (transition-aware strong-force assertions)
+- Updated test-run notes documenting Unity lock caveat
+- Passing EditMode + PlayMode results in `TestResults/`
 
 ---
 

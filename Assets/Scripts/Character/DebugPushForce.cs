@@ -12,7 +12,7 @@ namespace PhysicsDrivenMovement.Character
     {
         [SerializeField]
         [Tooltip("Enable keyboard debug pushes (P/O) for balance tuning.")]
-        private bool _enableDebugKeys = true;
+        private bool _enableDebugKeys = false;
 
         [SerializeField, Range(0f, 2000f)]
         [Tooltip("Force in Newtons applied when pressing P.")]

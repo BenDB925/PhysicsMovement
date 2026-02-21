@@ -6,10 +6,10 @@ namespace PhysicsDrivenMovement.Character
     /// Applies a Proportional-Derivative (PD) torque to the ragdoll Hips Rigidbody each
     /// FixedUpdate to keep the character upright and facing the desired direction.
     /// Reads ground state from two <see cref="GroundSensor"/> components found in the
-    /// ragdoll hierarchy (expected on sibling or child foot GameObjects). When the
-    /// character is considered fallen (tilt angle exceeds <c>_fallenEnterAngleThreshold</c>)
-    /// torque application is suspended so the character can lie flat while the getting-up
-    /// sequence (Phase 3) handles recovery.
+    /// ragdoll hierarchy (expected on sibling or child foot GameObjects). The
+    /// fallen state is tracked via angle thresholds and exposed through
+    /// <see cref="IsFallen"/> as a gameplay signal, while torque can continue
+    /// to support recovery behavior.
     /// Attach to the Hips (root) GameObject of the PlayerRagdoll prefab.
     /// Lifecycle: Awake → FixedUpdate.
     /// Collaborators: <see cref="RagdollSetup"/>, <see cref="GroundSensor"/>.
@@ -207,7 +207,7 @@ namespace PhysicsDrivenMovement.Character
         /// True when the Hips deviation from world-up exceeds
         /// <c>_fallenEnterAngleThreshold</c> and remains true until it drops below
         /// <c>_fallenExitAngleThreshold</c>.
-        /// While fallen, PD torque is not applied. Updated every FixedUpdate.
+        /// Updated every FixedUpdate.
         /// </summary>
         public bool IsFallen { get; private set; }
 
@@ -251,23 +251,49 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Find the two GroundSensor components anywhere in the child hierarchy.
             //         RagdollBuilder attaches them to Foot_L and Foot_R.
             GroundSensor[] sensors = GetComponentsInChildren<GroundSensor>(includeInactive: true);
-            if (sensors.Length >= 2)
+            if (sensors.Length > 0)
             {
-                _footL = sensors[0];
-                _footR = sensors[1];
+                for (int i = 0; i < sensors.Length; i++)
+                {
+                    GroundSensor sensor = sensors[i];
+                    string sensorName = sensor.gameObject.name;
+                    if (_footL == null && sensorName == "Foot_L")
+                    {
+                        _footL = sensor;
+                    }
+                    else if (_footR == null && sensorName == "Foot_R")
+                    {
+                        _footR = sensor;
+                    }
+                }
+
+                if (_footL == null)
+                {
+                    _footL = sensors[0];
+                }
+
+                if (_footR == null)
+                {
+                    _footR = sensors.Length > 1 ? sensors[1] : sensors[0];
+                }
             }
-            else if (sensors.Length == 1)
+
+            if (_footL != null && _footR != null && ReferenceEquals(_footL, _footR))
             {
                 // Tolerate a single sensor (e.g., in unit tests or partial prefabs).
-                _footL = sensors[0];
-                _footR = sensors[0];
                 Debug.LogWarning($"[BalanceController] '{name}': only one GroundSensor found. " +
                                  "Both feet will share the same sensor.", this);
             }
-            else
+
+            if (_footL == null && _footR == null)
             {
                 Debug.LogWarning($"[BalanceController] '{name}': no GroundSensor found in " +
                                  "children. IsGrounded will always be false.", this);
+            }
+            else if (_footL == null || _footR == null)
+            {
+                Debug.LogWarning($"[BalanceController] '{name}': only one named foot sensor " +
+                                 "was resolved. Ground checks may be less reliable.", this);
             }
 
             CacheStartupAssistLegJoints();

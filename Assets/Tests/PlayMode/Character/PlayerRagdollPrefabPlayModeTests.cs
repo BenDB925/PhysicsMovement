@@ -17,17 +17,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
         private const int SettleFrames = 220;
         private const int RecoveryFrames = 420;
+        private const int LongStabilityFrames = 2000;
 
         private GameObject _ground;
         private GameObject _instance;
+        private float _originalFixedDeltaTime;
+        private int _originalSolverIterations;
+        private int _originalSolverVelocityIterations;
+        private bool[,] _originalLayerCollisionMatrix;
 
         [SetUp]
         public void SetUp()
         {
+            _originalFixedDeltaTime = Time.fixedDeltaTime;
+            _originalSolverIterations = Physics.defaultSolverIterations;
+            _originalSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            _originalLayerCollisionMatrix = CaptureLayerCollisionMatrix();
+
             Time.fixedDeltaTime = 0.01f;
             Physics.defaultSolverIterations = 12;
             Physics.defaultSolverVelocityIterations = 4;
-            Physics.IgnoreLayerCollision(GameSettings.LayerPlayer1Parts, GameSettings.LayerPlayer1Parts, true);
         }
 
         [TearDown]
@@ -42,6 +51,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 Object.Destroy(_ground);
             }
+
+            Time.fixedDeltaTime = _originalFixedDeltaTime;
+            Physics.defaultSolverIterations = _originalSolverIterations;
+            Physics.defaultSolverVelocityIterations = _originalSolverVelocityIterations;
+            RestoreLayerCollisionMatrix(_originalLayerCollisionMatrix);
         }
 
         [UnityTest]
@@ -110,6 +124,81 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Recovery should lift hips off seated posture (height={hipsHeight:F2}m).");
             Assert.That(tilt, Is.LessThan(35f),
                 $"Recovered posture should be mostly upright (tilt={tilt:F1}°).");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerRagdollPrefab_LongRun_RemainsRecoverablyStable()
+        {
+            _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _ground.name = "TestGround";
+            _ground.transform.position = new Vector3(0f, -0.5f, 0f);
+            _ground.transform.localScale = new Vector3(20f, 1f, 20f);
+            _ground.layer = GameSettings.LayerEnvironment;
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
+
+            _instance = Object.Instantiate(prefab, new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            BalanceController balance = _instance.GetComponent<BalanceController>();
+            Assert.That(balance, Is.Not.Null, "PlayerRagdoll prefab should include BalanceController on root Hips.");
+
+            float minHipsHeight = float.MaxValue;
+            float maxTilt = 0f;
+            int fallenFrames = 0;
+
+            for (int i = 0; i < LongStabilityFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float tilt = Vector3.Angle(balance.transform.up, Vector3.up);
+                float hipsHeight = balance.transform.position.y;
+                minHipsHeight = Mathf.Min(minHipsHeight, hipsHeight);
+                maxTilt = Mathf.Max(maxTilt, tilt);
+
+                if (balance.IsFallen)
+                {
+                    fallenFrames++;
+                }
+            }
+
+            Assert.That(balance.IsGrounded, Is.True,
+                "At least one foot should remain grounded by the end of long-run simulation.");
+            Assert.That(fallenFrames, Is.LessThan(150),
+                $"Long-run stability should not remain fallen for extended periods (fallenFrames={fallenFrames}).");
+            Assert.That(minHipsHeight, Is.GreaterThan(0.62f),
+                $"Long-run behavior should avoid sustained seated collapse (minHipsHeight={minHipsHeight:F2}m).");
+            Assert.That(maxTilt, Is.LessThan(75f),
+                $"Long-run behavior should avoid catastrophic topple (maxTilt={maxTilt:F1}°).");
+        }
+
+        private static bool[,] CaptureLayerCollisionMatrix()
+        {
+            bool[,] matrix = new bool[32, 32];
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    matrix[a, b] = Physics.GetIgnoreLayerCollision(a, b);
+                }
+            }
+
+            return matrix;
+        }
+
+        private static void RestoreLayerCollisionMatrix(bool[,] matrix)
+        {
+            if (matrix == null || matrix.GetLength(0) != 32 || matrix.GetLength(1) != 32)
+            {
+                return;
+            }
+
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    Physics.IgnoreLayerCollision(a, b, matrix[a, b]);
+                }
+            }
         }
     }
 }
