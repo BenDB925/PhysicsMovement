@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using PhysicsDrivenMovement.Character;
+using PhysicsDrivenMovement.Core;
 
 namespace PhysicsDrivenMovement.Editor
 {
@@ -310,6 +311,10 @@ namespace PhysicsDrivenMovement.Editor
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
             rootGO.AddComponent<RagdollSetup>();
 
+            // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.
+            AttachGroundSensor(goMap["Foot_L"]);
+            AttachGroundSensor(goMap["Foot_R"]);
+
             // STEP 5: Save as a prefab asset.
             string directory = System.IO.Path.GetDirectoryName(prefabPath);
             if (!AssetDatabase.IsValidFolder(directory))
@@ -327,6 +332,23 @@ namespace PhysicsDrivenMovement.Editor
         }
 
         // ─── Private Helpers ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Adds a <see cref="GroundSensor"/> component to <paramref name="footGO"/> and
+        /// sets its <c>_groundLayers</c> field to the Environment layer defined in
+        /// <see cref="GameSettings.LayerEnvironment"/> using the SerializedObject API
+        /// so that the value is correctly serialised into the prefab asset.
+        /// </summary>
+        private static void AttachGroundSensor(GameObject footGO)
+        {
+            GroundSensor sensor = footGO.AddComponent<GroundSensor>();
+
+            // Use SerializedObject to write the private [SerializeField] so Unity
+            // serialises it correctly into the prefab.
+            using var so = new SerializedObject(sensor);
+            so.FindProperty("_groundLayers").intValue = 1 << GameSettings.LayerEnvironment;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
 
         // ─── Primitive Mesh Cache ─────────────────────────────────────────────
         // Avoids creating many temporary primitives during a single build pass.

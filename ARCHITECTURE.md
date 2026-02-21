@@ -22,7 +22,7 @@
 │                                                                    │
 │  RagdollSetup.Awake()   ─── disables neighbour collisions         │
 │  BalanceController ★    ─── PD torque → upright pose              │
-│  GroundSensor ★         ─── foot ground detection                 │
+│  GroundSensor           ─── foot ground detection                 │
 │  PlayerMovement ★       ─── input → AddForce on Hips              │
 │  LegAnimator ★          ─── procedural walk cycle                 │
 │  CharacterState ★       ─── FSM (Standing/Moving/Airborne/...)    │
@@ -84,6 +84,18 @@
 | **Public Surface** | `BuildRagdollPrefab()` (MenuItem). |
 | **Collaborators** | Attaches `RagdollSetup`; reads `PhysicsMaterials/Ragdoll.physicsMaterial`. |
 | **Phase** | 1 |
+
+### `Character.GroundSensor` — `Assets/Scripts/Character/GroundSensor.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on each foot (`Foot_L`, `Foot_R`); performs a downward `SphereCast` every FixedUpdate and exposes `bool IsGrounded`. |
+| **Why** | `BalanceController` needs to know when at least one foot is planted so it can modulate its upright torque. |
+| **Public Surface** | `IsGrounded: bool` — read by `BalanceController`. |
+| **Collaborators** | Read by `BalanceController`; attached by `RagdollBuilder` (Editor). |
+| **Phase** | 2B |
+
+---
 
 ### `Editor.SceneBuilder` — `Assets/Scripts/Editor/SceneBuilder.cs`
 
