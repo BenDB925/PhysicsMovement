@@ -22,6 +22,21 @@ namespace PhysicsDrivenMovement.Editor
 
         private enum ColliderShape { Box, Capsule, Sphere }
 
+        /// <summary>Drive spring/damper profile applied to a joint's SLERP drive.</summary>
+        private readonly struct JointDriveProfile
+        {
+            public readonly float Spring;
+            public readonly float Damper;
+            public readonly float MaxForce;
+
+            public JointDriveProfile(float spring, float damper, float maxForce)
+            {
+                Spring = spring;
+                Damper = damper;
+                MaxForce = maxForce;
+            }
+        }
+
         /// <summary>Data bag describing one body segment.</summary>
         private readonly struct SegmentDef
         {
@@ -48,6 +63,8 @@ namespace PhysicsDrivenMovement.Editor
             // Joint axis (primary) in child local space.
             public readonly Vector3 JointAxis;
             public readonly Vector3 JointSecondaryAxis;
+            /// <summary>SLERP drive profile — spring, damper, and max force for this joint.</summary>
+            public readonly JointDriveProfile DriveProfile;
 
             public SegmentDef(
                 string name, string parent, float mass, Vector3 localPos,
@@ -56,24 +73,26 @@ namespace PhysicsDrivenMovement.Editor
                 float capsuleHeight = 0f, int capsuleDir = 1, float sphereRadius = 0f,
                 float lowAngX = -40f, float highAngX = 40f,
                 float angY = 30f, float angZ = 30f,
-                Vector3 jointAxis = default, Vector3 jointSecondaryAxis = default)
+                Vector3 jointAxis = default, Vector3 jointSecondaryAxis = default,
+                JointDriveProfile driveProfile = default)
             {
-                Name             = name;
-                ParentName       = parent;
-                Mass             = mass;
-                LocalPosition    = localPos;
-                Shape            = shape;
-                BoxSize          = boxSize;
-                CapsuleRadius    = capsuleRadius;
-                CapsuleHeight    = capsuleHeight;
-                CapsuleDir       = capsuleDir;
-                SphereRadius     = sphereRadius;
-                LowAngX          = lowAngX;
-                HighAngX         = highAngX;
-                AngY             = angY;
-                AngZ             = angZ;
-                JointAxis        = jointAxis == default ? Vector3.right : jointAxis;
+                Name = name;
+                ParentName = parent;
+                Mass = mass;
+                LocalPosition = localPos;
+                Shape = shape;
+                BoxSize = boxSize;
+                CapsuleRadius = capsuleRadius;
+                CapsuleHeight = capsuleHeight;
+                CapsuleDir = capsuleDir;
+                SphereRadius = sphereRadius;
+                LowAngX = lowAngX;
+                HighAngX = highAngX;
+                AngY = angY;
+                AngZ = angZ;
+                JointAxis = jointAxis == default ? Vector3.right : jointAxis;
                 JointSecondaryAxis = jointSecondaryAxis == default ? Vector3.up : jointSecondaryAxis;
+                DriveProfile = driveProfile;
             }
         }
 
@@ -98,7 +117,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Box,
                 boxSize: new Vector3(0.28f, 0.32f, 0.14f),
                 lowAngX: -40f, highAngX: 40f, angY: 30f, angZ: 25f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
+                driveProfile: new JointDriveProfile(300f, 30f, 1000f)),
 
             new SegmentDef(
                 name: "Head", parent: "Torso", mass: 4f,
@@ -106,7 +126,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Sphere,
                 sphereRadius: 0.11f,
                 lowAngX: -40f, highAngX: 40f, angY: 35f, angZ: 20f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
+                driveProfile: new JointDriveProfile(150f, 15f, 500f)),
 
             // ── Left Arm ────────────────────────────────────────────────────────
             new SegmentDef(
@@ -115,7 +136,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
                 lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
-                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up),
+                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
+                driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_L", parent: "UpperArm_L", mass: 1.5f,
@@ -123,7 +145,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_L", parent: "LowerArm_L", mass: 0.5f,
@@ -131,7 +154,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Box,
                 boxSize: new Vector3(0.08f, 0.10f, 0.04f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(50f, 5f, 200f)),
 
             // ── Right Arm ───────────────────────────────────────────────────────
             new SegmentDef(
@@ -140,7 +164,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
                 lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
-                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up),
+                jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
+                driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_R", parent: "UpperArm_R", mass: 1.5f,
@@ -148,7 +173,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_R", parent: "LowerArm_R", mass: 0.5f,
@@ -156,7 +182,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Box,
                 boxSize: new Vector3(0.08f, 0.10f, 0.04f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(50f, 5f, 200f)),
 
             // ── Left Leg ────────────────────────────────────────────────────────
             new SegmentDef(
@@ -165,7 +192,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(200f, 20f, 800f)),
 
             new SegmentDef(
                 name: "LowerLeg_L", parent: "UpperLeg_L", mass: 2.5f,
@@ -173,7 +201,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(150f, 15f, 600f)),
 
             new SegmentDef(
                 name: "Foot_L", parent: "LowerLeg_L", mass: 1f,
@@ -181,7 +210,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Box,
                 boxSize: new Vector3(0.10f, 0.07f, 0.22f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             // ── Right Leg ───────────────────────────────────────────────────────
             new SegmentDef(
@@ -190,7 +220,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(200f, 20f, 800f)),
 
             new SegmentDef(
                 name: "LowerLeg_R", parent: "UpperLeg_R", mass: 2.5f,
@@ -198,7 +229,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(150f, 15f, 600f)),
 
             new SegmentDef(
                 name: "Foot_R", parent: "LowerLeg_R", mass: 1f,
@@ -206,7 +238,8 @@ namespace PhysicsDrivenMovement.Editor
                 shape: ColliderShape.Box,
                 boxSize: new Vector3(0.10f, 0.07f, 0.22f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
-                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward),
+                jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
+                driveProfile: new JointDriveProfile(80f, 8f, 300f)),
         };
 
         // ─── Menu Entry ────────────────────────────────────────────────────────
@@ -515,6 +548,19 @@ namespace PhysicsDrivenMovement.Editor
             joint.projectionMode          = JointProjectionMode.PositionAndRotation;
             joint.projectionDistance      = 0.1f;
             joint.projectionAngle         = 5f;
+
+            // Apply SLERP drive so joints resist displacement and can be controlled
+            // by downstream runtime systems (BalanceController, LegAnimator, etc.).
+            // targetRotation = Quaternion.identity means "hold the rest angle" — the
+            // angle the joint was at when it was created (joint-local, NOT world space).
+            joint.rotationDriveMode = RotationDriveMode.Slerp;
+            joint.slerpDrive = new JointDrive
+            {
+                positionSpring = seg.DriveProfile.Spring,
+                positionDamper = seg.DriveProfile.Damper,
+                maximumForce = seg.DriveProfile.MaxForce,
+            };
+            joint.targetRotation = Quaternion.identity;
         }
     }
 }
