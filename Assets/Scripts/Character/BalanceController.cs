@@ -125,6 +125,17 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Fraction of startup assist force routed through leg rigidbodies (rest is applied at hips).")]
         private float _startupAssistLegForceFraction = 0.8f;
 
+        // ─── LegAnimator Cooperation ────────────────────────────────────────
+
+        [SerializeField]
+        [Tooltip("When true and a LegAnimator component exists on this GameObject, " +
+                 "BalanceController will NOT apply direct forces or modify SLERP drives on the four " +
+                 "leg joints (UpperLeg_L, UpperLeg_R, LowerLeg_L, LowerLeg_R). " +
+                 "LegAnimator owns those joints exclusively; BalanceController owns Hips/Spine/torso. " +
+                 "This eliminates the fighting-systems bug where BC forces override LA targetRotation. " +
+                 "Disable only for debugging purposes.")]
+        private bool _deferLegJointsToAnimator = true;
+
         [SerializeField]
         [Tooltip("Log state transitions (Standing ↔ Fallen) to the console. " +
                  "Disable in production builds.")]
@@ -215,6 +226,13 @@ namespace PhysicsDrivenMovement.Character
         private Rigidbody[] _startupAssistLegBodies;
         private float _totalBodyMass;
         private float _nextRecoveryTelemetryTime;
+
+        /// <summary>
+        /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
+        /// <see cref="_deferLegJointsToAnimator"/> is true. Cached in Awake to avoid
+        /// per-frame GetComponent calls.
+        /// </summary>
+        private bool _hasLegAnimator;
 
         // ─── Public Properties ────────────────────────────────────────────────
 
@@ -339,6 +357,11 @@ namespace PhysicsDrivenMovement.Character
             {
                 _totalBodyMass += bodies[i].mass;
             }
+
+            // Cache whether a LegAnimator sibling is present. When true (and
+            // _deferLegJointsToAnimator is enabled), we skip all direct forces/drive
+            // modifications on the four leg joints so LegAnimator owns them exclusively.
+            _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
         }
 
         private void OnValidate()
@@ -692,6 +715,15 @@ namespace PhysicsDrivenMovement.Character
                 _rb.AddForce(assistDirection * hipsForce, ForceMode.Force);
             }
 
+            // When LegAnimator is present and deferred, skip applying direct forces to
+            // leg bodies — LegAnimator owns those joints via targetRotation / SLERP drive.
+            // Applying forces here would fight the joint drive and produce the dragging-feet
+            // symptom. The hips force above is still applied for torso-level startup assist.
+            if (_hasLegAnimator)
+            {
+                return;
+            }
+
             if (_startupAssistLegBodies == null || _startupAssistLegBodies.Length == 0 || legForce <= 0f)
             {
                 return;
@@ -712,6 +744,15 @@ namespace PhysicsDrivenMovement.Character
 
         private void ApplyStartupAssistLegDrive(float assistScale)
         {
+            // When LegAnimator is present and deferred, BC must not touch the SLERP drive
+            // parameters on leg joints. LegAnimator relies on the drives set by RagdollSetup
+            // (spring/damper); BC modifying them mid-flight overwrites those values and
+            // causes the dragging-feet symptom. This is the other half of the cooperative fix.
+            if (_hasLegAnimator)
+            {
+                return;
+            }
+
             if (_startupAssistLegJoints == null || _startupAssistLegBaseDrives == null)
             {
                 return;

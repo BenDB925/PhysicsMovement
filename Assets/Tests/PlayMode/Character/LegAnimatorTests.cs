@@ -849,9 +849,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // ── Configure test seams so gait runs without falling ──────────────
             physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
 
-            // Disable BalanceController and PlayerMovement physics loops to isolate
-            // the LegAnimator joint-drive signal.
-            physicsBalance.enabled = false;
+            // BalanceController is FULLY ACTIVE — do NOT disable it.
+            // The cooperative fix (_deferLegJointsToAnimator=true) ensures BC does not
+            // apply forces to leg bodies or modify leg joint drives when LegAnimator is
+            // present. BC torques on the kinematic hips body have no physical effect.
+            // PlayerMovement physics loop is disabled; we only need its move-input seam.
             physicsMovement.enabled = false;
 
             // Inject non-zero move input so LegAnimator's phase accumulates.
@@ -1483,9 +1485,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         ///   RagdollSetup (first — applies authoritative spring values in Awake)
         ///   BalanceController, PlayerMovement, CharacterState, LegAnimator
         ///
-        /// BalanceController and PlayerMovement physics loops are disabled so LegAnimator
-        /// can run in isolation. Move input must be injected by the caller via
-        /// physMovement.SetMoveInputForTest().
+        /// BalanceController is FULLY ACTIVE (not disabled) so these tests catch any
+        /// fighting-systems regression where BC forces interfere with LA joint drives.
+        /// The hips Rigidbody is kinematic so BC forces/torques on it have no effect;
+        /// the cooperative fix (_deferLegJointsToAnimator=true + LegAnimator present)
+        /// ensures BC skips all direct forces/drive-modifications on the four leg joints.
+        /// PlayerMovement physics loop is disabled (no horizontal driving force needed);
+        /// move input is injected via SetMoveInputForTest so LegAnimator's gait runs.
         /// </summary>
         private static GameObject BuildGaitQualityRig(
             out PlayerMovement physMovement,
@@ -1522,9 +1528,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             LegAnimator gaitQualityLegAnimator = physicsHips.AddComponent<LegAnimator>();
 
             // ── Configure test seams ────────────────────────────────────────
+            // Inject a stable grounded/not-fallen state so BC's internal logic runs
+            // in the expected standing mode (yaw + upright PD torques active).
+            // BC forces on the kinematic hips body have no physical effect, and the
+            // _deferLegJointsToAnimator fix ensures BC does not touch leg joints.
             physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            physicsBalance.enabled = false;
-            physMovement.enabled   = false;
+
+            // BalanceController is intentionally LEFT ENABLED — these are full-stack tests.
+            // If BC fights LA for leg joint ownership, the gait quality assertions will fail,
+            // catching any regression in the cooperative fix.
+            // PlayerMovement physics loop is disabled; we only need its move-input seam.
+            physMovement.enabled = false;
 
             // Set minimum cadence so the kinematic hips body (zero velocity) still drives
             // phase accumulation. 2 cycles/sec gives clear gait rotation in 80 frames.
