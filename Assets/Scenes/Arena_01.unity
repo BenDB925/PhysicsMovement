@@ -651,7 +651,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2036620642779884686, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -7.136
+      value: -5.09
       objectReference: {fileID: 0}
     - target: {fileID: 2036620642779884686, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: m_LocalRotation.w
@@ -682,6 +682,10 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      propertyPath: _kP
+      value: 1500
+      objectReference: {fileID: 0}
+    - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _debugStateTransitions
       value: 0
       objectReference: {fileID: 0}
@@ -701,6 +705,10 @@ PrefabInstance:
       propertyPath: _camera
       value: 
       objectReference: {fileID: 404821462}
+    - target: {fileID: 6044111111111111111, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      propertyPath: _moveForce
+      value: 200
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -751,8 +759,9 @@ MonoBehaviour:
   _stepFrequency: 2
   _kneeAngle: -30
   _idleBlendSpeed: 5
-  _swingAxis: {x: 1, y: 0, z: 0}
-  _kneeAxis: {x: 1, y: 0, z: 0}
+  _swingAxis: {x: 0, y: 1, z: 0}
+  _kneeAxis: {x: 0, y: 1, z: 0}
+  _useWorldSpaceSwing: 1
 --- !u!1 &2089396234
 GameObject:
   m_ObjectHideFlags: 0
