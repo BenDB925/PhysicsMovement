@@ -92,6 +92,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"PlayerRagdoll should not immediately topple on spawn (tilt={tilt:F1}°).");
         }
 
+        [Test]
+        public void PlayerRagdollPrefab_HipsHasSinglePlayerMovementWithRequiredComponents()
+        {
+            // Arrange
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
+
+            // Act
+            PlayerMovement[] movementComponents = prefab.GetComponents<PlayerMovement>();
+            Rigidbody hipsRigidbody = prefab.GetComponent<Rigidbody>();
+            BalanceController balanceController = prefab.GetComponent<BalanceController>();
+
+            // Assert
+            Assert.That(movementComponents, Has.Length.EqualTo(1),
+                $"PlayerRagdoll Hips must have exactly one PlayerMovement component, found {movementComponents.Length}.");
+            Assert.That(hipsRigidbody, Is.Not.Null,
+                "PlayerRagdoll Hips must include a Rigidbody on the same object as PlayerMovement.");
+            Assert.That(balanceController, Is.Not.Null,
+                "PlayerRagdoll Hips must include a BalanceController on the same object as PlayerMovement.");
+        }
+
         [UnityTest]
         public IEnumerator PlayerRagdollPrefab_FromBackFall_RecoversToStanding()
         {

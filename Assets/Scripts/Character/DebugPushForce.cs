@@ -36,12 +36,12 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.P))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.P))
             {
                 _rb.AddForce(transform.forward * _smallPushForce, ForceMode.Force);
             }
 
-            if (Input.GetKeyDown(KeyCode.O))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.O))
             {
                 _rb.AddForce(transform.forward * _largePushForce, ForceMode.Force);
             }

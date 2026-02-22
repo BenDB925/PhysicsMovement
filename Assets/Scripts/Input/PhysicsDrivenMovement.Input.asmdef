@@ -1,9 +1,7 @@
 {
-    "name": "PhysicsDrivenMovement.Character",
-    "rootNamespace": "PhysicsDrivenMovement.Character",
+    "name": "PhysicsDrivenMovement.Input",
+    "rootNamespace": "PhysicsDrivenMovement.Input",
     "references": [
-        "PhysicsDrivenMovement.Core",
-        "PhysicsDrivenMovement.Input",
         "Unity.InputSystem"
     ],
     "includePlatforms": [],
