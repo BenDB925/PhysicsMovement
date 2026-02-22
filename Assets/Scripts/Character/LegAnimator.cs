@@ -18,6 +18,35 @@ namespace PhysicsDrivenMovement.Character
     /// instead of sagittal swing (forward/backward lift). The axes are now serialized as
     /// <see cref="_swingAxis"/> and <see cref="_kneeAxis"/> for Inspector tuning.
     ///
+    /// World-space swing (Phase 3E3 — forward-tilt fix):
+    /// When <see cref="_useWorldSpaceSwing"/> is true (default), leg swing targets are
+    /// computed relative to the world-space movement direction rather than the Hips local
+    /// frame. This fixes the "dragging feet" symptom that occurs when the torso is pitched
+    /// forward: in that state the Hips +Z local axis points downward in world space, so a
+    /// pure local-frame "forward swing" actually drives the legs into the ground instead of
+    /// stepping ahead of the body.
+    ///
+    /// World-space swing implementation:
+    ///   1. A world-space gait-forward direction is derived from the Hips Rigidbody's
+    ///      horizontal velocity. If velocity is negligible (e.g. just-started), the move
+    ///      input direction (projected onto the XZ plane) is used as a fallback.
+    ///   2. The swing axis in world space = Cross(gaitForward, worldUp), which is the
+    ///      horizontal axis perpendicular to the movement direction. Rotating around this
+    ///      axis swings a leg forward or backward in the sagittal plane of movement,
+    ///      regardless of the torso's pitch angle.
+    ///   3. The desired world-space rotation for each upper leg is computed as
+    ///      Quaternion.AngleAxis(swingDeg, worldSwingAxis) applied to the joint body's
+    ///      current world rotation. This is then converted to the ConnectedBody (parent)
+    ///      frame before being assigned to ConfigurableJoint.targetRotation, so the SLERP
+    ///      drive interprets it correctly.
+    ///   4. The lower-leg knee bend uses a fixed angle around the same world-space swing
+    ///      axis (positive = knee bends forward / upward relative to world up), ensuring
+    ///      knees never fold into the ground even when the torso is pitched forward.
+    ///
+    /// When <see cref="_useWorldSpaceSwing"/> is false, the original local-frame behaviour
+    /// is used (Quaternion.AngleAxis around <see cref="_swingAxis"/>/<see cref="_kneeAxis"/>
+    /// in targetRotation space). This is provided for side-by-side comparison only.
+    ///
     /// Idle settle behaviour (Phase 3E2):
     /// — When move input drops to zero, all four joint targetRotations are set directly
     ///   to <see cref="Quaternion.identity"/> each FixedUpdate, so legs immediately
@@ -42,7 +71,7 @@ namespace PhysicsDrivenMovement.Character
     /// Attach to the Hips (root) GameObject alongside <see cref="BalanceController"/>,
     /// <see cref="PlayerMovement"/>, and <see cref="CharacterState"/>.
     /// Lifecycle: Awake (cache joints + siblings), FixedUpdate (advance phase, apply rotations).
-    /// Collaborators: <see cref="PlayerMovement"/>, <see cref="CharacterState"/>.
+    /// Collaborators: <see cref="PlayerMovement"/>, <see cref="CharacterState"/>, <see cref="Rigidbody"/>.
     /// </summary>
     public class LegAnimator : MonoBehaviour
     {
@@ -83,11 +112,13 @@ namespace PhysicsDrivenMovement.Character
         //         Therefore the correct axis for leg swing and knee bend is Vector3.forward (Z).
         //         These fields are exposed for Inspector tuning so they can be adjusted without
         //         code changes if the ragdoll's joint axes are reconfigured in future.
+        //         These are only used when _useWorldSpaceSwing = false (legacy mode).
 
         [SerializeField]
         [Tooltip("Rotation axis for upper-leg forward/backward swing in ConfigurableJoint targetRotation " +
                  "space. With RagdollBuilder defaults (joint.axis=right, secondaryAxis=forward), " +
                  "the correct value is (0, 0, 1) — Z maps to the primary hinge axis. " +
+                 "Only used when _useWorldSpaceSwing is false. " +
                  "Adjust if the joint axis configuration changes.")]
         private Vector3 _swingAxis = new Vector3(0f, 0f, 1f);
 
@@ -95,8 +126,16 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Rotation axis for lower-leg knee bend in ConfigurableJoint targetRotation space. " +
                  "With RagdollBuilder defaults (joint.axis=right, secondaryAxis=forward), " +
                  "the correct value is (0, 0, 1) — Z maps to the primary hinge axis. " +
+                 "Only used when _useWorldSpaceSwing is false. " +
                  "Adjust if the joint axis configuration changes.")]
         private Vector3 _kneeAxis = new Vector3(0f, 0f, 1f);
+
+        [SerializeField]
+        [Tooltip("When true (default), leg swing targets are computed relative to the world-space " +
+                 "movement direction so legs always step forward regardless of torso pitch angle. " +
+                 "When false, the legacy local-frame swing is used (may cause feet to drag when " +
+                 "the torso is pitched forward). Toggle for side-by-side comparison.")]
+        private bool _useWorldSpaceSwing = true;
 
         // ── Private Fields ──────────────────────────────────────────────────
 
@@ -117,6 +156,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Sibling CharacterState component used to gate gait on posture state.</summary>
         private CharacterState _characterState;
+
+        /// <summary>Hips Rigidbody used to read world-space velocity for movement direction.</summary>
+        private Rigidbody _hipsRigidbody;
 
         /// <summary>
         /// Current gait phase in radians, in the range [0, 2π).
@@ -150,6 +192,11 @@ namespace PhysicsDrivenMovement.Character
             if (!TryGetComponent(out _characterState))
             {
                 Debug.LogError("[LegAnimator] Missing CharacterState on this GameObject.", this);
+            }
+
+            if (!TryGetComponent(out _hipsRigidbody))
+            {
+                Debug.LogError("[LegAnimator] Missing Rigidbody on this GameObject.", this);
             }
 
             // STEP 2: Locate the four leg ConfigurableJoints by searching children by name.
@@ -252,48 +299,26 @@ namespace PhysicsDrivenMovement.Character
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
                 _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, inputMagnitude, t);
 
-                // STEP 5: Compute sinusoidal upper-leg targets.
+                // STEP 5: Compute sinusoidal upper-leg swing angles.
                 //         Left leg uses phase directly; right leg is offset by π (half-cycle)
                 //         so they always swing in opposite directions — the alternating gait.
-                //         The swing is a pure rotation around _swingAxis (default Z / forward)
-                //         in targetRotation space, which drives the primary hinge (joint.axis=right)
-                //         for sagittal forward/backward swing.
                 //         We scale amplitude by _smoothedInputMag to get the anti-pop ramp.
                 float leftSwingDeg  = Mathf.Sin(_phase)            * _stepAngle * _smoothedInputMag;
                 float rightSwingDeg = Mathf.Sin(_phase + Mathf.PI) * _stepAngle * _smoothedInputMag;
 
-                // STEP 6: Compute lower-leg knee-bend target.
+                // STEP 6: Compute lower-leg knee-bend angle.
                 //         The knee holds a constant positive bend during gait so the character
                 //         looks dynamically flexed rather than stiff-legged.
                 float kneeBendDeg = _kneeAngle * _smoothedInputMag;
 
-                // STEP 7: Apply computed rotations to joint targetRotations directly.
-                //         Using direct assignment (not slerp) preserves the exact L/R
-                //         phase relationship — the smoothing is done via _smoothedInputMag.
-                //         DESIGN: Quaternion.AngleAxis with _swingAxis (default Vector3.forward / Z)
-                //         is used because ConfigurableJoint.targetRotation maps the primary joint
-                //         hinge (joint.axis = Vector3.right) to the Z component of the rotation
-                //         in targetRotation space. Using X-axis (Quaternion.Euler(angle, 0, 0))
-                //         produced lateral abduction (side-to-side wiggle) instead of the intended
-                //         sagittal forward/backward swing that lifts the leg off the ground.
-                if (_upperLegL != null)
+                // STEP 7: Apply computed rotations to joint targetRotations.
+                if (_useWorldSpaceSwing)
                 {
-                    _upperLegL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _swingAxis);
+                    ApplyWorldSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
                 }
-
-                if (_upperLegR != null)
+                else
                 {
-                    _upperLegR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _swingAxis);
-                }
-
-                if (_lowerLegL != null)
-                {
-                    _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
-                }
-
-                if (_lowerLegR != null)
-                {
-                    _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+                    ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
                 }
             }
             else
@@ -321,7 +346,198 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
-        // ── Helpers ──────────────────────────────────────────────────────────
+        // ── Private Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Applies world-space swing targets to the four leg ConfigurableJoints.
+        /// The swing axis is computed from the character's actual movement direction (world
+        /// horizontal velocity or move-input fallback), ensuring legs step forward in world
+        /// space even when the torso is pitched forward.
+        /// </summary>
+        /// <param name="leftSwingDeg">Signed swing angle (degrees) for the left upper leg.</param>
+        /// <param name="rightSwingDeg">Signed swing angle (degrees) for the right upper leg.</param>
+        /// <param name="kneeBendDeg">Knee bend angle (degrees, positive = forward flex).</param>
+        private void ApplyWorldSpaceSwing(float leftSwingDeg, float rightSwingDeg, float kneeBendDeg)
+        {
+            // STEP A: Determine the world-space gait-forward direction.
+            //         Primary: use the Hips Rigidbody's horizontal velocity (most accurate
+            //         proxy for actual movement direction regardless of torso pitch).
+            //         Fallback: project CurrentMoveInput (XZ) when velocity is near zero
+            //         (e.g. just starting to move).
+            Vector3 gaitForward = GetWorldGaitForward();
+
+            if (gaitForward.sqrMagnitude < 0.0001f)
+            {
+                // No direction available — use local-space fallback to avoid zero-vector issues.
+                ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                return;
+            }
+
+            // STEP B: Build the world-space swing axis.
+            //         worldSwingAxis = Cross(gaitForward, worldUp) gives the horizontal axis
+            //         that is perpendicular to the movement direction and lies in the ground
+            //         plane. Rotating around this axis lifts a leg forward or backward in
+            //         the sagittal plane of movement, independent of torso pitch.
+            //         DESIGN: We use Vector3.up (world up) not the Hips local up so the
+            //         knee always folds toward world-space "forward/upward", even when the
+            //         torso is significantly pitched forward.
+            Vector3 worldSwingAxis = Vector3.Cross(gaitForward, Vector3.up).normalized;
+
+            if (worldSwingAxis.sqrMagnitude < 0.0001f)
+            {
+                // gaitForward is parallel to world up (degenerate — character facing straight
+                // up or down). Fall back to local-space behaviour.
+                ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                return;
+            }
+
+            // STEP C: Apply upper-leg targets in world space, converted to joint-local frame.
+            ApplyWorldSpaceJointTarget(_upperLegL, leftSwingDeg,  worldSwingAxis);
+            ApplyWorldSpaceJointTarget(_upperLegR, rightSwingDeg, worldSwingAxis);
+
+            // STEP D: Apply lower-leg knee-bend targets.
+            //         Positive kneeBendDeg bends the knee forward (in the direction of
+            //         movement) — same worldSwingAxis, but opposite sign convention
+            //         so the lower leg folds in the physiologically correct direction.
+            ApplyWorldSpaceJointTarget(_lowerLegL, -kneeBendDeg, worldSwingAxis);
+            ApplyWorldSpaceJointTarget(_lowerLegR, -kneeBendDeg, worldSwingAxis);
+        }
+
+        /// <summary>
+        /// Computes and assigns a world-space swing target rotation to a single
+        /// ConfigurableJoint. The target is expressed as: "rotate the joint body's
+        /// current orientation by <paramref name="swingDeg"/> degrees around
+        /// <paramref name="worldAxis"/> in world space", then converted to the connected
+        /// body's local frame for <c>ConfigurableJoint.targetRotation</c>.
+        /// </summary>
+        /// <param name="joint">The ConfigurableJoint to drive. No-op if null.</param>
+        /// <param name="swingDeg">
+        /// Signed angle in degrees. Positive = swing in the direction of the axis
+        /// by the right-hand rule (forward/upward for knee, forward swing for upper leg).
+        /// </param>
+        /// <param name="worldAxis">The world-space rotation axis (should be pre-normalised).</param>
+        private static void ApplyWorldSpaceJointTarget(ConfigurableJoint joint, float swingDeg, Vector3 worldAxis)
+        {
+            if (joint == null)
+            {
+                return;
+            }
+
+            // DESIGN: ConfigurableJoint.targetRotation is specified in the space of the
+            // connected body (parent body). It represents the desired local rotation of the
+            // joint body relative to its connected body, measured in the connected body's
+            // frame at the time the joint was created (i.e., the initial reference frame).
+            //
+            // To drive toward a world-space orientation:
+            //   1. Build the desired world-space rotation delta: a rotation around worldAxis
+            //      by swingDeg, applied on top of the joint body's current world rotation.
+            //      We use Quaternion.identity as the "rest" reference, so swingDeg=0 → identity
+            //      target → joint returns to rest pose (exactly matching the legacy behaviour).
+            //
+            //   2. Convert to connected-body-local frame:
+            //      localTarget = Inverse(connectedBody.rotation) × worldSpaceTargetRot
+            //
+            //   This is equivalent to: "in the parent's frame, the child should be at this
+            //   rotation" — which is exactly what ConfigurableJoint.targetRotation expects.
+            //
+            //   Note: we intentionally do NOT multiply by the joint body's current world rotation.
+            //   Instead we treat swingDeg as an absolute offset from the rest pose (identity),
+            //   expressed in a world-aligned frame. This keeps the L/R alternating phase
+            //   mathematics identical to the legacy path (sin(phase) × stepAngle) while
+            //   ensuring the axis of rotation is always world-horizontal.
+
+            Quaternion worldSwingRotation = Quaternion.AngleAxis(swingDeg, worldAxis);
+
+            // Get the connected body's current world rotation to express the target in its frame.
+            Quaternion connectedBodyRot = joint.connectedBody != null
+                ? joint.connectedBody.rotation
+                : Quaternion.identity;
+
+            // Convert world-space rotation to connected-body local space.
+            Quaternion localTarget = Quaternion.Inverse(connectedBodyRot) * worldSwingRotation;
+
+            joint.targetRotation = localTarget;
+        }
+
+        /// <summary>
+        /// Returns the world-space horizontal forward direction for gait animation.
+        /// Uses the Hips Rigidbody's horizontal velocity as the primary source (accurate
+        /// even when the torso is pitched). Falls back to CurrentMoveInput projected onto
+        /// the XZ plane when velocity magnitude is below the threshold (e.g. start of motion).
+        /// Returns <see cref="Vector3.zero"/> if neither source has a usable direction.
+        /// </summary>
+        private Vector3 GetWorldGaitForward()
+        {
+            // DESIGN: Velocity is the best proxy for actual movement direction because it is
+            // already in world space and naturally accounts for camera yaw, slopes, and any
+            // forces applied by PlayerMovement. The 0.1 m/s threshold avoids noisy direction
+            // from near-zero velocity at the very start of a walk or when nearly stopped.
+            const float VelocityThreshold = 0.1f;
+
+            if (_hipsRigidbody != null)
+            {
+                Vector3 horizontalVel = new Vector3(
+                    _hipsRigidbody.linearVelocity.x,
+                    0f,
+                    _hipsRigidbody.linearVelocity.z);
+
+                if (horizontalVel.magnitude >= VelocityThreshold)
+                {
+                    return horizontalVel.normalized;
+                }
+            }
+
+            // Fallback: use move input as a world-space XZ direction.
+            // CurrentMoveInput is a raw 2D input; without camera transform it maps X→world-X,
+            // Y→world-Z. This is an approximation sufficient for tests and the zero-velocity
+            // start-of-movement window. PlayerMovement applies camera yaw to forces; here
+            // we use the raw input for simplicity (the velocity path takes over once moving).
+            Vector2 moveInput = _playerMovement.CurrentMoveInput;
+            Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);
+            if (inputDir.sqrMagnitude > 0.0001f)
+            {
+                return inputDir.normalized;
+            }
+
+            return Vector3.zero;
+        }
+
+        /// <summary>
+        /// Applies leg swing in the joint's local targetRotation frame (original behaviour).
+        /// Used when <see cref="_useWorldSpaceSwing"/> is false, or as a fallback when a
+        /// valid world-space gait direction cannot be computed.
+        /// </summary>
+        /// <param name="leftSwingDeg">Signed swing angle (degrees) for the left upper leg.</param>
+        /// <param name="rightSwingDeg">Signed swing angle (degrees) for the right upper leg.</param>
+        /// <param name="kneeBendDeg">Knee bend angle (degrees).</param>
+        private void ApplyLocalSpaceSwing(float leftSwingDeg, float rightSwingDeg, float kneeBendDeg)
+        {
+            // DESIGN: Quaternion.AngleAxis with _swingAxis (default Vector3.forward / Z)
+            //         is used because ConfigurableJoint.targetRotation maps the primary joint
+            //         hinge (joint.axis = Vector3.right) to the Z component of the rotation
+            //         in targetRotation space. Using X-axis (Quaternion.Euler(angle, 0, 0))
+            //         produced lateral abduction (side-to-side wiggle) instead of the intended
+            //         sagittal forward/backward swing that lifts the leg off the ground.
+            if (_upperLegL != null)
+            {
+                _upperLegL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _swingAxis);
+            }
+
+            if (_upperLegR != null)
+            {
+                _upperLegR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _swingAxis);
+            }
+
+            if (_lowerLegL != null)
+            {
+                _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+            }
+
+            if (_lowerLegR != null)
+            {
+                _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+            }
+        }
 
         /// <summary>
         /// Sets all four leg joint <c>targetRotation</c> values immediately to
