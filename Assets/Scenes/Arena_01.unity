@@ -708,6 +708,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1977400340}
+    - targetCorrespondingSourceObject: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1977400348}
   m_SourcePrefab: {fileID: 100100000, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
 --- !u!1 &1977400339 stripped
 GameObject:
@@ -726,9 +729,30 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6a96640ea324894c92bd91b15f56aed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _moveEnterThreshold: 0.1
+  _moveExitThreshold: 0.05
   _getUpDelay: 0.5
   _knockoutDuration: 1.5
   _getUpForce: 250
+  _getUpTimeout: 3
+--- !u!114 &1977400348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1977400339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 282eae0f717f82a4bb8ead682de9086d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _stepAngle: 50.3
+  _stepFrequency: 2
+  _kneeAngle: -30
+  _idleBlendSpeed: 5
+  _swingAxis: {x: 1, y: 0, z: 0}
+  _kneeAxis: {x: 1, y: 0, z: 0}
 --- !u!1 &2089396234
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="8" result="Failed(Child)" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.2046848">
+  <test-suite type="TestSuite" id="1054" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="39" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.204685" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <failure>
+      <message><![CDATA[One or more child tests had errors]]></message>
+    </failure>
+    <test-suite type="Assembly" id="1047" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="H:/Work/PhysicsDrivenMovementDemo/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="39" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.196708" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="43700" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <failure>
+        <message><![CDATA[One or more child tests had errors]]></message>
+      </failure>
+      <test-suite type="TestSuite" id="1048" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="39" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.195378" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <failure>
+          <message><![CDATA[One or more child tests had errors]]></message>
+        </failure>
+        <test-suite type="TestSuite" id="1049" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="39" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.194461" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <failure>
+            <message><![CDATA[One or more child tests had errors]]></message>
+          </failure>
+          <test-suite type="TestSuite" id="1050" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="39" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.193493" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <failure>
+              <message><![CDATA[One or more child tests had errors]]></message>
+            </failure>
+            <test-suite type="TestFixture" id="1024" name="CharacterStateTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" testcasecount="8" result="Failed" site="Child" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.190597" total="8" passed="5" failed="3" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <failure>
+                <message><![CDATA[One or more child tests had errors]]></message>
+              </failure>
+              <test-case id="1026" name="Awake_WhenComponentInitializes_CachesRequiredDependencies" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.Awake_WhenComponentInitializes_CachesRequiredDependencies" methodname="Awake_WhenComponentInitializes_CachesRequiredDependencies" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="2031742914" result="Passed" start-time="2026-02-22 11:08:18Z" end-time="2026-02-22 11:08:19Z" duration="0.058270" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1025" name="Awake_WhenComponentInitializes_CurrentStateStartsStanding" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.Awake_WhenComponentInitializes_CurrentStateStartsStanding" methodname="Awake_WhenComponentInitializes_CurrentStateStartsStanding" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="1034113035" result="Passed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.010647" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1030" name="FixedUpdate_WhenFallenSignalTrue_TransitionsToFallen" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenFallenSignalTrue_TransitionsToFallen" methodname="FixedUpdate_WhenFallenSignalTrue_TransitionsToFallen" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="169107462" result="Passed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.006254" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=True moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1027" name="FixedUpdate_WhenGroundedAndMoveInputExceedsEnterThreshold_TransitionsStandingToMoving" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenGroundedAndMoveInputExceedsEnterThreshold_TransitionsStandingToMoving" methodname="FixedUpdate_WhenGroundedAndMoveInputExceedsEnterThreshold_TransitionsStandingToMoving" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="1027535539" result="Failed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.017170" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  State should transition Standing -> Moving when grounded and move magnitude exceeds enter threshold.
+  Expected: Moving
+  But was:  Standing
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests+<FixedUpdate_WhenGroundedAndMoveInputExceedsEnterThreshold_TransitionsStandingToMoving>d__8.MoveNext () [0x00086] in H:\Work\PhysicsDrivenMovementDemo\Assets\Tests\PlayMode\Character\CharacterStateTests.cs:94
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1029" name="FixedUpdate_WhenGroundedSignalLost_TransitionsToAirborne" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenGroundedSignalLost_TransitionsToAirborne" methodname="FixedUpdate_WhenGroundedSignalLost_TransitionsToAirborne" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="1602498886" result="Passed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.012445" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=False fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1028" name="FixedUpdate_WhenMovingAndMoveInputDropsBelowExitThreshold_TransitionsMovingToStanding" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenMovingAndMoveInputDropsBelowExitThreshold_TransitionsMovingToStanding" methodname="FixedUpdate_WhenMovingAndMoveInputDropsBelowExitThreshold_TransitionsMovingToStanding" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="1479149615" result="Failed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.010088" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  Precondition failed: expected Moving after enter-threshold input.
+  Expected: Moving
+  But was:  Standing
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests+<FixedUpdate_WhenMovingAndMoveInputDropsBelowExitThreshold_TransitionsMovingToStanding>d__9.MoveNext () [0x0008f] in H:\Work\PhysicsDrivenMovementDemo\Assets\Tests\PlayMode\Character\CharacterStateTests.cs:106
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+]]></output>
+              </test-case>
+              <test-case id="1031" name="FixedUpdate_WhenRecoveredFromFallenAndGrounded_TransitionsToGettingUp" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenRecoveredFromFallenAndGrounded_TransitionsToGettingUp" methodname="FixedUpdate_WhenRecoveredFromFallenAndGrounded_TransitionsToGettingUp" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="1675462197" result="Passed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.019522" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=True moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Fallen
+]]></output>
+              </test-case>
+              <test-case id="1032" name="FixedUpdate_WhenStateUnchanged_OnStateChangedFiresOnlyForActualChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests.FixedUpdate_WhenStateUnchanged_OnStateChangedFiresOnlyForActualChanges" methodname="FixedUpdate_WhenStateUnchanged_OnStateChangedFiresOnlyForActualChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests" runstate="Runnable" seed="2064345309" result="Failed" start-time="2026-02-22 11:08:19Z" end-time="2026-02-22 11:08:19Z" duration="0.040006" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  OnStateChanged should fire exactly once for a single actual state change.
+  Expected: 1
+  But was:  0
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.CharacterStateTests+<FixedUpdate_WhenStateUnchanged_OnStateChangedFiresOnlyForActualChanges>d__13.MoveNext () [0x0017d] in H:\Work\PhysicsDrivenMovementDemo\Assets\Tests\PlayMode\Character\CharacterStateTests.cs:202
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+                <output><![CDATA[[BalanceController] 'CharacterState_TestRoot': no GroundSensor found in children. IsGrounded will always be false.
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+[CharacterState] FixedUpdate: grounded=True fallen=False moveMag=0.000 wantsMove=False currentState=Standing
+Saving results to: C:/Users/Usuario/AppData/LocalLow/DefaultCompany/PhysicsDrivenMovementDemo\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

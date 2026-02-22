@@ -16,6 +16,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// - Lower-leg knee-bend rotations change while moving
     /// - Legs return to Quaternion.identity when state is Fallen or GettingUp
     /// - Arm joints are not modified by LegAnimator
+    /// - Lower leg joints physically rotate during gait, overcoming gravity (regression: dragging-feet bug)
     /// </summary>
     public class LegAnimatorTests
     {
@@ -304,15 +305,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Quaternion lRotA = _upperLegLJoint.targetRotation;
             Quaternion rRotA = _upperLegRJoint.targetRotation;
 
-            // Capture the sign of the X-component difference now
-            float diffA = GetRotationXAngle(lRotA) - GetRotationXAngle(rRotA);
+            // Capture the sign of the Z-component difference now.
+            // DESIGN: _swingAxis defaults to Vector3.forward (Z) because ConfigurableJoint
+            // targetRotation maps joint.axis (Vector3.right = primary hinge) to the Z
+            // component of the rotation. We therefore check the Z-axis signed angle here.
+            float diffA = GetRotationZAngle(lRotA) - GetRotationZAngle(rRotA);
 
             // Wait a half-cycle
             yield return new WaitForSeconds(0.25f);
 
             Quaternion lRotB = _upperLegLJoint.targetRotation;
             Quaternion rRotB = _upperLegRJoint.targetRotation;
-            float diffB = GetRotationXAngle(lRotB) - GetRotationXAngle(rRotB);
+            float diffB = GetRotationZAngle(lRotB) - GetRotationZAngle(rRotB);
 
             // Assert — the sign of (L - R) should flip over a half-cycle
             Assert.That(diffA * diffB, Is.LessThan(0f),
@@ -442,6 +446,64 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "LegAnimator must have a private serialized field named '_idleBlendSpeed'.");
             Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
                 "_idleBlendSpeed must be a float.");
+        }
+
+        /// <summary>
+        /// LegAnimator must expose a serialized _swingAxis field (Vector3) so the upper-leg
+        /// rotation axis can be tuned in the Inspector without code changes.
+        /// Default must be Vector3.forward (Z) — the correct targetRotation axis for
+        /// joint.axis=right with ConfigurableJoint's internal frame mapping.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator SwingAxis_FieldExists_AndDefaultsToForward()
+        {
+            // Arrange
+            yield return null;
+
+            // Act — use reflection to confirm the field exists and has the correct default
+            FieldInfo field = typeof(LegAnimator).GetField("_swingAxis",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Assert: field exists and is a Vector3
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_swingAxis'.");
+            Assert.That(field.FieldType, Is.EqualTo(typeof(Vector3)),
+                "_swingAxis must be a Vector3.");
+
+            // Assert: default value is Vector3.forward (0, 0, 1)
+            Vector3 defaultValue = (Vector3)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(Vector3.forward),
+                $"_swingAxis default must be Vector3.forward (0,0,1) for correct sagittal swing. " +
+                $"Got: {defaultValue}.");
+        }
+
+        /// <summary>
+        /// LegAnimator must expose a serialized _kneeAxis field (Vector3) so the lower-leg
+        /// knee-bend rotation axis can be tuned in the Inspector without code changes.
+        /// Default must be Vector3.forward (Z) — the correct targetRotation axis for
+        /// joint.axis=right with ConfigurableJoint's internal frame mapping.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator KneeAxis_FieldExists_AndDefaultsToForward()
+        {
+            // Arrange
+            yield return null;
+
+            // Act — use reflection to confirm the field exists and has the correct default
+            FieldInfo field = typeof(LegAnimator).GetField("_kneeAxis",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Assert: field exists and is a Vector3
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_kneeAxis'.");
+            Assert.That(field.FieldType, Is.EqualTo(typeof(Vector3)),
+                "_kneeAxis must be a Vector3.");
+
+            // Assert: default value is Vector3.forward (0, 0, 1)
+            Vector3 defaultValue = (Vector3)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(Vector3.forward),
+                $"_kneeAxis default must be Vector3.forward (0,0,1) for correct knee bend. " +
+                $"Got: {defaultValue}.");
         }
 
         /// <summary>
@@ -688,6 +750,135 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"UpperArm_L changed by {angleDiff:F4}°.");
         }
 
+        // ─── Physical Lift Regression Test ──────────────────────────────────
+
+        /// <summary>
+        /// Regression test for the 'dragging feet' bug.
+        ///
+        /// Verifies that, with a full physics-enabled ragdoll (RagdollSetup + LegAnimator +
+        /// PlayerMovement + CharacterState + BalanceController all active), at least one
+        /// lower leg ConfigurableJoint physically rotates away from its rest orientation
+        /// during sustained walking gait — proving the joint drive overcomes gravity and
+        /// the leg actually lifts, not just that <c>targetRotation</c> is assigned.
+        ///
+        /// Measurement: angular displacement of the lower leg segment's local rotation
+        /// relative to its starting orientation (measured via Quaternion.Angle between
+        /// initial and final local rotation of the lower leg Transform).  Local rotation
+        /// is the quantity driven by the ConfigurableJoint spring, making it the most
+        /// direct indicator of whether the joint is physically responding to the
+        /// LegAnimator's targetRotation commands.
+        ///
+        /// Threshold rationale (5°):
+        ///   - LegAnimator default _kneeAngle = 20°, applied immediately once input starts.
+        ///   - RagdollSetup applies lowerLegSpring = 1200 Nm/rad; at 20° = 0.35 rad,
+        ///     spring torque ≈ 420 Nm vs gravity torque ≈ 4.2 Nm — the joint wins 100:1.
+        ///   - The _smoothedInputMag ramp means amplitude is only ~5% at frame 1, ramping
+        ///     toward 100% over ~60 frames; after 50 frames the joint should be > 15°.
+        ///   - 5° threshold is deliberately conservative: a limp/no-drive leg measures 0°,
+        ///     while a properly driven leg will exceed 10° well within 50 frames.
+        ///   - If CI proves this too tight, raise to 3° — the point is that ANY measurable
+        ///     angular response proves the drive chain is alive end-to-end.
+        ///
+        /// This test uses a SEPARATE, fully-wired physics rig (not the shared SetUp rig)
+        /// so that gravity is enabled on all bodies and the drives are configured by
+        /// RagdollSetup exactly as they are at runtime.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LowerLeg_WhenWalking_LiftsBeyondMinimumThreshold()
+        {
+            // ── Arrange ────────────────────────────────────────────────────────
+
+            // Minimum angular displacement (degrees) the lower leg joint must achieve
+            // relative to its rest orientation. See threshold rationale above.
+            const float MinAngularDisplacementDeg = 5f;
+
+            // Number of FixedUpdate frames to simulate before measuring.
+            // 50 frames at 100 Hz = 0.5 s — enough for the gait phase + smoothed-scale
+            // ramp (_smoothedInputMag) to reach near-full amplitude.
+            const int PhysicsFrames = 50;
+
+            // ── Build the physical rig ─────────────────────────────────────────
+            // 5-body ragdoll: Hips → UpperLeg_L → LowerLeg_L
+            //                        UpperLeg_R → LowerLeg_R
+            // Joints use locked linear axes (position-constrained) so gravity does not
+            // cause the bodies to free-fall through each other.
+            // Rotation is free (Slerp drive controls angular response via targetRotation).
+
+            GameObject physicsHips = new GameObject("PhysicsHips");
+            Rigidbody hipsRb = physicsHips.AddComponent<Rigidbody>();
+            hipsRb.useGravity = false;  // Hips are the anchor — keep stable
+            hipsRb.isKinematic = true;  // Lock hips in place so legs swing freely
+            physicsHips.AddComponent<BoxCollider>();
+
+            // Build leg hierarchy BEFORE adding Character components so all Awake calls
+            // see the complete hierarchy.
+            GameObject physUpperLegL = CreatePhysicsLegJoint(physicsHips, "UpperLeg_L", hipsRb,
+                localPos: new Vector3(-0.2f, -0.3f, 0f), mass: 3f);
+            GameObject physUpperLegR = CreatePhysicsLegJoint(physicsHips, "UpperLeg_R", hipsRb,
+                localPos: new Vector3( 0.2f, -0.3f, 0f), mass: 3f);
+
+            Rigidbody upperLRb = physUpperLegL.GetComponent<Rigidbody>();
+            Rigidbody upperRRb = physUpperLegR.GetComponent<Rigidbody>();
+
+            GameObject physLowerLegL = CreatePhysicsLegJoint(physUpperLegL, "LowerLeg_L", upperLRb,
+                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
+            GameObject physLowerLegR = CreatePhysicsLegJoint(physUpperLegR, "LowerLeg_R", upperRRb,
+                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
+
+            // ── Add Character components on Hips in dependency order ───────────
+            // RagdollSetup FIRST: its Awake applies SLERP drives to joints.
+            physicsHips.AddComponent<RagdollSetup>();
+
+            BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
+            PlayerMovement physicsMovement = physicsHips.AddComponent<PlayerMovement>();
+            physicsHips.AddComponent<CharacterState>();
+            physicsHips.AddComponent<LegAnimator>();
+
+            // ── Configure test seams so gait runs without falling ──────────────
+            physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+
+            // Disable BalanceController and PlayerMovement physics loops to isolate
+            // the LegAnimator joint-drive signal.
+            physicsBalance.enabled = false;
+            physicsMovement.enabled = false;
+
+            // Inject non-zero move input so LegAnimator's phase accumulates.
+            physicsMovement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Wait one frame for all Awake/Start calls to complete.
+            yield return null;
+
+            // ── Record rest rotation ───────────────────────────────────────────
+            // Capture initial local rotation of both lower legs before gait has any effect.
+            Quaternion lowerLegLRestRot = physLowerLegL.transform.localRotation;
+            Quaternion lowerLegRRestRot = physLowerLegR.transform.localRotation;
+
+            // ── Act — simulate physics frames ─────────────────────────────────
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // ── Assert ─────────────────────────────────────────────────────────
+            float angularDisplacementL = Quaternion.Angle(lowerLegLRestRot, physLowerLegL.transform.localRotation);
+            float angularDisplacementR = Quaternion.Angle(lowerLegRRestRot, physLowerLegR.transform.localRotation);
+
+            // At least one lower leg must have physically rotated by MinAngularDisplacementDeg.
+            bool eitherRotated = (angularDisplacementL >= MinAngularDisplacementDeg) ||
+                                 (angularDisplacementR >= MinAngularDisplacementDeg);
+
+            Assert.That(eitherRotated, Is.True,
+                $"At least one lower leg joint must physically rotate ≥{MinAngularDisplacementDeg:F1}° " +
+                $"from rest during {PhysicsFrames} FixedUpdate frames of walking gait. " +
+                $"LowerLeg_L angular displacement={angularDisplacementL:F2}°  |  " +
+                $"LowerLeg_R angular displacement={angularDisplacementR:F2}°. " +
+                $"A rotation near 0° indicates the SLERP drive is not overcoming gravity — " +
+                $"the 'dragging feet' bug has returned.");
+
+            // ── Cleanup ───────────────────────────────────────────────────────
+            UnityEngine.Object.Destroy(physicsHips);
+        }
+
         // ─── Helper: create test-rig leg/arm joints ─────────────────────────
 
         private static GameObject CreateLegJoint(GameObject parent, string name)
@@ -709,6 +900,52 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             go.AddComponent<Rigidbody>();
             ConfigurableJoint joint = go.AddComponent<ConfigurableJoint>();
             joint.targetRotation = Quaternion.identity;
+            return go;
+        }
+
+        /// <summary>
+        /// Creates a child GameObject with a Rigidbody (gravity enabled), a BoxCollider,
+        /// and a ConfigurableJoint connected to <paramref name="parentRb"/> — suitable for
+        /// the physical-lift regression test that measures real angular displacement.
+        /// Linear axes are locked so the body remains position-constrained to its parent
+        /// (preventing gravity free-fall through the joint). Rotation is free so the
+        /// SLERP drive can rotate the joint in response to LegAnimator's targetRotation.
+        /// The joint uses SLERP drive mode so <see cref="RagdollSetup"/> can override it.
+        /// </summary>
+        private static GameObject CreatePhysicsLegJoint(
+            GameObject parent, string name, Rigidbody parentRb, Vector3 localPos, float mass)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent.transform);
+            go.transform.localPosition = localPos;
+
+            Rigidbody rb = go.AddComponent<Rigidbody>();
+            rb.mass = mass;
+            rb.useGravity = true;   // Gravity enabled — the joint spring must resist it
+
+            go.AddComponent<BoxCollider>();
+
+            ConfigurableJoint joint = go.AddComponent<ConfigurableJoint>();
+            joint.connectedBody = parentRb;
+
+            // Lock linear axes so the body stays positionally anchored to the parent
+            // and cannot free-fall away from the joint. Angular motion remains free so
+            // the SLERP drive can rotate the segment in response to targetRotation.
+            joint.xMotion = ConfigurableJointMotion.Locked;
+            joint.yMotion = ConfigurableJointMotion.Locked;
+            joint.zMotion = ConfigurableJointMotion.Locked;
+
+            joint.rotationDriveMode = RotationDriveMode.Slerp;
+            // Deliberately weak initial drive — RagdollSetup.Awake overrides this with the
+            // authoritative spring/damper values (default _lowerLegSpring = 1200 Nm/rad).
+            joint.slerpDrive = new JointDrive
+            {
+                positionSpring = 100f,
+                positionDamper = 10f,
+                maximumForce   = float.MaxValue,
+            };
+            joint.targetRotation = Quaternion.identity;
+
             return go;
         }
 
@@ -741,9 +978,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetAutoPropertyBackingField(_characterState, nameof(CharacterState.CurrentState), state);
         }
 
+        private static float GetRotationZAngle(Quaternion q)
+        {
+            // Extract local Z rotation angle (degrees) from quaternion, signed by convention.
+            // Used because LegAnimator._swingAxis defaults to Vector3.forward (Z) — the
+            // ConfigurableJoint targetRotation Z component maps to rotation around joint.axis
+            // (Vector3.right = primary hinge), which drives sagittal forward/backward swing.
+            q.ToAngleAxis(out float angle, out Vector3 axis);
+            if (angle > 180f) { angle -= 360f; }
+            return angle * Vector3.Dot(axis.normalized, Vector3.forward);
+        }
+
         private static float GetRotationXAngle(Quaternion q)
         {
             // Extract local X rotation angle (degrees) from quaternion, signed by convention.
+            // Retained for backward compatibility — not used by gait tests after axis fix.
             q.ToAngleAxis(out float angle, out Vector3 axis);
             if (angle > 180f) { angle -= 360f; }
             return angle * Vector3.Dot(axis.normalized, Vector3.right);

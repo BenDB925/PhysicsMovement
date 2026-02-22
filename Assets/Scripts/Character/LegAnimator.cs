@@ -9,6 +9,15 @@ namespace PhysicsDrivenMovement.Character
     /// Left and right upper legs are offset by π (half-cycle), producing an alternating
     /// stepping pattern. Lower legs receive a constant knee-bend target during gait.
     ///
+    /// Axis convention (Bug fix — Phase 3E1 axis correction):
+    /// Unity's ConfigurableJoint.targetRotation maps the joint's primary axis (joint.axis)
+    /// to the Z component of the target Euler rotation, NOT the X component as might be
+    /// intuited. With RagdollBuilder defaults (joint.axis = Vector3.right, secondaryAxis =
+    /// Vector3.forward), the correct swing axis in targetRotation space is Vector3.forward
+    /// (Z), not Vector3.right (X). Using X caused lateral abduction (side-to-side wiggle)
+    /// instead of sagittal swing (forward/backward lift). The axes are now serialized as
+    /// <see cref="_swingAxis"/> and <see cref="_kneeAxis"/> for Inspector tuning.
+    ///
     /// Idle settle behaviour (Phase 3E2):
     /// — When move input drops to zero, all four joint targetRotations are set directly
     ///   to <see cref="Quaternion.identity"/> each FixedUpdate, so legs immediately
@@ -62,6 +71,32 @@ namespace PhysicsDrivenMovement.Character
                  "   movement resumes, preventing a snap to full gait amplitude.\n" +
                  "Higher = faster transition; 0 = no smoothing. Typical: 3–8.")]
         private float _idleBlendSpeed = 5f;
+
+        // DESIGN: _swingAxis and _kneeAxis are specified in ConfigurableJoint targetRotation
+        //         space, which maps joint.axis (the primary hinge) to the Z component of the
+        //         Euler/quaternion rotation — NOT the X component as intuition might suggest.
+        //         With joint.axis=Vector3.right and secondaryAxis=Vector3.forward (as set by
+        //         RagdollBuilder for all leg joints), the targetRotation frame is:
+        //           Z → joint.axis (Vector3.right) → sagittal forward/backward swing ✓
+        //           X → secondaryAxis (Vector3.forward) → lateral abduction (unwanted for gait)
+        //           Y → right×forward = Vector3.down → leg twist (unwanted for gait)
+        //         Therefore the correct axis for leg swing and knee bend is Vector3.forward (Z).
+        //         These fields are exposed for Inspector tuning so they can be adjusted without
+        //         code changes if the ragdoll's joint axes are reconfigured in future.
+
+        [SerializeField]
+        [Tooltip("Rotation axis for upper-leg forward/backward swing in ConfigurableJoint targetRotation " +
+                 "space. With RagdollBuilder defaults (joint.axis=right, secondaryAxis=forward), " +
+                 "the correct value is (0, 0, 1) — Z maps to the primary hinge axis. " +
+                 "Adjust if the joint axis configuration changes.")]
+        private Vector3 _swingAxis = new Vector3(0f, 0f, 1f);
+
+        [SerializeField]
+        [Tooltip("Rotation axis for lower-leg knee bend in ConfigurableJoint targetRotation space. " +
+                 "With RagdollBuilder defaults (joint.axis=right, secondaryAxis=forward), " +
+                 "the correct value is (0, 0, 1) — Z maps to the primary hinge axis. " +
+                 "Adjust if the joint axis configuration changes.")]
+        private Vector3 _kneeAxis = new Vector3(0f, 0f, 1f);
 
         // ── Private Fields ──────────────────────────────────────────────────
 
@@ -220,7 +255,9 @@ namespace PhysicsDrivenMovement.Character
                 // STEP 5: Compute sinusoidal upper-leg targets.
                 //         Left leg uses phase directly; right leg is offset by π (half-cycle)
                 //         so they always swing in opposite directions — the alternating gait.
-                //         The swing is a pure rotation around the X axis (forward/backward).
+                //         The swing is a pure rotation around _swingAxis (default Z / forward)
+                //         in targetRotation space, which drives the primary hinge (joint.axis=right)
+                //         for sagittal forward/backward swing.
                 //         We scale amplitude by _smoothedInputMag to get the anti-pop ramp.
                 float leftSwingDeg  = Mathf.Sin(_phase)            * _stepAngle * _smoothedInputMag;
                 float rightSwingDeg = Mathf.Sin(_phase + Mathf.PI) * _stepAngle * _smoothedInputMag;
@@ -233,24 +270,30 @@ namespace PhysicsDrivenMovement.Character
                 // STEP 7: Apply computed rotations to joint targetRotations directly.
                 //         Using direct assignment (not slerp) preserves the exact L/R
                 //         phase relationship — the smoothing is done via _smoothedInputMag.
+                //         DESIGN: Quaternion.AngleAxis with _swingAxis (default Vector3.forward / Z)
+                //         is used because ConfigurableJoint.targetRotation maps the primary joint
+                //         hinge (joint.axis = Vector3.right) to the Z component of the rotation
+                //         in targetRotation space. Using X-axis (Quaternion.Euler(angle, 0, 0))
+                //         produced lateral abduction (side-to-side wiggle) instead of the intended
+                //         sagittal forward/backward swing that lifts the leg off the ground.
                 if (_upperLegL != null)
                 {
-                    _upperLegL.targetRotation = Quaternion.Euler(leftSwingDeg, 0f, 0f);
+                    _upperLegL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _swingAxis);
                 }
 
                 if (_upperLegR != null)
                 {
-                    _upperLegR.targetRotation = Quaternion.Euler(rightSwingDeg, 0f, 0f);
+                    _upperLegR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _swingAxis);
                 }
 
                 if (_lowerLegL != null)
                 {
-                    _lowerLegL.targetRotation = Quaternion.Euler(-kneeBendDeg, 0f, 0f);
+                    _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
                 }
 
                 if (_lowerLegR != null)
                 {
-                    _lowerLegR.targetRotation = Quaternion.Euler(-kneeBendDeg, 0f, 0f);
+                    _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
                 }
             }
             else
