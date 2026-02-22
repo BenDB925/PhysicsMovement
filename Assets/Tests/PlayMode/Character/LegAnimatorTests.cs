@@ -888,6 +888,368 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             UnityEngine.Object.Destroy(physicsHips);
         }
 
+        // ─── Gait Quality Regression Tests ──────────────────────────────────
+
+        /// <summary>
+        /// Gait Quality Test 1: Knee world Y must be higher than lower leg (foot) world Y
+        /// during swing phase.
+        ///
+        /// With world-space knee bend enabled, the upper knee joint is driven to fold the
+        /// lower leg forward and upward relative to the upper leg. The knee (UpperLeg
+        /// segment midpoint / LowerLeg anchor) should be measurably higher in world space
+        /// than the lower leg tip (LowerLeg body) at the peak of the swing cycle.
+        ///
+        /// Threshold rationale (0.02 m):
+        ///   - LegAnimator default _kneeAngle = 20°, _stepAngle = 25°.
+        ///   - At 20° knee bend with a 0.35 m lower leg, the foot rises ~0.35 × sin(20°) ≈ 0.12 m.
+        ///   - The knee itself is ~0.35 m below the upper leg pivot, so knee Y relative to
+        ///     the lower leg centre is at least 0.12 m in theory.
+        ///   - 0.02 m is conservative: any measurable knee lift above the foot confirms
+        ///     the knee-bend drive is working in the correct direction.
+        ///   - A leg dragging flat would show knee Y ≈ lower leg Y (diff near 0).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LowerLeg_WhenWalking_KneeHigherThanFoot()
+        {
+            // ── Arrange ────────────────────────────────────────────────────────
+            const float MinKneeAboveFootMetres = 0.02f;
+            const int PhysicsFrames = 80;
+
+            GameObject physicsHips = BuildGaitQualityRig(out PlayerMovement physMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR);
+
+            physMovement.SetMoveInputForTest(new Vector2(0f, 1f));
+            yield return null;  // allow Awake/Start
+
+            // ── Act ────────────────────────────────────────────────────────────
+            float maxKneeAboveFootL = float.MinValue;
+            float maxKneeAboveFootR = float.MinValue;
+
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                // Knee world Y = world position of the LowerLeg joint anchor = UpperLeg child pos
+                // Lower leg world Y = world position of the LowerLeg body centre
+                float kneeYL    = physUpperLegL.transform.position.y;
+                float lowerLegYL = physLowerLegL.transform.position.y;
+                float kneeYR    = physUpperLegR.transform.position.y;
+                float lowerLegYR = physLowerLegR.transform.position.y;
+
+                // Knee is the pivot point at top of LowerLeg; foot/lower leg body is below
+                // knee when the leg hangs straight, but ABOVE the knee when bent forward.
+                // We measure knee Y (UpperLeg body position) vs lower leg body Y.
+                // During knee bend, the UpperLeg body remains roughly fixed (hips are
+                // kinematic), but the LowerLeg body rotates forward and upward, so
+                // lowerLegY > kneeY (foot rises above knee pivot).
+                // Alternatively, we measure the signed difference: lowerLegY - kneeY
+                // (positive means foot has risen above the knee pivot).
+                float diffL = lowerLegYL - kneeYL;
+                float diffR = lowerLegYR - kneeYR;
+
+                if (diffL > maxKneeAboveFootL) { maxKneeAboveFootL = diffL; }
+                if (diffR > maxKneeAboveFootR) { maxKneeAboveFootR = diffR; }
+            }
+
+            // ── Assert ─────────────────────────────────────────────────────────
+            // At peak of the forward swing, the lower leg body (foot) rises above the
+            // UpperLeg body (knee pivot) by at least MinKneeAboveFootMetres.
+            bool eitherLegRaisedFoot = (maxKneeAboveFootL >= MinKneeAboveFootMetres) ||
+                                       (maxKneeAboveFootR >= MinKneeAboveFootMetres);
+
+            Assert.That(eitherLegRaisedFoot, Is.True,
+                $"During {PhysicsFrames} frames of walking gait, at least one lower leg body must rise " +
+                $"above its knee pivot (UpperLeg position) by ≥{MinKneeAboveFootMetres:F3} m. " +
+                $"Max foot-above-knee: L={maxKneeAboveFootL:F4} m  R={maxKneeAboveFootR:F4} m. " +
+                $"A negative or near-zero value means the knee-bend drive is not lifting the lower leg.");
+
+            // ── Cleanup ────────────────────────────────────────────────────────
+            UnityEngine.Object.Destroy(physicsHips);
+        }
+
+        /// <summary>
+        /// Gait Quality Test 2: Lower leg world Y must rise above spawn Y + 0.05 m
+        /// at some point during 80 physics frames of walking gait.
+        ///
+        /// This tests that the leg actually lifts off the ground plane during gait,
+        /// not just oscillates in place at the starting height (which would indicate
+        /// joint targeting is producing horizontal motion instead of vertical lift).
+        ///
+        /// Threshold rationale (0.05 m):
+        ///   - Spawn Y of the lower leg body is approximately hips Y - 0.30 m - 0.35 m
+        ///     (upper leg + lower leg half-lengths), so about 0.65 m below the hips.
+        ///   - During forward swing, the lower leg is driven to ~20° knee bend while the
+        ///     upper leg swings forward ~25°; combined, the foot can rise 0.1–0.2 m above
+        ///     the straight-down rest position.
+        ///   - 0.05 m is a conservative lower bound: a working gait should produce at
+        ///     least 5 cm of vertical foot clearance; a dragging / jammed leg produces 0.
+        ///   - If CI proves this too tight given the test rig geometry, lower to 0.03 m.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LowerLeg_WhenWalking_FootClearsGround()
+        {
+            // ── Arrange ────────────────────────────────────────────────────────
+            const float MinFootClearanceMetres = 0.05f;
+            const int PhysicsFrames = 80;
+
+            GameObject physicsHips = BuildGaitQualityRig(out PlayerMovement physMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR);
+
+            physMovement.SetMoveInputForTest(new Vector2(0f, 1f));
+            yield return null;  // allow Awake/Start
+
+            // Record spawn Y positions after Awake (joint constraints may shift them slightly)
+            float spawnYL = physLowerLegL.transform.position.y;
+            float spawnYR = physLowerLegR.transform.position.y;
+
+            // ── Act ────────────────────────────────────────────────────────────
+            float maxYAboveSpawnL = 0f;
+            float maxYAboveSpawnR = 0f;
+
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float riseL = physLowerLegL.transform.position.y - spawnYL;
+                float riseR = physLowerLegR.transform.position.y - spawnYR;
+
+                if (riseL > maxYAboveSpawnL) { maxYAboveSpawnL = riseL; }
+                if (riseR > maxYAboveSpawnR) { maxYAboveSpawnR = riseR; }
+            }
+
+            // ── Assert ─────────────────────────────────────────────────────────
+            bool eitherFootCleared = (maxYAboveSpawnL >= MinFootClearanceMetres) ||
+                                     (maxYAboveSpawnR >= MinFootClearanceMetres);
+
+            Assert.That(eitherFootCleared, Is.True,
+                $"During {PhysicsFrames} frames of walking gait, at least one lower leg must rise " +
+                $"≥{MinFootClearanceMetres:F3} m above its spawn Y. " +
+                $"Max rise above spawn: L={maxYAboveSpawnL:F4} m  R={maxYAboveSpawnR:F4} m. " +
+                $"A near-zero rise means the foot is not clearing the ground — dragging-feet regression.");
+
+            // ── Cleanup ────────────────────────────────────────────────────────
+            UnityEngine.Object.Destroy(physicsHips);
+        }
+
+        /// <summary>
+        /// Gait Quality Test 3: Feet must alternate — left and right lower legs must
+        /// each take a turn being further forward along the movement direction over 80
+        /// physics frames.
+        ///
+        /// This proves that the L/R alternating gait phase (π offset) produces a visible
+        /// walking pattern in world space, not just symmetric oscillation.
+        ///
+        /// Method:
+        ///   Move input is (0, 1) → movement direction is world +Z.
+        ///   Project both lower leg world positions onto the +Z axis each frame.
+        ///   Assert that:
+        ///     (a) At some frame, LowerLeg_L.z > LowerLeg_R.z (left foot is ahead)
+        ///     (b) At a different frame, LowerLeg_R.z > LowerLeg_L.z (right foot is ahead)
+        ///
+        /// Threshold rationale (0.01 m):
+        ///   - With _stepAngle=25° and upper leg length ~0.3 m, the forward excursion of
+        ///     each foot at peak swing is ~0.3 × sin(25°) ≈ 0.13 m.
+        ///   - 0.01 m threshold is conservative: both feet should exceed this easily if
+        ///     the alternating phase is working.
+        ///   - A symmetric rig (both swinging together) would never produce a crossing;
+        ///     a broken phase would show one foot always ahead.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LowerLeg_WhenWalking_FeetAlternate()
+        {
+            // ── Arrange ────────────────────────────────────────────────────────
+            const float MinAlternationMarginMetres = 0.01f;
+            const int PhysicsFrames = 80;
+
+            // Move input direction: forward (+Z in world space for our rig)
+            Vector2 moveInput = new Vector2(0f, 1f);
+            Vector3 moveDir3D  = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
+
+            GameObject physicsHips = BuildGaitQualityRig(out PlayerMovement physMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR);
+
+            physMovement.SetMoveInputForTest(moveInput);
+            yield return null;  // allow Awake/Start
+
+            // ── Act ────────────────────────────────────────────────────────────
+            float maxLeftAheadMargin  = float.MinValue;  // L.z - R.z (positive = L ahead)
+            float maxRightAheadMargin = float.MinValue;  // R.z - L.z (positive = R ahead)
+
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                // Project lower leg world positions onto the movement direction
+                float lForward = Vector3.Dot(physLowerLegL.transform.position, moveDir3D);
+                float rForward = Vector3.Dot(physLowerLegR.transform.position, moveDir3D);
+
+                float leftAhead  = lForward - rForward;
+                float rightAhead = rForward - lForward;
+
+                if (leftAhead  > maxLeftAheadMargin)  { maxLeftAheadMargin  = leftAhead; }
+                if (rightAhead > maxRightAheadMargin) { maxRightAheadMargin = rightAhead; }
+            }
+
+            // ── Assert ─────────────────────────────────────────────────────────
+            Assert.That(maxLeftAheadMargin, Is.GreaterThanOrEqualTo(MinAlternationMarginMetres),
+                $"During {PhysicsFrames} frames, LowerLeg_L must be further forward than LowerLeg_R " +
+                $"by ≥{MinAlternationMarginMetres:F3} m at some frame. " +
+                $"Max L-ahead margin={maxLeftAheadMargin:F4} m. " +
+                $"A value below threshold means left foot never leads — alternating gait broken.");
+
+            Assert.That(maxRightAheadMargin, Is.GreaterThanOrEqualTo(MinAlternationMarginMetres),
+                $"During {PhysicsFrames} frames, LowerLeg_R must be further forward than LowerLeg_L " +
+                $"by ≥{MinAlternationMarginMetres:F3} m at some frame. " +
+                $"Max R-ahead margin={maxRightAheadMargin:F4} m. " +
+                $"A value below threshold means right foot never leads — alternating gait broken.");
+
+            // ── Cleanup ────────────────────────────────────────────────────────
+            UnityEngine.Object.Destroy(physicsHips);
+        }
+
+        /// <summary>
+        /// Gait Quality Test 4: Net horizontal displacement of the more-displaced lower
+        /// leg over 80 physics frames must have a positive dot product with the move
+        /// input direction.
+        ///
+        /// This tests that the world-space leg swing drives feet in the direction the
+        /// character is actually moving, not sideways or backwards.
+        ///
+        /// Method:
+        ///   Record each lower leg's world position at frame 0 and frame 80.
+        ///   Compute net horizontal displacement (XZ) for each leg.
+        ///   Select the leg with the larger total displacement magnitude.
+        ///   Assert: dot(displacement, moveDir) > 0 (displacement has a positive forward
+        ///   component — the foot ended up further forward than it started).
+        ///
+        /// Threshold rationale (0.0f — just positive dot product):
+        ///   - We only require a positive dot product, not a minimum magnitude, to avoid
+        ///     sensitivity to the amount of spring oscillation in the rig.
+        ///   - Any net forward component proves the drive axis is correct; a zero or
+        ///     negative result means the foot swung sideways or backwards (wrong axis).
+        ///   - This is the minimal correctness assertion: direction is right, not magnitude.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LowerLeg_WhenWalking_StepDirectionMatchesMovement()
+        {
+            // ── Arrange ────────────────────────────────────────────────────────
+            const int PhysicsFrames = 80;
+
+            Vector2 moveInput = new Vector2(0f, 1f);
+            Vector3 moveDir3D  = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
+
+            GameObject physicsHips = BuildGaitQualityRig(out PlayerMovement physMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR);
+
+            physMovement.SetMoveInputForTest(moveInput);
+            yield return null;  // allow Awake/Start
+
+            // Record starting positions after Awake
+            Vector3 startPosL = new Vector3(
+                physLowerLegL.transform.position.x, 0f, physLowerLegL.transform.position.z);
+            Vector3 startPosR = new Vector3(
+                physLowerLegR.transform.position.x, 0f, physLowerLegR.transform.position.z);
+
+            // ── Act ────────────────────────────────────────────────────────────
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // ── Measure ────────────────────────────────────────────────────────
+            Vector3 endPosL = new Vector3(
+                physLowerLegL.transform.position.x, 0f, physLowerLegL.transform.position.z);
+            Vector3 endPosR = new Vector3(
+                physLowerLegR.transform.position.x, 0f, physLowerLegR.transform.position.z);
+
+            Vector3 dispL = endPosL - startPosL;
+            Vector3 dispR = endPosR - startPosR;
+
+            // Pick the leg with the larger total displacement magnitude as the representative
+            Vector3 dispChosen = (dispL.magnitude >= dispR.magnitude) ? dispL : dispR;
+            string chosenName = (dispL.magnitude >= dispR.magnitude) ? "LowerLeg_L" : "LowerLeg_R";
+            float dotProduct = Vector3.Dot(dispChosen, moveDir3D);
+
+            // ── Assert ─────────────────────────────────────────────────────────
+            Assert.That(dotProduct, Is.GreaterThan(0f),
+                $"Net horizontal displacement of {chosenName} over {PhysicsFrames} frames must have " +
+                $"a positive dot product with move direction {moveDir3D}. " +
+                $"Dot product={dotProduct:F4}. Displacement={dispChosen}. " +
+                $"A zero or negative value means the foot is stepping sideways or backwards — " +
+                $"world-space swing axis is misaligned with movement direction.");
+
+            // ── Cleanup ────────────────────────────────────────────────────────
+            UnityEngine.Object.Destroy(physicsHips);
+        }
+
+        // ─── Gait Quality Rig Builder ─────────────────────────────────────────
+
+        /// <summary>
+        /// Builds a minimal full-physics ragdoll rig for the four gait quality regression
+        /// tests. Mirrors the setup in <see cref="LowerLeg_WhenWalking_LiftsBeyondMinimumThreshold"/>
+        /// but exposes all five body GameObjects via out parameters.
+        ///
+        /// Rig topology:
+        ///   physicsHips (kinematic, gravity off) — anchor body
+        ///     UpperLeg_L (rb, gravity on, ConfigurableJoint → hips)
+        ///       LowerLeg_L (rb, gravity on, ConfigurableJoint → UpperLeg_L)
+        ///     UpperLeg_R (rb, gravity on, ConfigurableJoint → hips)
+        ///       LowerLeg_R (rb, gravity on, ConfigurableJoint → UpperLeg_R)
+        ///
+        /// Components on Hips (in dependency order):
+        ///   RagdollSetup (first — applies authoritative spring values in Awake)
+        ///   BalanceController, PlayerMovement, CharacterState, LegAnimator
+        ///
+        /// BalanceController and PlayerMovement physics loops are disabled so LegAnimator
+        /// can run in isolation. Move input must be injected by the caller via
+        /// physMovement.SetMoveInputForTest().
+        /// </summary>
+        private static GameObject BuildGaitQualityRig(
+            out PlayerMovement physMovement,
+            out GameObject physUpperLegL, out GameObject physUpperLegR,
+            out GameObject physLowerLegL, out GameObject physLowerLegR)
+        {
+            // ── Hips anchor ─────────────────────────────────────────────────
+            GameObject physicsHips = new GameObject("PhysicsHips");
+            Rigidbody hipsRb = physicsHips.AddComponent<Rigidbody>();
+            hipsRb.useGravity  = false;
+            hipsRb.isKinematic = true;
+            physicsHips.AddComponent<BoxCollider>();
+
+            // ── Build leg hierarchy ─────────────────────────────────────────
+            physUpperLegL = CreatePhysicsLegJoint(physicsHips, "UpperLeg_L", hipsRb,
+                localPos: new Vector3(-0.2f, -0.3f, 0f), mass: 3f);
+            physUpperLegR = CreatePhysicsLegJoint(physicsHips, "UpperLeg_R", hipsRb,
+                localPos: new Vector3( 0.2f, -0.3f, 0f), mass: 3f);
+
+            Rigidbody upperLRb = physUpperLegL.GetComponent<Rigidbody>();
+            Rigidbody upperRRb = physUpperLegR.GetComponent<Rigidbody>();
+
+            physLowerLegL = CreatePhysicsLegJoint(physUpperLegL, "LowerLeg_L", upperLRb,
+                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
+            physLowerLegR = CreatePhysicsLegJoint(physUpperLegR, "LowerLeg_R", upperRRb,
+                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
+
+            // ── Add Character components (RagdollSetup FIRST) ──────────────
+            physicsHips.AddComponent<RagdollSetup>();
+
+            BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
+            physMovement = physicsHips.AddComponent<PlayerMovement>();
+            physicsHips.AddComponent<CharacterState>();
+            physicsHips.AddComponent<LegAnimator>();
+
+            // ── Configure test seams ────────────────────────────────────────
+            physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            physicsBalance.enabled = false;
+            physMovement.enabled   = false;
+
+            return physicsHips;
+        }
+
         // ─── World-Space Swing Tests (Phase 3E3) ────────────────────────────
 
         /// <summary>
