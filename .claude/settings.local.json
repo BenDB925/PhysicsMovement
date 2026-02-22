@@ -9,7 +9,9 @@
       "Bash(powershell:*)",
       "Bash(python3:*)",
       "Bash(python:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(xargs basename:*)"
     ]
   }
 }

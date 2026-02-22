@@ -17,6 +17,7 @@ namespace PhysicsDrivenMovement.Input
         private readonly InputAction _playerJump;
         private readonly InputAction _playerGrab;
         private readonly InputAction _playerPunch;
+        private readonly InputAction _playerSprint;
 
         public PlayerInputActions()
         {
@@ -37,6 +38,9 @@ namespace PhysicsDrivenMovement.Input
 
             _playerPunch = _player.AddAction("Punch", InputActionType.Button);
             _playerPunch.expectedControlType = "Button";
+
+            _playerSprint = _player.AddAction("Sprint", InputActionType.Button);
+            _playerSprint.expectedControlType = "Button";
 
             AddMoveBindings();
             AddLookBindings();
@@ -84,11 +88,14 @@ namespace PhysicsDrivenMovement.Input
             _playerJump.AddBinding("<Keyboard>/space");
             _playerJump.AddBinding("<Gamepad>/buttonSouth");
 
-            _playerGrab.AddBinding("<Keyboard>/leftShift");
+            _playerGrab.AddBinding("<Keyboard>/leftCtrl");
             _playerGrab.AddBinding("<Gamepad>/leftTrigger");
 
             _playerPunch.AddBinding("<Mouse>/leftButton");
             _playerPunch.AddBinding("<Gamepad>/rightTrigger");
+
+            _playerSprint.AddBinding("<Keyboard>/leftShift");
+            _playerSprint.AddBinding("<Gamepad>/leftShoulder");
         }
 
         public readonly struct PlayerActions
@@ -109,6 +116,8 @@ namespace PhysicsDrivenMovement.Input
             public InputAction Grab => _wrapper._playerGrab;
 
             public InputAction Punch => _wrapper._playerPunch;
+
+            public InputAction Sprint => _wrapper._playerSprint;
 
             public InputActionMap Get() => _wrapper._player;
 

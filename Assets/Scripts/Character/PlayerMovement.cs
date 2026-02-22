@@ -36,6 +36,15 @@ namespace PhysicsDrivenMovement.Character
                  "Higher values push from the ground up, preventing forward lean and knee buckling.")]
         private float _footForceFraction = 0.85f;
 
+        [Header("Sprint")]
+        [SerializeField, Range(1f, 3f)]
+        [Tooltip("Multiplied with _maxSpeed while sprinting to raise the horizontal speed cap.")]
+        private float _sprintSpeedMultiplier = 1.8f;
+
+        [SerializeField, Range(1f, 3f)]
+        [Tooltip("Multiplied with _moveForce while sprinting so the character actually accelerates to the higher cap.")]
+        private float _sprintForceMultiplier = 1.5f;
+
         [SerializeField]
         private Camera _camera;
 
@@ -47,16 +56,20 @@ namespace PhysicsDrivenMovement.Character
         private Vector2 _currentMoveInput;
         private bool _jumpRequested;
         private float _lastJumpTime = -10f;
+        private bool _sprintHeld;
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
         public Vector2 CurrentMoveInput => _currentMoveInput;
 
+        /// <summary>True while the sprint button is held and the character is moving.</summary>
+        public bool IsSprinting => _sprintHeld && _currentMoveInput.sqrMagnitude > 0.0001f;
+
         /// <summary>
-        /// Test seam: directly inject move input, bypassing the Input System.
+        /// Directly inject move input, bypassing the Input System.
         /// FixedUpdate will not overwrite this value while the override is active.
-        /// Do not call from production code.
+        /// Used by AI controllers and tests.
         /// </summary>
-        public void SetMoveInputForTest(Vector2 input)
+        public void SetMoveInputOverride(Vector2 input)
         {
             _currentMoveInput = input;
             _overrideMoveInput = true;
@@ -105,6 +118,12 @@ namespace PhysicsDrivenMovement.Character
             if (!_overrideMoveInput && _inputActions != null)
             {
                 _currentMoveInput = _inputActions.Player.Move.ReadValue<Vector2>();
+            }
+
+            // Cache sprint hold state every frame.
+            if (_inputActions != null)
+            {
+                _sprintHeld = _inputActions.Player.Sprint.IsPressed();
             }
 
             // Latch jump press so FixedUpdate can consume it even if Update runs multiple times.
@@ -206,10 +225,13 @@ namespace PhysicsDrivenMovement.Character
 
             worldDirection.Normalize();
 
+            float effectiveMaxSpeed = IsSprinting ? _maxSpeed * _sprintSpeedMultiplier : _maxSpeed;
+            float effectiveMoveForce = IsSprinting ? _moveForce * _sprintForceMultiplier : _moveForce;
+
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            if (horizontalVelocity.magnitude < _maxSpeed)
+            if (horizontalVelocity.magnitude < effectiveMaxSpeed)
             {
-                Vector3 totalForce = worldDirection * _moveForce;
+                Vector3 totalForce = worldDirection * effectiveMoveForce;
                 float footShare = _footForceFraction;
                 float hipsShare = 1f - footShare;
 

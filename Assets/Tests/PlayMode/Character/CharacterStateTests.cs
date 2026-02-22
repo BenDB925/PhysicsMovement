@@ -29,7 +29,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Inject default state immediately so FixedUpdate can't overwrite before tests run.
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Disable physics-driven components so tests have full deterministic control.
             _balance.enabled = false;
@@ -333,7 +333,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private void SetCurrentMoveInput(Vector2 moveInput)
         {
-            _movement.SetMoveInputForTest(moveInput);
+            _movement.SetMoveInputOverride(moveInput);
         }
 
         private static void SetAutoPropertyBackingField(object instance, string propertyName, object value)

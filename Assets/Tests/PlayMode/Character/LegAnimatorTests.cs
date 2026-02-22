@@ -75,7 +75,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Provide deterministic test state via seams
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Disable non-deterministic components to avoid interference
             _balance.enabled = false;
@@ -185,7 +185,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
             float phaseBefore = GetPhaseAccumulator();
 
             // Act
@@ -203,7 +203,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
             float phaseBefore = GetPhaseAccumulator();
 
             // Act
@@ -224,7 +224,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             Quaternion rotBefore = _upperLegLJoint.targetRotation;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Act — run enough frames for phase to accumulate meaningfully
             yield return new WaitForSeconds(0.1f);
@@ -242,7 +242,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             Quaternion rotBefore = _upperLegRJoint.targetRotation;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Act
             yield return new WaitForSeconds(0.1f);
@@ -260,7 +260,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             Quaternion rotBefore = _lowerLegLJoint.targetRotation;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Act
             yield return new WaitForSeconds(0.1f);
@@ -278,7 +278,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             Quaternion rotBefore = _lowerLegRJoint.targetRotation;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Act
             yield return new WaitForSeconds(0.1f);
@@ -296,7 +296,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange — capture snapshot at one time then a half-cycle later
             yield return null;
             SetStepFrequency(2f);   // 2 Hz → half-cycle = 0.25 s
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Stabilize phase first
             yield return new WaitForSeconds(0.05f);
@@ -327,11 +327,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange — run gait for a bit, then flip to Fallen
             yield return null;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.1f);
 
             SetCurrentState(CharacterStateType.Fallen);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Act
             yield return new WaitForFixedUpdate();
@@ -349,11 +349,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.1f);
 
             SetCurrentState(CharacterStateType.Fallen);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Act
             yield return new WaitForFixedUpdate();
@@ -371,11 +371,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.1f);
 
             SetCurrentState(CharacterStateType.Fallen);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Act
             yield return new WaitForFixedUpdate();
@@ -395,11 +395,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.1f);
 
             SetCurrentState(CharacterStateType.GettingUp);
-            _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetMoveInputOverride(Vector2.zero);
 
             // Act
             yield return new WaitForFixedUpdate();
@@ -429,7 +429,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             Quaternion armRotBefore = _upperArmLJoint.targetRotation;
-            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _movement.SetMoveInputOverride(new Vector2(0f, 1f));
 
             // Act
             yield return new WaitForSeconds(0.2f);

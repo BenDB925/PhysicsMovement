@@ -53,6 +53,15 @@ namespace PhysicsDrivenMovement.Character
                  "~80° produces a natural hanging pose. The gait swing layers on top.")]
         private float _armRestAngle = 0f;
 
+        [Header("Sprint")]
+        [SerializeField, Range(1f, 3f)]
+        [Tooltip("Multiplied with _stepFrequency while sprinting for a faster cadence.")]
+        private float _sprintFrequencyMultiplier = 1.6f;
+
+        [SerializeField, Range(1f, 2f)]
+        [Tooltip("Multiplied with _stepAngle while sprinting for slightly wider strides.")]
+        private float _sprintStepAngleMultiplier = 1.3f;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -188,16 +197,20 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 3: Read move input magnitude (0–1).
+            // STEP 3: Read move input magnitude (0–1) and sprint state.
             //         Input magnitude drives both phase advancement speed and implicitly
             //         represents walking speed. No force is applied here — this script
             //         only sets ConfigurableJoint.targetRotation.
             float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+            bool sprinting = _playerMovement.IsSprinting;
+
+            float effectiveFrequency = sprinting ? _stepFrequency * _sprintFrequencyMultiplier : _stepFrequency;
+            float effectiveStepAngle = sprinting ? _stepAngle * _sprintStepAngleMultiplier : _stepAngle;
 
             // STEP 4: Advance phase accumulator. Phase is in radians, cycling [0, 2π).
             //         Scale by 2π × frequency × deltaTime so one full cycle takes exactly
             //         1/_stepFrequency seconds at full input.
-            _phase += inputMagnitude * 2f * Mathf.PI * _stepFrequency * Time.fixedDeltaTime;
+            _phase += inputMagnitude * 2f * Mathf.PI * effectiveFrequency * Time.fixedDeltaTime;
 
             // Wrap phase to [0, 2π) to prevent float overflow over time.
             if (_phase >= 2f * Mathf.PI)
@@ -210,8 +223,8 @@ namespace PhysicsDrivenMovement.Character
             //         so they always swing in opposite directions — the alternating gait.
             //         The swing is a pure rotation around the X axis (forward/backward).
             //         We scale amplitude by inputMagnitude so standing still produces no swing.
-            float leftSwingDeg  =  Mathf.Sin(_phase)              * _stepAngle * inputMagnitude;
-            float rightSwingDeg =  Mathf.Sin(_phase + Mathf.PI)   * _stepAngle * inputMagnitude;
+            float leftSwingDeg  =  Mathf.Sin(_phase)              * effectiveStepAngle * inputMagnitude;
+            float rightSwingDeg =  Mathf.Sin(_phase + Mathf.PI)   * effectiveStepAngle * inputMagnitude;
 
             // STEP 6: Compute lower-leg knee-bend target.
             //         The knee holds a constant positive bend during gait so the character
