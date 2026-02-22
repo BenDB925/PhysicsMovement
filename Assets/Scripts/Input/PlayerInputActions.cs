@@ -6,13 +6,14 @@ namespace PhysicsDrivenMovement.Input
 {
     /// <summary>
     /// Wrapper for project player input actions.
-    /// Defines the Player action map with Move, Jump, Grab, and Punch actions.
+    /// Defines the Player action map with Move, Look, Jump, Grab, and Punch actions.
     /// </summary>
     public sealed class PlayerInputActions : IDisposable
     {
         private readonly InputActionAsset _asset;
         private readonly InputActionMap _player;
         private readonly InputAction _playerMove;
+        private readonly InputAction _playerLook;
         private readonly InputAction _playerJump;
         private readonly InputAction _playerGrab;
         private readonly InputAction _playerPunch;
@@ -25,6 +26,9 @@ namespace PhysicsDrivenMovement.Input
             _playerMove = _player.AddAction("Move", InputActionType.Value);
             _playerMove.expectedControlType = "Vector2";
 
+            _playerLook = _player.AddAction("Look", InputActionType.Value);
+            _playerLook.expectedControlType = "Vector2";
+
             _playerJump = _player.AddAction("Jump", InputActionType.Button);
             _playerJump.expectedControlType = "Button";
 
@@ -35,6 +39,7 @@ namespace PhysicsDrivenMovement.Input
             _playerPunch.expectedControlType = "Button";
 
             AddMoveBindings();
+            AddLookBindings();
             AddActionBindings();
 
             _asset.AddActionMap(_player);
@@ -68,6 +73,12 @@ namespace PhysicsDrivenMovement.Input
             _playerMove.AddBinding("<Gamepad>/leftStick");
         }
 
+        private void AddLookBindings()
+        {
+            _playerLook.AddBinding("<Mouse>/delta");
+            _playerLook.AddBinding("<Gamepad>/rightStick");
+        }
+
         private void AddActionBindings()
         {
             _playerJump.AddBinding("<Keyboard>/space");
@@ -90,6 +101,8 @@ namespace PhysicsDrivenMovement.Input
             }
 
             public InputAction Move => _wrapper._playerMove;
+
+            public InputAction Look => _wrapper._playerLook;
 
             public InputAction Jump => _wrapper._playerJump;
 
