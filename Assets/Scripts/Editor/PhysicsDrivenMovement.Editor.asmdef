@@ -3,7 +3,8 @@
     "rootNamespace": "PhysicsDrivenMovement.Editor",
     "references": [
         "PhysicsDrivenMovement.Core",
-        "PhysicsDrivenMovement.Character"
+        "PhysicsDrivenMovement.Character",
+        "PhysicsDrivenMovement.Environment"
     ],
     "includePlatforms": [
         "Editor"

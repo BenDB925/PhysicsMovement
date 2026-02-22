@@ -1,0 +1,16 @@
+{
+    "name": "PhysicsDrivenMovement.Environment",
+    "rootNamespace": "PhysicsDrivenMovement.Environment",
+    "references": [
+        "PhysicsDrivenMovement.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
