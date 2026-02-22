@@ -532,7 +532,7 @@ namespace PhysicsDrivenMovement.Character
         /// <paramref name="worldAxis"/> in world space", then converted to the connected
         /// body's local frame for <c>ConfigurableJoint.targetRotation</c>.
         /// </summary>
-        /// <param name="joint">The ConfigurableJoint to drive. No-op if null.</param>
+        /// <param name="joint">The ConfigurableJoint to drive. Logs a LogError and returns if null.</param>
         /// <param name="swingDeg">
         /// Signed angle in degrees. Positive = swing in the direction of the axis
         /// by the right-hand rule (forward/upward for knee, forward swing for upper leg).
@@ -542,6 +542,8 @@ namespace PhysicsDrivenMovement.Character
         {
             if (joint == null)
             {
+                Debug.LogError("[LegAnimator] ApplyWorldSpaceJointTarget: joint reference is null — targetRotation was NOT applied. " +
+                               "Check that Awake() found the correct ConfigurableJoint by name (UpperLeg_L / UpperLeg_R / LowerLeg_L / LowerLeg_R).");
                 return;
             }
 
@@ -664,10 +666,18 @@ namespace PhysicsDrivenMovement.Character
                 _upperLegL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _swingAxis);
                 _upperLegLTargetEuler = _upperLegL.targetRotation.eulerAngles;
             }
+            else
+            {
+                Debug.LogError("[LegAnimator] ApplyLocalSpaceSwing: _upperLegL is null — targetRotation NOT applied to UpperLeg_L.");
+            }
 
             if (_upperLegR != null)
             {
                 _upperLegR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _swingAxis);
+            }
+            else
+            {
+                Debug.LogError("[LegAnimator] ApplyLocalSpaceSwing: _upperLegR is null — targetRotation NOT applied to UpperLeg_R.");
             }
 
             if (_lowerLegL != null)
@@ -675,10 +685,18 @@ namespace PhysicsDrivenMovement.Character
                 _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
                 _lowerLegLTargetEuler = _lowerLegL.targetRotation.eulerAngles;
             }
+            else
+            {
+                Debug.LogError("[LegAnimator] ApplyLocalSpaceSwing: _lowerLegL is null — targetRotation NOT applied to LowerLeg_L.");
+            }
 
             if (_lowerLegR != null)
             {
                 _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+            }
+            else
+            {
+                Debug.LogError("[LegAnimator] ApplyLocalSpaceSwing: _lowerLegR is null — targetRotation NOT applied to LowerLeg_R.");
             }
         }
 
