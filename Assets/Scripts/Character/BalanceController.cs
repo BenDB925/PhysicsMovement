@@ -49,6 +49,12 @@ namespace PhysicsDrivenMovement.Character
                  "Airborne multiplier does NOT apply to yaw torque.")]
         private float _kDYaw = 40f;
 
+        [SerializeField, Range(0f, 10f)]
+        [Tooltip("Minimum yaw error in degrees before any yaw torque is applied. " +
+                 "Suppresses micro-oscillation when the character is already nearly facing " +
+                 "the target direction (Phase 3D2). Typical value: 1–3 degrees.")]
+        private float _yawDeadZoneDeg = 2f;
+
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Multiplier applied to upright (pitch + roll) PD torque while airborne. " +
                  "Lower values reduce in-air correction and preserve floppy feel. " +
@@ -350,6 +356,8 @@ namespace PhysicsDrivenMovement.Character
             _persistentSeatedRecoveryMinAssistScale = Mathf.Clamp01(_persistentSeatedRecoveryMinAssistScale);
             _debugRecoveryTelemetryInterval = Mathf.Max(0.1f, _debugRecoveryTelemetryInterval);
             _debugSeatedHeightThreshold = Mathf.Max(0f, _debugSeatedHeightThreshold);
+            // Phase 3D2: dead zone must be non-negative; 0 disables the guard (all errors fire).
+            _yawDeadZoneDeg = Mathf.Max(0f, _yawDeadZoneDeg);
         }
 
         private void FixedUpdate()
@@ -568,6 +576,16 @@ namespace PhysicsDrivenMovement.Character
             // We compute this independently from upright error so that changing the
             // facing direction never introduces roll instability.
             //
+            // Phase 3D2 hardening:
+            //   (a) Both vectors are explicitly normalized before SignedAngle to prevent
+            //       any floating-point imprecision from a near-unit vector entering the
+            //       angle computation. The sqrMagnitude guard below ensures normalization
+            //       is safe (no zero-vector normalize).
+            //   (b) A dead zone (_yawDeadZoneDeg) suppresses torque for small errors,
+            //       preventing micro-oscillation near the target facing direction.
+            //   (c) SetFacingDirection already retains the last valid direction on zero
+            //       input (guarded by sqrMagnitude check), so no extra guard is needed here.
+            //
             // Yaw torque is only applied when NOT fallen: when the character is severely
             // tilted or upside-down, the horizontal projection of the forward vector is
             // unreliable and can produce a spurious 180° yaw error that fights recovery.
@@ -581,6 +599,8 @@ namespace PhysicsDrivenMovement.Character
                 Vector3 targetForwardXZ  = Vector3.ProjectOnPlane(_targetFacingRotation * Vector3.forward, Vector3.up);
 
                 // Guard degenerate cases (character is near-vertical — forward projects near zero).
+                // Both sqrMagnitude checks must pass before we normalize; this prevents
+                // NaN from normalizing a zero or near-zero vector (Phase 3D2).
                 if (currentForwardXZ.sqrMagnitude > 0.001f && targetForwardXZ.sqrMagnitude > 0.001f)
                 {
                     float yawErrorDeg = Vector3.SignedAngle(
@@ -588,10 +608,16 @@ namespace PhysicsDrivenMovement.Character
                         targetForwardXZ.normalized,
                         Vector3.up);
 
-                    float yawErrorRad  = yawErrorDeg * Mathf.Deg2Rad;
-                    float yawAngVelY   = angVel.y;
-                    float yawTorqueY   = _kPYaw * yawErrorRad - _kDYaw * yawAngVelY;
-                    _rb.AddTorque(Vector3.up * yawTorqueY, ForceMode.Force);
+                    // Phase 3D2: Dead zone — suppress yaw torque for small errors to
+                    // prevent micro-oscillation when the character is already nearly facing
+                    // the target direction.
+                    if (Mathf.Abs(yawErrorDeg) >= _yawDeadZoneDeg)
+                    {
+                        float yawErrorRad  = yawErrorDeg * Mathf.Deg2Rad;
+                        float yawAngVelY   = angVel.y;
+                        float yawTorqueY   = _kPYaw * yawErrorRad - _kDYaw * yawAngVelY;
+                        _rb.AddTorque(Vector3.up * yawTorqueY, ForceMode.Force);
+                    }
                 }
             }
         }
