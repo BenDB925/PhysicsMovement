@@ -75,6 +75,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 
 ### Framework
 
+- **Always use script to run tests** Use `Tools/Run-UnityTests.ps1` (defaults to unattended hidden execution; use `-Unattended:$false` only when you explicitly want visible child windows) so EditMode + PlayMode execute sequentially without stale lock issues.
 - **Unity Test Framework** (NUnit-based).
 - **EditMode tests** for pure logic, data transforms, state machines, utility functions — anything that doesn't need a scene or MonoBehaviour lifecycle.
 - **PlayMode tests** for physics interactions, coroutine/async flows, component integration, NetworkBehaviour, and anything requiring `Awake`/`Start`/`Update`.

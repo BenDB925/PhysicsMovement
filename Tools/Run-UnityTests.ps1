@@ -3,10 +3,12 @@ param(
     [ValidateSet("All", "EditMode", "PlayMode")]
     [string]$Platform = "All",
     [switch]$NoGraphicsForEditMode,
-    [int]$MaxAttemptsPerPlatform = 2
+    [int]$MaxAttemptsPerPlatform = 2,
+    [switch]$Unattended
 )
 
 $ErrorActionPreference = "Stop"
+$ConfirmPreference = "None"
 
 function Get-UnityExePath {
     param([string]$ResolvedProjectPath)
@@ -35,7 +37,7 @@ function Stop-UnityProcesses {
 
     foreach ($processName in $processNames) {
         Get-Process -Name $processName -ErrorAction SilentlyContinue |
-            Stop-Process -Force -ErrorAction SilentlyContinue
+        Stop-Process -Force -Confirm:$false -ErrorAction SilentlyContinue
     }
 
     $deadline = (Get-Date).AddSeconds(15)
@@ -69,7 +71,7 @@ function Remove-UnityLockArtifacts {
 
     foreach ($candidate in $lockCandidates) {
         Get-ChildItem -Path $candidate -ErrorAction SilentlyContinue |
-            Remove-Item -Force -ErrorAction SilentlyContinue
+        Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
 
@@ -79,7 +81,8 @@ function Invoke-UnityTestPlatform {
         [string]$ResolvedProjectPath,
         [ValidateSet("EditMode", "PlayMode")]
         [string]$SinglePlatform,
-        [bool]$UseNoGraphics
+        [bool]$UseNoGraphics,
+        [bool]$RunHidden
     )
 
     $testResultsDir = Join-Path $ResolvedProjectPath "TestResults"
@@ -99,6 +102,8 @@ function Invoke-UnityTestPlatform {
     $arguments = @(
         "-runTests"
         "-batchmode"
+        "-quit"
+        "-silent-crashes"
     )
 
     if ($UseNoGraphics) {
@@ -113,31 +118,45 @@ function Invoke-UnityTestPlatform {
         "-forgetProjectPath"
     )
 
-    $proc = Start-Process -FilePath $UnityExe -ArgumentList $arguments -PassThru -Wait -NoNewWindow
+    $procStartParams = @{
+        FilePath     = $UnityExe
+        ArgumentList = $arguments
+        PassThru     = $true
+        Wait         = $true
+    }
+
+    if ($RunHidden) {
+        $procStartParams.WindowStyle = "Hidden"
+    }
+    else {
+        $procStartParams.NoNewWindow = $true
+    }
+
+    $proc = Start-Process @procStartParams
 
     if (-not (Test-Path $resultPath)) {
         return [PSCustomObject]@{
-            Platform = $SinglePlatform
-            Status = "InfraFailure"
-            Message = "Results file was not generated."
+            Platform   = $SinglePlatform
+            Status     = "InfraFailure"
+            Message    = "Results file was not generated."
             ResultPath = $resultPath
-            LogPath = $logPath
-            ExitCode = $proc.ExitCode
+            LogPath    = $logPath
+            ExitCode   = $proc.ExitCode
         }
     }
 
     $newWriteTime = (Get-Item $resultPath).LastWriteTime
     $isFresh = $newWriteTime -gt $runStart.AddSeconds(-1) -and
-               ($null -eq $previousWriteTime -or $newWriteTime -gt $previousWriteTime)
+    ($null -eq $previousWriteTime -or $newWriteTime -gt $previousWriteTime)
 
     if (-not $isFresh) {
         return [PSCustomObject]@{
-            Platform = $SinglePlatform
-            Status = "InfraFailure"
-            Message = "Results file exists but timestamp was not refreshed by this run."
+            Platform   = $SinglePlatform
+            Status     = "InfraFailure"
+            Message    = "Results file exists but timestamp was not refreshed by this run."
             ResultPath = $resultPath
-            LogPath = $logPath
-            ExitCode = $proc.ExitCode
+            LogPath    = $logPath
+            ExitCode   = $proc.ExitCode
         }
     }
 
@@ -145,12 +164,12 @@ function Invoke-UnityTestPlatform {
     $run = $xml.'test-run'
     if ($null -eq $run) {
         return [PSCustomObject]@{
-            Platform = $SinglePlatform
-            Status = "InfraFailure"
-            Message = "Results XML does not contain a test-run node."
+            Platform   = $SinglePlatform
+            Status     = "InfraFailure"
+            Message    = "Results XML does not contain a test-run node."
             ResultPath = $resultPath
-            LogPath = $logPath
-            ExitCode = $proc.ExitCode
+            LogPath    = $logPath
+            ExitCode   = $proc.ExitCode
         }
     }
 
@@ -162,16 +181,16 @@ function Invoke-UnityTestPlatform {
     $status = if ($failedCount -gt 0 -or $runResult -like "Failed*") { "TestsFailed" } else { "Passed" }
 
     return [PSCustomObject]@{
-        Platform = $SinglePlatform
-        Status = $status
-        Message = "Result=$runResult, Total=$totalCount, Passed=$passedCount, Failed=$failedCount"
+        Platform   = $SinglePlatform
+        Status     = $status
+        Message    = "Result=$runResult, Total=$totalCount, Passed=$passedCount, Failed=$failedCount"
         ResultPath = $resultPath
-        LogPath = $logPath
-        ExitCode = $proc.ExitCode
-        RunResult = $runResult
-        Total = $totalCount
-        Passed = $passedCount
-        Failed = $failedCount
+        LogPath    = $logPath
+        ExitCode   = $proc.ExitCode
+        RunResult  = $runResult
+        Total      = $totalCount
+        Passed     = $passedCount
+        Failed     = $failedCount
     }
 }
 
@@ -189,6 +208,10 @@ foreach ($singlePlatform in $platformsToRun) {
     $attempt = 0
     $result = $null
     $useNoGraphics = $singlePlatform -eq "EditMode" -and $NoGraphicsForEditMode.IsPresent
+    $runHidden = $true
+    if ($PSBoundParameters.ContainsKey("Unattended")) {
+        $runHidden = $Unattended.IsPresent
+    }
 
     while ($attempt -lt $MaxAttemptsPerPlatform) {
         $attempt++
@@ -201,7 +224,8 @@ foreach ($singlePlatform in $platformsToRun) {
             -UnityExe $unityExe `
             -ResolvedProjectPath $resolvedProjectPath `
             -SinglePlatform $singlePlatform `
-            -UseNoGraphics:$useNoGraphics
+            -UseNoGraphics:$useNoGraphics `
+            -RunHidden:$runHidden
 
         Write-Host "[$($result.Platform)] $($result.Status): $($result.Message)"
         Write-Host "  XML: $($result.ResultPath)"

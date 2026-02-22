@@ -124,15 +124,21 @@ $logFile      = "$projectPath\TestResults\PlayMode.log"
 
 ---
 
-## 4 — Run All Tests (EditMode + PlayMode)
+## 4 — Run All Tests (EditMode + PlayMode) (preferred method to run tests)
 
 ### Preferred command (lock-safe)
 
 Use the repo script below as the default path. It force-stops lingering Unity processes, clears known lock artifacts, runs platforms sequentially, verifies fresh XML output, and retries once if it detects an infra/lock race.
 
+For agent execution in VS Code: launch this command in a regular (non-background) terminal session. Background terminal launches can trigger a UI confirmation prompt that requires user interaction.
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File ".\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform All -NoGraphicsForEditMode
+powershell -ExecutionPolicy Bypass -File ".\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform All -NoGraphicsForEditMode -Unattended
 ```
+
+`Run-UnityTests.ps1` now defaults to unattended hidden child-process execution; `-Unattended` remains supported and explicit.
+
+Use `-Unattended:$false` only if you intentionally want visible Unity child process windows.
 
 Exit codes:
 
