@@ -20,6 +20,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// - World-space swing: _useWorldSpaceSwing field exists and defaults to true
     /// - World-space swing: leg targetRotation changes even when hips are pitched forward
     /// - World-space swing: swing axis is world-horizontal (independent of hips pitch)
+    /// - Bug fix: _worldSwingAxis resets to zero on idle (no stale-axis carry-over between frames)
+    /// - Bug fix: world-space gait path fires at 0.07 m/s velocity (below old 0.1 threshold, above new 0.05)
+    /// - Bug fix: aggressive input fallback fires immediately at zero velocity when input is non-zero
     /// </summary>
     public class LegAnimatorTests
     {
@@ -1676,6 +1679,126 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Cleanup: reset hips rotation
             _hips.transform.rotation = Quaternion.identity;
+        }
+
+        // ─── Bug Fix Regression Tests (gait-stale-axis-fix) ────────────────
+
+        /// <summary>
+        /// BUG FIX REGRESSION — BUG 1: _worldSwingAxis must never be stale between frames.
+        ///
+        /// When the character transitions from walking (world-space path active) to idle
+        /// (early-exit path), _worldSwingAxis must reset to Vector3.zero on the very first
+        /// idle frame rather than retaining the last active-gait value.
+        ///
+        /// Root cause: _worldSwingAxis was only updated inside ApplyWorldSpaceSwing(), so any
+        /// code path that bypassed that method (idle, fallen, degenerate gaitFwd) left the
+        /// field at the previous frame's non-zero value. The fix: reset _worldSwingAxis to
+        /// Vector3.zero at the top of FixedUpdate() every frame, before any branching.
+        ///
+        /// This test verifies the fix by:
+        ///   1. Walking long enough for _worldSwingAxis to be set to a non-zero value.
+        ///   2. Stopping input so the idle path runs.
+        ///   3. Asserting _worldSwingAxis is zero on the very next FixedUpdate.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WorldSwingAxis_WhenTransitionsToIdle_ResetsToZeroImmediately()
+        {
+            // Arrange — walk long enough to get a non-zero _worldSwingAxis
+            yield return null;
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            yield return new WaitForSeconds(0.1f);
+
+            // Verify pre-condition: swing axis is non-zero while walking
+            Vector3 axisWhileWalking = (Vector3)GetPrivateField(_legAnimator, "_worldSwingAxis");
+            Assume.That(axisWhileWalking.magnitude, Is.GreaterThan(0.01f),
+                "Pre-condition: _worldSwingAxis must be non-zero while walking.");
+
+            // Act — stop input so the idle path fires
+            _movement.SetMoveInputForTest(Vector2.zero);
+            yield return new WaitForFixedUpdate();
+
+            // Assert — _worldSwingAxis must be zero on the first idle frame
+            Vector3 axisAfterIdle = (Vector3)GetPrivateField(_legAnimator, "_worldSwingAxis");
+            Assert.That(axisAfterIdle.magnitude, Is.LessThanOrEqualTo(0.001f),
+                $"_worldSwingAxis must reset to Vector3.zero immediately on idle (first frame after input stops). " +
+                $"Got magnitude={axisAfterIdle.magnitude:F4} ({axisAfterIdle}). " +
+                $"A non-zero value means the stale-axis bug has returned — _worldSwingAxis is not " +
+                $"reset at the top of FixedUpdate().");
+        }
+
+        /// <summary>
+        /// BUG FIX REGRESSION — BUG 2: World-space gait path must fire at low velocity.
+        ///
+        /// Before the fix the velocity threshold was 0.1 m/s; at velocities below that
+        /// the input fallback was not entered aggressively enough, causing gaitFwd to stay
+        /// Vector3.zero (and UL_targetEuler to stay 0,0,0) even while the character was
+        /// visibly moving (debug log frames 4–222, vel 0.08–3.83 m/s).
+        ///
+        /// After the fix:
+        ///   • Velocity threshold is 0.05 m/s (half the old value).
+        ///   • Input fallback fires immediately when input magnitude > 0.01, regardless
+        ///     of velocity — so gaitFwd is non-zero on the very first frame of input.
+        ///
+        /// This test verifies the fix by:
+        ///   1. Setting Rigidbody velocity to a value between 0.05 and 0.1 m/s (which was
+        ///      below the old threshold but above the new one).
+        ///   2. Setting move input to a non-zero value.
+        ///   3. Asserting that GetWorldGaitForward (via a FixedUpdate that runs worldSwing)
+        ///      produces a non-zero _worldSwingAxis (proving gaitFwd was non-zero).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WorldGaitForward_AtLowVelocity_StillProducesNonZeroSwingAxis()
+        {
+            // Arrange — set velocity below old 0.1 m/s threshold, above new 0.05 m/s threshold
+            yield return null;
+            _hipsRb.linearVelocity = new Vector3(0f, 0f, 0.07f);  // 0.07 m/s: old fail, new pass
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", true);
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 0.25f);         // non-zero phase
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);             // full amplitude
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Act — one FixedUpdate to trigger the world-space swing path
+            yield return new WaitForFixedUpdate();
+
+            // Assert — _worldSwingAxis must be non-zero (world-space path executed with valid gaitFwd)
+            Vector3 swingAxis = (Vector3)GetPrivateField(_legAnimator, "_worldSwingAxis");
+            Assert.That(swingAxis.magnitude, Is.GreaterThan(0.5f),
+                $"_worldSwingAxis must be non-zero when horizontal velocity is 0.07 m/s (above 0.05 threshold). " +
+                $"Got magnitude={swingAxis.magnitude:F4} ({swingAxis}). " +
+                $"A near-zero value means the 0.05 m/s threshold fix did not take effect, or the " +
+                $"world-space path fell back to local-space due to a degenerate gaitFwd.");
+        }
+
+        /// <summary>
+        /// BUG FIX REGRESSION — BUG 2 (input fallback): When velocity is zero but input
+        /// is non-zero, GetWorldGaitForward must use the input direction immediately
+        /// (aggressive fallback) so gaitFwd is non-zero from the very first frame of input.
+        ///
+        /// Before the fix the input fallback was only reached when velocity was below
+        /// threshold AND the rigidbody was null — the non-null, low-velocity path returned
+        /// Vector3.zero without checking input.  Now the input check is explicit and
+        /// unconditional when velocity is below threshold.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WorldGaitForward_AtZeroVelocity_UsesInputDirectionImmediately()
+        {
+            // Arrange — zero velocity, non-zero input
+            yield return null;
+            _hipsRb.linearVelocity = Vector3.zero;
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", true);
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 0.25f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));   // input direction: +Z
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert — _worldSwingAxis must be non-zero (gaitFwd came from input dir = +Z)
+            Vector3 swingAxis = (Vector3)GetPrivateField(_legAnimator, "_worldSwingAxis");
+            Assert.That(swingAxis.magnitude, Is.GreaterThan(0.5f),
+                $"_worldSwingAxis must be non-zero when velocity=0 but input magnitude > 0.01. " +
+                $"Got magnitude={swingAxis.magnitude:F4} ({swingAxis}). " +
+                $"A near-zero value means the aggressive input fallback fix is not working.");
         }
 
         // ─── Helper: create test-rig leg/arm joints ─────────────────────────

@@ -217,9 +217,14 @@ namespace PhysicsDrivenMovement.Character
         private int _debugFrameCounter;
 
         /// <summary>
-        /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/>.
-        /// Exposed as a field so it can be included in debug log output without recomputing.
-        /// Zero when world-space swing was not applied this frame.
+        /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/> this frame.
+        /// Refreshed unconditionally at the top of every <see cref="FixedUpdate"/> call so it is
+        /// never stale. Zero when world-space swing was not applied this frame (e.g. idle,
+        /// gait-forward degenerate, or local-space fallback active).
+        /// DESIGN: Previously this field was set only inside ApplyWorldSpaceSwing, which meant
+        /// it could retain a non-zero value from a prior frame if the code path did not reach
+        /// that method (e.g. early-exit for fallen state). Resetting it at the top of FixedUpdate
+        /// guarantees that the value in WriteDebugLogLine always reflects the current frame.
         /// </summary>
         private Vector3 _worldSwingAxis;
 
@@ -318,6 +323,16 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
+            // STEP 0: Reset _worldSwingAxis so it never retains a stale value from a
+            //         previous frame. ApplyWorldSpaceSwing will set this to a fresh value
+            //         when the world-space path executes; it remains Vector3.zero for
+            //         all other paths (idle, fallen, local-space fallback).
+            //         DESIGN: Without this reset, frames where the early-exit (fallen/idle)
+            //         path runs would leave _worldSwingAxis at the last active-gait value,
+            //         causing the debug log to show a frozen non-zero axis while gaitFwd
+            //         shows zero — the "stale axis" bug seen in the runtime debug log.
+            _worldSwingAxis = Vector3.zero;
+
             // STEP 1: Gate on missing dependencies — skip gracefully.
             if (_playerMovement == null || _characterState == null)
             {
@@ -577,33 +592,52 @@ namespace PhysicsDrivenMovement.Character
         {
             // DESIGN: Velocity is the best proxy for actual movement direction because it is
             // already in world space and naturally accounts for camera yaw, slopes, and any
-            // forces applied by PlayerMovement. The 0.1 m/s threshold avoids noisy direction
-            // from near-zero velocity at the very start of a walk or when nearly stopped.
-            const float VelocityThreshold = 0.1f;
+            // forces applied by PlayerMovement.
+            //
+            // THRESHOLD CHANGE (bug fix): Lowered from 0.1 m/s to 0.05 m/s.
+            // At 0.1 m/s the velocity path failed to trigger for most of the acceleration
+            // ramp (frames 4-222 in the debug log, vel 0.08-3.83 m/s showed gaitFwd=0),
+            // because physics velocity at the very start of motion is below 0.1 m/s and
+            // the input fallback was not being reached aggressively enough. 0.05 m/s catches
+            // motion 2× sooner and is still large enough to avoid noisy near-zero direction.
+            //
+            // INPUT FALLBACK CHANGE (bug fix): The input fallback is now checked BEFORE
+            // the velocity threshold returns early. If move input magnitude > 0.01 and
+            // velocity < threshold, the input direction is used immediately rather than
+            // returning Vector3.zero. This eliminates the window at the start of motion
+            // where velocity is non-negligible (> 0.05 m/s) but the input path was
+            // returning zero because no fallback was attempted.
+            const float VelocityThreshold = 0.05f;
 
+            Vector3 horizontalVel = Vector3.zero;
             if (_hipsRigidbody != null)
             {
-                Vector3 horizontalVel = new Vector3(
+                horizontalVel = new Vector3(
                     _hipsRigidbody.linearVelocity.x,
                     0f,
                     _hipsRigidbody.linearVelocity.z);
-
-                if (horizontalVel.magnitude >= VelocityThreshold)
-                {
-                    return horizontalVel.normalized;
-                }
             }
 
-            // Fallback: use move input as a world-space XZ direction.
+            if (horizontalVel.magnitude >= VelocityThreshold)
+            {
+                return horizontalVel.normalized;
+            }
+
+            // Aggressive input fallback: if move input is non-negligible, use it immediately
+            // rather than waiting for velocity to build up. This ensures gaitFwd is non-zero
+            // on the very first frame of input and prevents the 'gaitFwd stays 0,0,0' bug
+            // seen in frames 4–222 of the debug log.
             // CurrentMoveInput is a raw 2D input; without camera transform it maps X→world-X,
             // Y→world-Z. This is an approximation sufficient for tests and the zero-velocity
-            // start-of-movement window. PlayerMovement applies camera yaw to forces; here
-            // we use the raw input for simplicity (the velocity path takes over once moving).
-            Vector2 moveInput = _playerMovement.CurrentMoveInput;
-            Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);
-            if (inputDir.sqrMagnitude > 0.0001f)
+            // start-of-movement window. The velocity path takes over once the body is moving.
+            if (_playerMovement != null)
             {
-                return inputDir.normalized;
+                Vector2 moveInput = _playerMovement.CurrentMoveInput;
+                if (moveInput.magnitude > 0.01f)
+                {
+                    Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);
+                    return inputDir.normalized;
+                }
             }
 
             return Vector3.zero;
