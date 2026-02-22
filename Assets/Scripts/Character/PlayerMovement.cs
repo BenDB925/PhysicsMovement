@@ -31,10 +31,21 @@ namespace PhysicsDrivenMovement.Character
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
 
-        /// <summary>
-        /// Latest sampled movement input from the Player action map.
-        /// </summary>
+        /// <summary>Latest sampled movement input from the Player action map.</summary>
         public Vector2 CurrentMoveInput => _currentMoveInput;
+
+        /// <summary>
+        /// Test seam: directly inject move input, bypassing the Input System.
+        /// FixedUpdate will not overwrite this value while the override is active.
+        /// Do not call from production code.
+        /// </summary>
+        public void SetMoveInputForTest(Vector2 input)
+        {
+            _currentMoveInput = input;
+            _overrideMoveInput = true;
+        }
+
+        private bool _overrideMoveInput;
 
         private void Awake()
         {
@@ -65,13 +76,16 @@ namespace PhysicsDrivenMovement.Character
         private void FixedUpdate()
         {
             // STEP 0: Read Move action (Vector2) into _currentMoveInput once per physics tick.
-            if (_inputActions == null)
+            if (!_overrideMoveInput)
             {
-                _currentMoveInput = Vector2.zero;
-            }
-            else
-            {
-                _currentMoveInput = _inputActions.Player.Move.ReadValue<Vector2>();
+                if (_inputActions == null)
+                {
+                    _currentMoveInput = Vector2.zero;
+                }
+                else
+                {
+                    _currentMoveInput = _inputActions.Player.Move.ReadValue<Vector2>();
+                }
             }
 
             // STEP 1: Early-out when dependencies are missing or character is fallen.

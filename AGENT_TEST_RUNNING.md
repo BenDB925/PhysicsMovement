@@ -136,6 +136,12 @@ For agent execution in VS Code: launch this command in a regular (non-background
 powershell -ExecutionPolicy Bypass -File ".\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform All -NoGraphicsForEditMode -Unattended
 ```
 
+For best reliability from VS Code terminals, use the absolute-path + no-profile form:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform All -NoGraphicsForEditMode -MaxAttemptsPerPlatform 2 -Unattended
+```
+
 `Run-UnityTests.ps1` now defaults to unattended hidden child-process execution; `-Unattended` remains supported and explicit.
 
 Use `-Unattended:$false` only if you intentionally want visible Unity child process windows.
@@ -197,11 +203,19 @@ Common log signature for this lock race:
 
 - `HandleProjectAlreadyOpenInAnotherInstance`
 
+Related symptom seen in this repo:
+
+- Unity exits cleanly, but `TestResults/*.xml` is not generated on the first attempt.
+- This can still happen even when the Editor was closed moments before running tests.
+- Most often this is a transient lock/licensing/startup race, not a test failure.
+
 Operator action:
 
 1. Close any open Unity Editor instance for this project.
 2. Ensure no stray `Unity` process remains.
 3. Re-run EditMode then PlayMode sequentially (or run `Tools/Run-UnityTests.ps1` with `-Platform All`).
+4. If XML is missing, re-run the exact same command once or twice (`-MaxAttemptsPerPlatform 2` or `3`).
+5. Confirm the latest run wrote a fresh file at `TestResults/<Platform>.xml` before parsing results.
 
 ---
 
@@ -324,6 +338,7 @@ Show-TestResults "PlayMode" "$outDir\PlayMode.xml"
 | **Unity exits with code 1 but no XML file** | Check the log file (`-logFile`). Usually a compile error. Search for `error CS` in the log. |
 | **"Unity is already running"** | Only one Unity instance can open a project at a time. The user must close the Unity Editor before the agent can run tests in batch mode, **or** use a separate copy of the project. |
 | **`HandleProjectAlreadyOpenInAnotherInstance` in log** | This is the same project lock race in batch mode. Close all Unity instances/processes for this project, then rerun tests strictly sequentially (EditMode, then PlayMode). |
+| **Unity exits cleanly, but no `TestResults/*.xml` file appears** | Treat as infrastructure race (often lock/licensing/startup). Re-run the same command with `-MaxAttemptsPerPlatform 2` or `3`, verify no Unity process is alive, and only accept runs that produce fresh XML. |
 | **PlayMode tests hang** | Add a timeout: use `-quit` (but note: `-quit` can cause issues if tests haven't finished). Better: set `-testSettingsFile` with a timeout. |
 | **No tests found** | Ensure test assemblies have `.asmdef` files referencing `UnityEngine.TestRunner` and `UnityEditor.TestRunner`, and that the test scripts have `[Test]` or `[UnityTest]` attributes. |
 | **`-nographics` causes PlayMode failures** | Some PlayMode tests need a GPU. Remove `-nographics` for PlayMode runs. |

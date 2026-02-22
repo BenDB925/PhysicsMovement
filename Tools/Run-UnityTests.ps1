@@ -93,16 +93,17 @@ function Invoke-UnityTestPlatform {
     $resultPath = Join-Path $testResultsDir "$SinglePlatform.xml"
     $logPath = Join-Path $logsDir ("test_{0}_{1}.log" -f $SinglePlatform.ToLowerInvariant(), (Get-Date -Format "yyyyMMdd_HHmmss"))
 
-    $runStart = Get-Date
-    $previousWriteTime = $null
+    # Delete stale results file before the run so freshness check is unambiguous.
+    # If Unity produces ANY file at this path after we start, it must be fresh.
     if (Test-Path $resultPath) {
-        $previousWriteTime = (Get-Item $resultPath).LastWriteTime
+        Remove-Item $resultPath -Force -ErrorAction SilentlyContinue
     }
+
+    $runStart = Get-Date
 
     $arguments = @(
         "-runTests"
         "-batchmode"
-        "-quit"
         "-silent-crashes"
     )
 
@@ -122,7 +123,6 @@ function Invoke-UnityTestPlatform {
         FilePath     = $UnityExe
         ArgumentList = $arguments
         PassThru     = $true
-        Wait         = $true
     }
 
     if ($RunHidden) {
@@ -133,6 +133,21 @@ function Invoke-UnityTestPlatform {
     }
 
     $proc = Start-Process @procStartParams
+
+    # Wait for Unity to exit — up to 10 minutes (PlayMode physics tests can take 3-4 min).
+    # Start-Process -Wait is unreliable in nested PowerShell invocations; use WaitForExit() directly.
+    $exited = $proc.WaitForExit(600000)
+    if (-not $exited) {
+        $proc.Kill()
+        return [PSCustomObject]@{
+            Platform   = $SinglePlatform
+            Status     = "InfraFailure"
+            Message    = "Unity process timed out after 10 minutes."
+            ResultPath = $resultPath
+            LogPath    = $logPath
+            ExitCode   = -1
+        }
+    }
 
     if (-not (Test-Path $resultPath)) {
         return [PSCustomObject]@{
@@ -146,8 +161,9 @@ function Invoke-UnityTestPlatform {
     }
 
     $newWriteTime = (Get-Item $resultPath).LastWriteTime
-    $isFresh = $newWriteTime -gt $runStart.AddSeconds(-1) -and
-    ($null -eq $previousWriteTime -or $newWriteTime -gt $previousWriteTime)
+    # Since we deleted the old XML before the run, any file here was written by this run.
+    # We also keep a generous 10-second grace on the timestamp to handle filesystem/clock skew.
+    $isFresh = $newWriteTime -gt $runStart.AddSeconds(-10)
 
     if (-not $isFresh) {
         return [PSCustomObject]@{

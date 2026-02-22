@@ -15,7 +15,13 @@ namespace PhysicsDrivenMovement.Character
     [RequireComponent(typeof(PlayerMovement))]
     public class CharacterState : MonoBehaviour
     {
-        #pragma warning disable CS0414
+        [SerializeField, Range(0f, 1f)]
+        private float _moveEnterThreshold = 0.1f;
+
+        [SerializeField, Range(0f, 1f)]
+        private float _moveExitThreshold = 0.05f;
+
+#pragma warning disable CS0414
         [SerializeField, Range(0f, 10f)]
         private float _getUpDelay = 0.5f;
 
@@ -72,9 +78,81 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // STEP 1: Read grounded/fallen/move-input signals from cached collaborators.
-            // STEP 2: Apply deterministic state transition rules.
-            // STEP 3: Route state mutations through ChangeState helper for centralized events.
+            if (_balanceController == null || _playerMovement == null)
+            {
+                return;
+            }
+
+            float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+            bool isGrounded = _balanceController.IsGrounded;
+            bool isFallen = _balanceController.IsFallen;
+            bool wantsMove = moveMagnitude >= _moveEnterThreshold;
+            bool stoppedMove = moveMagnitude <= _moveExitThreshold;
+
+            CharacterStateType nextState = CurrentState;
+
+            if (isFallen)
+            {
+                nextState = CharacterStateType.Fallen;
+            }
+            else
+            {
+                switch (CurrentState)
+                {
+                    case CharacterStateType.Standing:
+                        if (!isGrounded)
+                        {
+                            nextState = CharacterStateType.Airborne;
+                        }
+                        else if (wantsMove)
+                        {
+                            nextState = CharacterStateType.Moving;
+                        }
+                        break;
+
+                    case CharacterStateType.Moving:
+                        if (!isGrounded)
+                        {
+                            nextState = CharacterStateType.Airborne;
+                        }
+                        else if (stoppedMove)
+                        {
+                            nextState = CharacterStateType.Standing;
+                        }
+                        break;
+
+                    case CharacterStateType.Airborne:
+                        if (isGrounded)
+                        {
+                            nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                        }
+                        break;
+
+                    case CharacterStateType.Fallen:
+                        if (isGrounded)
+                        {
+                            nextState = CharacterStateType.GettingUp;
+                        }
+                        else
+                        {
+                            nextState = CharacterStateType.Airborne;
+                        }
+                        break;
+
+                    case CharacterStateType.GettingUp:
+                        if (!isGrounded)
+                        {
+                            nextState = CharacterStateType.Airborne;
+                        }
+                        else
+                        {
+                            nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                        }
+                        break;
+                }
+            }
+
+            ChangeState(nextState);
         }
 
         private void ChangeState(CharacterStateType newState)

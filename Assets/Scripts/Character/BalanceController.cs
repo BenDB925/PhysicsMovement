@@ -211,6 +211,20 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public bool IsFallen { get; private set; }
 
+        /// <summary>
+        /// Test seam: directly override IsGrounded/IsFallen without needing GroundSensor components.
+        /// FixedUpdate will not overwrite these values while the override is active.
+        /// Do not call this from production code.
+        /// </summary>
+        public void SetGroundStateForTest(bool isGrounded, bool isFallen)
+        {
+            IsGrounded = isGrounded;
+            IsFallen = isFallen;
+            _overrideGroundState = true;
+        }
+
+        private bool _overrideGroundState;
+
         // ─── Public Methods ───────────────────────────────────────────────────
 
         /// <summary>
@@ -325,10 +339,13 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // STEP 1: Update ground state from foot sensors.
-            bool leftGrounded  = _footL != null && _footL.IsGrounded;
-            bool rightGrounded = _footR != null && _footR.IsGrounded;
-            IsGrounded = leftGrounded || rightGrounded;
+            // STEP 1: Update ground state from foot sensors (unless overridden by test seam).
+            if (!_overrideGroundState)
+            {
+                bool leftGrounded  = _footL != null && _footL.IsGrounded;
+                bool rightGrounded = _footR != null && _footR.IsGrounded;
+                IsGrounded = leftGrounded || rightGrounded;
+            }
 
             // Hips-height proxy: treat character as "effectively grounded" when hips
             // are close to or below standing height.  This provides a safety net when
@@ -353,15 +370,23 @@ namespace PhysicsDrivenMovement.Character
             //         Vector3.Angle always returns 0–180°, so this is safe for all poses.
             float uprightAngle = Vector3.Angle(_rb.transform.up, Vector3.up);
 
-            // STEP 3: Update fallen state with hysteresis and optionally log transitions.
-            bool nowFallen = IsFallen;
-            if (!IsFallen)
+            // STEP 3: Update fallen state with hysteresis (unless overridden by test seam).
+            bool nowFallen;
+            if (_overrideGroundState)
             {
-                nowFallen = uprightAngle > _fallenEnterAngleThreshold;
+                nowFallen = IsFallen; // preserve test-injected value
             }
             else
             {
-                nowFallen = uprightAngle > _fallenExitAngleThreshold;
+                nowFallen = IsFallen;
+                if (!IsFallen)
+                {
+                    nowFallen = uprightAngle > _fallenEnterAngleThreshold;
+                }
+                else
+                {
+                    nowFallen = uprightAngle > _fallenExitAngleThreshold;
+                }
             }
 
             if (_debugStateTransitions && nowFallen != _wasFallen)

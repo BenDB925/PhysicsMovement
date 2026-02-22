@@ -35,12 +35,14 @@ Every task — bug fix, feature, refactor — MUST follow these phases **in orde
 4. Follow the naming convention: `MethodName_Condition_ExpectedResult`.
 5. Tests live in `Assets/Tests/EditMode/` or `Assets/Tests/PlayMode/` mirroring the source folder structure.
 6. **Run tests from the terminal** to confirm they fail. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §2–3 for exact commands. Parse the NUnit XML results to verify `failed > 0`.
+7. If Unity exits but `TestResults/*.xml` is missing, treat it as a transient infrastructure race (lock/licensing/startup), rerun up to 2–3 attempts, and only conclude failure after retries still produce no XML.
 
 ### Phase D: Implement to Pass Tests
 
 1. Write the minimum code required to make all tests from Phase C pass.
 2. Do not add untested behaviour in this phase.
 3. Run all tests (not just new ones) — zero failures required before proceeding. Use the terminal commands in [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §4 to run EditMode + PlayMode, then parse the XML to confirm `result = "Passed"`.
+4. If results XML is missing on a run, rerun sequentially (EditMode then PlayMode) with retries before marking the test gate as failed.
 
 ### Phase E: Verify Feature / Fix
 
