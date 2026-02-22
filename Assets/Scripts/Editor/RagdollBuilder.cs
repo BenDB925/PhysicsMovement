@@ -314,6 +314,9 @@ namespace PhysicsDrivenMovement.Editor
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
             rootGO.AddComponent<RagdollSetup>();
             rootGO.AddComponent<BalanceController>();
+            rootGO.AddComponent<PlayerMovement>();
+            rootGO.AddComponent<CharacterState>();
+            rootGO.AddComponent<LegAnimator>();
             rootGO.AddComponent<DebugPushForce>();
 
             // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.

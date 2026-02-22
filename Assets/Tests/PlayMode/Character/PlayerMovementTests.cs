@@ -30,8 +30,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _root = new GameObject("TestHips");
             _rb = _root.AddComponent<Rigidbody>();
             _rb.useGravity = false;
-            _rb.drag = 0f;
-            _rb.angularDrag = 0f;
+            _rb.linearDamping = 0f;
+            _rb.angularDamping = 0f;
 
             _balance = _root.AddComponent<BalanceController>();
             _movement = _root.AddComponent<PlayerMovement>();
@@ -71,7 +71,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Arrange
             yield return null;
             SetAutoPropertyBackingField(_balance, "IsFallen", true);
-            Vector3 velocityBefore = _rb.velocity;
+            Vector3 velocityBefore = _rb.linearVelocity;
 
             // Act
             _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
@@ -79,7 +79,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Assert
             Vector3 horizontalBefore = new Vector3(velocityBefore.x, 0f, velocityBefore.z);
-            Vector3 horizontalAfter = new Vector3(_rb.velocity.x, 0f, _rb.velocity.z);
+            Vector3 horizontalAfter = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             Assert.That((horizontalAfter - horizontalBefore).sqrMagnitude, Is.LessThanOrEqualTo(TestEpsilon),
                 $"Fallen locomotion must be blocked. Horizontal delta sqrMagnitude={((horizontalAfter - horizontalBefore).sqrMagnitude):F6}.");
         }
@@ -97,7 +97,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return new WaitForFixedUpdate();
 
             // Assert
-            Vector3 horizontalVelocity = new Vector3(_rb.velocity.x, 0f, _rb.velocity.z);
+            Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             Assert.That(horizontalVelocity.magnitude, Is.GreaterThan(0.01f),
                 "Movement input should produce measurable horizontal velocity.");
 
@@ -114,15 +114,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return null;
             SetAutoPropertyBackingField(_balance, "IsFallen", false);
             SetPrivateField(_movement, "_maxSpeed", 5f);
-            _rb.velocity = new Vector3(8f, 0f, 0f);
-            float speedBefore = new Vector3(_rb.velocity.x, 0f, _rb.velocity.z).magnitude;
+            _rb.linearVelocity = new Vector3(8f, 0f, 0f);
+            float speedBefore = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z).magnitude;
 
             // Act
             _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(1f, 0f) });
             yield return new WaitForFixedUpdate();
 
             // Assert
-            float speedAfter = new Vector3(_rb.velocity.x, 0f, _rb.velocity.z).magnitude;
+            float speedAfter = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z).magnitude;
             Assert.That(speedAfter, Is.LessThanOrEqualTo(speedBefore + 0.05f),
                 $"Speed cap should block additional acceleration above max speed. before={speedBefore:F3}, after={speedAfter:F3}.");
         }

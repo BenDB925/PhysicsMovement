@@ -159,6 +159,16 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Horizontal velocity damping for COM stabilization. Reduces oscillation.")]
         private float _comStabilizationDamping = 60f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("At full speed, shifts the COM balance target forward in the velocity direction " +
+                 "by this fraction of horizontal speed, so locomotion lean isn't fought.")]
+        private float _comMovementOffsetScale = 0.12f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Multiplier applied to COM stabilization strength at full speed (lerped over 0–2 m/s). " +
+                 "Reduces the 400 N/m spring during movement so the character can lean into locomotion.")]
+        private float _comMovingStrengthMultiplier = 0.55f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -179,6 +189,11 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 300f)]
         [Tooltip("Vertical velocity damping for height maintenance. Prevents bouncing.")]
         private float _heightMaintenanceDamping = 120f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Multiplier applied to height maintenance strength at full speed (lerped over 0–2 m/s). " +
+                 "Allows natural body compression during movement.")]
+        private float _heightMovingMultiplier = 0.7f;
 
         // ─── Private Fields ──────────────────────────────────────────────────
 
@@ -504,16 +519,36 @@ namespace PhysicsDrivenMovement.Character
             // When grounded or near standing height, pulls the hips back toward the
             // midpoint of the feet to prevent topple that rotational PD torque alone
             // cannot correct.
+            // During locomotion the balance target shifts forward in the velocity
+            // direction and the spring is weakened so the character can lean naturally.
             if (_enableComStabilization && effectivelyGrounded && _footL != null && _footR != null)
             {
                 Vector3 feetCenter = (_footL.transform.position + _footR.transform.position) * 0.5f;
                 Vector3 hipsPos = _rb.position;
-                Vector3 horizontalOffset = new Vector3(
-                    hipsPos.x - feetCenter.x,
-                    0f,
-                    hipsPos.z - feetCenter.z);
+
+                // Shift balance target forward during movement so the COM spring
+                // doesn't fight natural locomotion lean.
                 Vector3 horizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-                Vector3 comForce = -horizontalOffset * _comStabilizationStrength
+                float horizontalSpeed = horizontalVel.magnitude;
+                float speedBlend = Mathf.Clamp01(horizontalSpeed / 2f);
+
+                Vector3 movementOffset = Vector3.zero;
+                if (horizontalSpeed > 0.1f)
+                {
+                    movementOffset = horizontalVel.normalized * (_comMovementOffsetScale * horizontalSpeed);
+                }
+
+                Vector3 horizontalOffset = new Vector3(
+                    hipsPos.x - (feetCenter.x + movementOffset.x),
+                    0f,
+                    hipsPos.z - (feetCenter.z + movementOffset.z));
+
+                float effectiveStrength = Mathf.Lerp(
+                    _comStabilizationStrength,
+                    _comStabilizationStrength * _comMovingStrengthMultiplier,
+                    speedBlend);
+
+                Vector3 comForce = -horizontalOffset * effectiveStrength
                                    - horizontalVel * _comStabilizationDamping;
                 _rb.AddForce(comForce, ForceMode.Force);
             }
@@ -521,12 +556,20 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3.7: Height maintenance.
             // When near ground, pushes hips up toward standing height to prevent the
             // character from settling into a seated basin-of-attraction.
+            // Weakened during locomotion so the character compresses naturally.
             if (_enableHeightMaintenance && effectivelyGrounded)
             {
                 float hipsHeightError = _standingHipsHeight - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
-                    float heightForce = hipsHeightError * _heightMaintenanceStrength
+                    Vector3 horizontalVelForHeight = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+                    float speedBlendForHeight = Mathf.Clamp01(horizontalVelForHeight.magnitude / 2f);
+                    float effectiveHeightStrength = Mathf.Lerp(
+                        _heightMaintenanceStrength,
+                        _heightMaintenanceStrength * _heightMovingMultiplier,
+                        speedBlendForHeight);
+
+                    float heightForce = hipsHeightError * effectiveHeightStrength
                                         - _rb.linearVelocity.y * _heightMaintenanceDamping;
                     heightForce = Mathf.Max(0f, heightForce);
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);

@@ -52,7 +52,39 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void Start()
+        {
+            // Ensure required gameplay components exist on this ragdoll so the
+            // existing prefab/scene works without manual re-wiring.
+            // Runs in Start (not Awake) so that tests and other code can add
+            // components between Awake and Start without triggering errors from
+            // downstream Awake() dependency checks.
+            EnsureComponent<BalanceController>();
+            EnsureComponent<PlayerMovement>();
+            EnsureComponent<CharacterState>();
+            EnsureComponent<LegAnimator>();
+
+            // Wire CameraFollow onto the main camera if one exists.
+            Camera mainCam = Camera.main;
+            if (mainCam != null && !mainCam.TryGetComponent<CameraFollow>(out _))
+            {
+                mainCam.gameObject.AddComponent<CameraFollow>();
+            }
+        }
+
         // ─── Private Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Adds <typeparamref name="T"/> to this GameObject if it is not already present.
+        /// </summary>
+        private T EnsureComponent<T>() where T : Component
+        {
+            if (!TryGetComponent<T>(out var existing))
+            {
+                existing = gameObject.AddComponent<T>();
+            }
+            return existing;
+        }
 
         /// <summary>
         /// For every ConfigurableJoint in the hierarchy, retrieves the collider(s) on the
