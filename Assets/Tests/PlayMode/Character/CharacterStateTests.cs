@@ -149,10 +149,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator FixedUpdate_WhenRecoveredFromFallenAndGrounded_TransitionsToGettingUp()
+        public IEnumerator FixedUpdate_WhenRecoveredFromFallenAndGroundedBeforeTimer_StaysFallen()
         {
             // Arrange
             yield return null;
+            SetPrivateField(_characterState, "_getUpDelay", 0.5f);
+            SetPrivateField(_characterState, "_knockoutDuration", 1.5f);
             SetBalanceSignals(isGrounded: true, isFallen: true);
             SetCurrentMoveInput(Vector2.zero);
             yield return new WaitForFixedUpdate();
@@ -165,8 +167,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return new WaitForFixedUpdate();
 
             // Assert
-            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.GettingUp),
-                "Recovered grounded fallen state should transition to GettingUp.");
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Recovered grounded fallen state should remain Fallen until timer gates are satisfied.");
         }
 
         [UnityTest]
@@ -207,6 +209,123 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Event new-state argument should match transitioned state.");
         }
 
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenFallenGroundedBeforeDelay_RemainsFallen()
+        {
+            // Arrange
+            yield return null;
+            SetPrivateField(_characterState, "_getUpDelay", 0.2f);
+            SetPrivateField(_characterState, "_knockoutDuration", 0.5f);
+
+            SetBalanceSignals(isGrounded: true, isFallen: true);
+            SetCurrentMoveInput(Vector2.zero);
+            yield return new WaitForFixedUpdate();
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Precondition failed: expected Fallen after fallen signal.");
+
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "State should remain Fallen until get-up delay and knockout duration gates are both satisfied.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenFallenGroundedPastDelayAndKnockout_TransitionsToGettingUp()
+        {
+            // Arrange
+            yield return null;
+            SetPrivateField(_characterState, "_getUpDelay", 0.02f);
+            SetPrivateField(_characterState, "_knockoutDuration", 0.02f);
+            bool transitionedToGettingUp = false;
+
+            _characterState.OnStateChanged += (_, next) =>
+            {
+                if (next == CharacterStateType.GettingUp)
+                {
+                    transitionedToGettingUp = true;
+                }
+            };
+
+            SetBalanceSignals(isGrounded: true, isFallen: true);
+            SetCurrentMoveInput(Vector2.zero);
+            yield return new WaitForFixedUpdate();
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Precondition failed: expected Fallen after fallen signal.");
+
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+            yield return new WaitForSeconds(0.05f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(transitionedToGettingUp, Is.True,
+                "State machine should enter GettingUp only after both timer gates are satisfied while grounded.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenEnteringGettingUp_AppliesSingleUpwardImpulse()
+        {
+            // Arrange
+            yield return null;
+            SetPrivateField(_characterState, "_getUpDelay", 0.01f);
+            SetPrivateField(_characterState, "_knockoutDuration", 0.01f);
+            SetPrivateField(_characterState, "_getUpForce", 5f);
+
+            Rigidbody rb = (Rigidbody)GetPrivateField(_characterState, "_rb");
+            rb.linearVelocity = Vector3.zero;
+
+            SetBalanceSignals(isGrounded: true, isFallen: true);
+            SetCurrentMoveInput(Vector2.zero);
+            yield return new WaitForFixedUpdate();
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Precondition failed: expected Fallen after fallen signal.");
+
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+            yield return new WaitForSeconds(0.03f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+            float firstVelocityY = rb.linearVelocity.y;
+            int firstImpulseCount = (int)GetPrivateField(_characterState, "_getUpImpulseAppliedCount");
+
+            rb.linearVelocity = Vector3.zero;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            int secondImpulseCount = (int)GetPrivateField(_characterState, "_getUpImpulseAppliedCount");
+
+            // Assert
+            Assert.That(firstVelocityY, Is.GreaterThan(0f),
+                "Entering GettingUp should apply an upward impulse exactly once.");
+            Assert.That(firstImpulseCount, Is.EqualTo(1),
+                "Get-up impulse count should be 1 after entering GettingUp.");
+            Assert.That(secondImpulseCount, Is.EqualTo(1),
+                "Get-up impulse count should remain unchanged across later GettingUp ticks.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenGettingUpExceedsTimeout_TransitionsToStanding()
+        {
+            // Arrange
+            yield return null;
+            SetPrivateField(_characterState, "_getUpTimeout", 0.05f);
+            SetCurrentState(CharacterStateType.GettingUp);
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+            SetCurrentMoveInput(Vector2.zero);
+
+            // Act
+            yield return new WaitForSeconds(0.06f);
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Standing),
+                "GettingUp should timeout back to Standing after the configured safety duration.");
+        }
+
         private void SetBalanceSignals(bool isGrounded, bool isFallen)
         {
             _balance.SetGroundStateForTest(isGrounded, isFallen);
@@ -240,6 +359,23 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             return field.GetValue(instance);
+        }
+
+        private static void SetPrivateField(object instance, string fieldName, object value)
+        {
+            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+            {
+                throw new InvalidOperationException(
+                    $"Missing expected private field '{fieldName}' on {instance.GetType().Name}.");
+            }
+
+            field.SetValue(instance, value);
+        }
+
+        private void SetCurrentState(CharacterStateType state)
+        {
+            SetAutoPropertyBackingField(_characterState, nameof(CharacterState.CurrentState), state);
         }
     }
 }

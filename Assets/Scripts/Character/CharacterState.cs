@@ -21,7 +21,6 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         private float _moveExitThreshold = 0.05f;
 
-#pragma warning disable CS0414
         [SerializeField, Range(0f, 10f)]
         private float _getUpDelay = 0.5f;
 
@@ -30,17 +29,22 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0f, 2000f)]
         private float _getUpForce = 250f;
-        #pragma warning restore CS0414
+
+        [SerializeField, Range(0.1f, 10f)]
+        private float _getUpTimeout = 3f;
 
         private BalanceController _balanceController;
         private PlayerMovement _playerMovement;
         private Rigidbody _rb;
+        private float _fallenTimer;
+        private float _gettingUpTimer;
+        private int _getUpImpulseAppliedCount;
 
         /// <summary>
         /// Raised when <see cref="CurrentState"/> changes.
         /// First argument is previous state, second argument is new state.
         /// </summary>
-        #pragma warning disable CS0067
+#pragma warning disable CS0067
         public event Action<CharacterStateType, CharacterStateType> OnStateChanged;
         #pragma warning restore CS0067
 
@@ -89,67 +93,97 @@ namespace PhysicsDrivenMovement.Character
             bool wantsMove = moveMagnitude >= _moveEnterThreshold;
             bool stoppedMove = moveMagnitude <= _moveExitThreshold;
 
-            CharacterStateType nextState = CurrentState;
-
-            if (isFallen)
+            // STEP 1: Track fallen timer only while grounded and in Fallen.
+            if (CurrentState == CharacterStateType.Fallen && isGrounded)
             {
-                nextState = CharacterStateType.Fallen;
+                _fallenTimer += Time.fixedDeltaTime;
             }
             else
             {
-                switch (CurrentState)
-                {
-                    case CharacterStateType.Standing:
-                        if (!isGrounded)
-                        {
-                            nextState = CharacterStateType.Airborne;
-                        }
-                        else if (wantsMove)
-                        {
-                            nextState = CharacterStateType.Moving;
-                        }
-                        break;
+                _fallenTimer = 0f;
+            }
 
-                    case CharacterStateType.Moving:
-                        if (!isGrounded)
-                        {
-                            nextState = CharacterStateType.Airborne;
-                        }
-                        else if (stoppedMove)
-                        {
-                            nextState = CharacterStateType.Standing;
-                        }
-                        break;
+            // STEP 2: Track elapsed time while in GettingUp for timeout safety.
+            if (CurrentState == CharacterStateType.GettingUp)
+            {
+                _gettingUpTimer += Time.fixedDeltaTime;
+            }
+            else
+            {
+                _gettingUpTimer = 0f;
+            }
 
-                    case CharacterStateType.Airborne:
-                        if (isGrounded)
-                        {
-                            nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
-                        }
-                        break;
+            CharacterStateType nextState = CurrentState;
 
-                    case CharacterStateType.Fallen:
-                        if (isGrounded)
-                        {
-                            nextState = CharacterStateType.GettingUp;
-                        }
-                        else
-                        {
-                            nextState = CharacterStateType.Airborne;
-                        }
-                        break;
+            // STEP 3: Resolve deterministic transitions for all locomotion states.
+            switch (CurrentState)
+            {
+                case CharacterStateType.Standing:
+                    if (isFallen)
+                    {
+                        nextState = CharacterStateType.Fallen;
+                    }
+                    else if (!isGrounded)
+                    {
+                        nextState = CharacterStateType.Airborne;
+                    }
+                    else if (wantsMove)
+                    {
+                        nextState = CharacterStateType.Moving;
+                    }
+                    break;
 
-                    case CharacterStateType.GettingUp:
-                        if (!isGrounded)
-                        {
-                            nextState = CharacterStateType.Airborne;
-                        }
-                        else
-                        {
-                            nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
-                        }
-                        break;
-                }
+                case CharacterStateType.Moving:
+                    if (isFallen)
+                    {
+                        nextState = CharacterStateType.Fallen;
+                    }
+                    else if (!isGrounded)
+                    {
+                        nextState = CharacterStateType.Airborne;
+                    }
+                    else if (stoppedMove)
+                    {
+                        nextState = CharacterStateType.Standing;
+                    }
+                    break;
+
+                case CharacterStateType.Airborne:
+                    if (isFallen)
+                    {
+                        nextState = CharacterStateType.Fallen;
+                    }
+                    else if (isGrounded)
+                    {
+                        nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                    }
+                    break;
+
+                case CharacterStateType.Fallen:
+                    if (!isGrounded)
+                    {
+                        nextState = CharacterStateType.Airborne;
+                    }
+                    else if (_fallenTimer >= _getUpDelay && _fallenTimer >= _knockoutDuration)
+                    {
+                        nextState = CharacterStateType.GettingUp;
+                    }
+                    break;
+
+                case CharacterStateType.GettingUp:
+                    if (!isGrounded)
+                    {
+                        nextState = CharacterStateType.Airborne;
+                    }
+                    else if (_gettingUpTimer >= _getUpTimeout)
+                    {
+                        nextState = CharacterStateType.Standing;
+                    }
+                    else if (!isFallen)
+                    {
+                        nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                    }
+                    break;
             }
 
             ChangeState(nextState);
@@ -167,8 +201,25 @@ namespace PhysicsDrivenMovement.Character
             CharacterStateType previousState = CurrentState;
             CurrentState = newState;
 
-            // STEP 3: Raise OnStateChanged event with previous/new values.
+            // STEP 3: Run state-entry behavior.
+            if (newState == CharacterStateType.GettingUp)
+            {
+                ApplyGetUpImpulse();
+            }
+
+            // STEP 4: Raise OnStateChanged event with previous/new values.
             OnStateChanged?.Invoke(previousState, newState);
+        }
+
+        private void ApplyGetUpImpulse()
+        {
+            if (_rb == null)
+            {
+                return;
+            }
+
+            _rb.AddForce(Vector3.up * _getUpForce, ForceMode.Impulse);
+            _getUpImpulseAppliedCount++;
         }
     }
 
