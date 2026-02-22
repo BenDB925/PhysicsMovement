@@ -125,17 +125,26 @@ Hips (root, no joint)
 
 > **Goal:** The player can move the character with WASD/stick input. The character lurches forward with physics forces and stays (mostly) upright while moving.
 
+> **Execution model for agents:** Phase 3 is intentionally split into micro-sections so each section can be assigned with a single prompt like: **"Implement Phase 3B2"**.
+
 | Task | Details |
 |------|---------|
-| 3.1 | **Input setup.** Create an Input Action Asset with a `Player` action map. Actions: `Move` (Vector2, WASD/left stick), `Jump` (Button), `Grab` (Button, placeholder), `Punch` (Button, placeholder). |
-| 3.2 | **Create `PlayerMovement.cs`** attached to the Hips. In `FixedUpdate`, read the `Move` input vector. Convert to world-space direction relative to camera forward (project onto XZ plane). Apply a force to the Hips rigidbody: `rb.AddForce(moveDir * moveForce)`. Start with `moveForce = 300`. |
-| 3.3 | **Speed capping.** Clamp the Hips' horizontal velocity to a max speed (e.g., 5 m/s) by reducing the applied force when near the cap, **not** by setting velocity directly. Use `Vector3.ClampMagnitude` on the horizontal component as a fallback. |
-| 3.4 | **Turning.** Rotate the desired facing direction of the Hips toward the movement direction. Apply a torque around Y to turn, or adjust the balance controller's target rotation to face the move direction. |
-| 3.5 | **Procedural leg movement.** Create `LegAnimator.cs`. When moving, oscillate the target rotation of the upper leg joints sinusoidally (simulating a walking cycle). The frequency should scale with speed. This makes the legs "walk" rather than drag. |
-| 3.6 | **Jumping.** When grounded and Jump is pressed, apply an upward impulse to the Hips: `rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse)`. Temporarily reduce leg joint spring to let legs dangle in air. |
-| 3.7 | **Falling & recovery state machine.** Create `CharacterState.cs` with states: `Standing`, `Moving`, `Airborne`, `Fallen`, `GettingUp`. Transitions: lose ground contact → `Airborne`; torso angle > 60° from upright → `Fallen`; in `Fallen` + grounded for 1s → `GettingUp` (boost joint drives + upward force on hips). `GettingUp` → `Standing` after uprighting. |
-| 3.8 | **Camera.** Create a simple third-person follow camera (`CameraFollow.cs`) that tracks the Hips position with smoothing. For now, a single shared camera; split-screen or per-player camera comes in Phase 5. |
-| 3.9 | **Test.** Run around the test scene. The character should lurch, wobble, fall over from sharp turns, and get back up. It should *feel* silly and physical. |
+| 3.1 | **3A — Input asset.** Create `PlayerInputActions.inputactions` and generated wrapper class. |
+| 3.2 | **3B1 — Movement scaffold.** Create `PlayerMovement.cs` component skeleton, input lifecycle, and component caching. |
+| 3.3 | **3B2 — Movement forces.** Implement camera-relative movement force + speed cap + facing direction feed into `BalanceController`. |
+| 3.4 | **3B3 — Movement wiring.** Add `PlayerMovement` to prefab/scene and validate runtime references (`Camera`, `BalanceController`, `Rigidbody`). |
+| 3.5 | **3C1 — FSM API scaffold.** Add `CharacterStateType`, `CharacterState`, `CurrentState`, and `OnStateChanged` API. |
+| 3.6 | **3C2 — FSM transitions.** Implement `Standing/Moving/Airborne/Fallen/GettingUp` transition rules. |
+| 3.7 | **3C3 — Get-up behavior.** Add fallen timer, get-up delay/timeout, and upward recovery impulse. |
+| 3.8 | **3D1 — Turning torque split.** Refactor balance control into separate upright torque (pitch/roll) and yaw torque. |
+| 3.9 | **3D2 — Turning stabilization.** Tune/guard yaw behavior (no spin, no oscillation, safe zero-input handling). |
+| 3.10 | **3E1 — Leg animation core.** Add `LegAnimator.cs` with gait phase and upper/lower leg target rotations. |
+| 3.11 | **3E2 — Leg settle behavior.** Add idle return-to-rest smoothing and fallen/get-up bypass behavior. |
+| 3.12 | **3F1 — Jump impulse.** Add grounded/state-gated jump to `PlayerMovement`. |
+| 3.13 | **3F2 — Airborne leg spring modulation.** In `LegAnimator`, subscribe to state changes and scale leg spring in air, restore on landing. |
+| 3.14 | **3G1 — Camera follow script.** Create `CameraFollow.cs` with smoothed position/look behavior in `LateUpdate`. |
+| 3.15 | **3G2 — Camera scene wiring.** Configure scene camera target and validate framing/jitter behavior. |
+| 3.16 | **3T — Automated test pass.** Implement Phase 3 PlayMode/EditMode tests (cards below), then run EditMode + PlayMode sequentially and archive results in `TestResults/`. |
 
 **Deliverable:** A controllable wobbly character that walks, jumps, falls, and recovers.
 
@@ -576,290 +585,405 @@ Below is each task formatted as a standalone brief you can hand to an agent. Eac
 
 ### AGENT CARD: Phase 3A — Input Action Asset
 
-**Context:** The character can stand. Before adding any movement logic, set up the input bindings in a Unity Input Action Asset. This card is entirely about data — no C# runtime logic.
+**Context:** The character can stand. Set up input data only.
 
-**Dependencies:** Phase 2 complete. Package `com.unity.inputsystem` must be installed (it is, per Phase 0).
+**Dependencies:** Phase 2 complete.
 
 **Instructions:**
+1. Create `Assets/Scripts/Input/PlayerInputActions.inputactions`.
+2. Add action map `Player` with actions: `Move` (Vector2), `Jump` (Button), `Grab` (Button), `Punch` (Button).
+3. Bindings:
+   - Keyboard: `Move` = WASD composite, `Jump` = Space, `Grab` = Left Shift, `Punch` = Left Mouse Button.
+   - Gamepad: `Move` = Left Stick, `Jump` = South (A), `Grab` = Left Trigger, `Punch` = Right Trigger.
+4. Enable generated class (`PlayerInputActions`, namespace `PhysicsDrivenMovement.Input`).
 
-1. **Create `PlayerInputActions.inputactions`** at `Assets/Scripts/Input/PlayerInputActions.inputactions`.
+**Done when:** Asset imports cleanly and generated wrapper class appears.
 
-2. **Action Map: `Player`** — add these actions:
-
-   | Action | Type | Default Binding (KB) | Default Binding (Gamepad) |
-   |---|---|---|---|
-   | `Move` | Value / Vector2 | WASD composite | Left Stick |
-   | `Jump` | Button | Space | South Button (A) |
-   | `Grab` | Button | Left Shift | Left Trigger |
-   | `Punch` | Button | Left Mouse Button | Right Trigger |
-
-3. **Enable "Generate C# Class"** on the asset (tick the checkbox in the Inspector, set class name to `PlayerInputActions`, namespace to `PhysicsDrivenMovement.Input`). Save and let Unity generate the wrapper class.
-
-4. **No MonoBehaviour needed yet.** The generated class will be instantiated by `PlayerMovement.cs` in Phase 3B.
-
-**Output:** `PlayerInputActions.inputactions`, auto-generated `PlayerInputActions.cs` wrapper.
+**Output:** `PlayerInputActions.inputactions`, generated `PlayerInputActions.cs`.
 
 ---
 
-### AGENT CARD: Phase 3B — Player Movement (Force Application)
+### AGENT CARD: Phase 3B1 — PlayerMovement Scaffold
 
-**Context:** Input bindings exist. Now apply horizontal forces to the Hips based on the `Move` input. No state machine, no leg animation — force application only.
+**Context:** Add component skeleton without movement math yet.
 
-**Dependencies:** Phase 3A complete. Phase 2C (`BalanceController`) complete.
-
-**Read first:**
-- `Assets/Scripts/Character/BalanceController.cs` — specifically the `IsGrounded`, `IsFallen` public properties.
-- `Assets/Scripts/Input/PlayerInputActions.cs` (generated) — how to read the `Move` action.
-
-**Assembly / Namespace:** `PhysicsDrivenMovement.Character`, file at `Assets/Scripts/Character/PlayerMovement.cs`.
+**Dependencies:** Phase 3A, Phase 2C.
 
 **Instructions:**
+1. Create `Assets/Scripts/Character/PlayerMovement.cs` in namespace `PhysicsDrivenMovement.Character`.
+2. Add `[RequireComponent(typeof(Rigidbody))]`.
+3. Add serialized fields: `_moveForce`, `_maxSpeed`, `_camera`.
+4. Add private fields: `_rb`, `_balance`, `_inputActions`, `_currentMoveInput`.
+5. In `Awake`, cache references and enable input actions.
+6. In `OnDestroy`, dispose input actions.
+7. Add public read-only property: `Vector2 CurrentMoveInput => _currentMoveInput;`.
 
-1. **Create `PlayerMovement.cs`** (`[RequireComponent(typeof(Rigidbody))]`). Attach to `Hips`.
+**Done when:** Script compiles and can be attached to `Hips` without null-ref in `Awake`.
 
-2. **Serialised fields:**
-   - `[Range(0f, 1000f)] float _moveForce = 300f`
-   - `[Range(1f, 20f)] float _maxSpeed = 5f`
-   - `[SerializeField] Camera _camera` — assign the main camera in the prefab/scene.
-
-3. **Private fields:** `Rigidbody _rb`, `BalanceController _balance`, `PlayerInputActions _inputActions`.
-
-4. **In `Awake`:** cache `_rb`, `_balance`. Instantiate `new PlayerInputActions()` and call `.Enable()`.
-
-5. **In `OnDestroy`:** call `_inputActions.Dispose()`.
-
-6. **In `FixedUpdate`:**
-   - Read `Vector2 rawInput = _inputActions.Player.Move.ReadValue<Vector2>()`.
-   - If `_balance.IsFallen`, skip — do not apply movement forces while the character is on the ground.
-   - Convert to world-space direction relative to camera: project the camera's forward/right vectors onto the XZ plane, normalise each, then `worldDir = (right * rawInput.x + forward * rawInput.y).normalized`.
-   - **Speed cap:** read `Vector3 hVel = new Vector3(_rb.velocity.x, 0f, _rb.velocity.z)`. If `hVel.magnitude < _maxSpeed`, apply `_rb.AddForce(worldDir * _moveForce, ForceMode.Force)`. Otherwise apply zero (no friction fighting — let the balance controller's damping slow the character naturally).
-   - **Facing:** call `_balance.SetFacingDirection(worldDir)` whenever `rawInput.magnitude > 0.1f`.
-
-7. **`Vector2 CurrentMoveInput { get; }` public property** returning the latest raw input — needed by `LegAnimator` in Phase 3E.
-
-**Test criteria:** In Play mode, WASD moves `Hips` in the input direction. Character does not exceed ~5 m/s. Turning via `SetFacingDirection` causes visible yaw rotation. No movement while `IsFallen = true`.
-
-**Output:** `PlayerMovement.cs`, prefab updated (add component to Hips and wire `_camera`).
+**Output:** `PlayerMovement.cs` scaffold.
 
 ---
 
-### AGENT CARD: Phase 3C — Character State Machine
+### AGENT CARD: Phase 3B2 — Movement Force + Speed Cap
 
-**Context:** Force application works. Now formalise the character's states so that other systems (jump, get-up, leg animation, networking) can query and react to them cleanly.
+**Context:** Implement movement behavior.
 
-**Dependencies:** Phase 3B complete. Phase 2C (`BalanceController`) complete.
-
-**Read first:**
-- `BalanceController.cs` — `IsFallen`, `IsGrounded`.
-- `PlayerMovement.cs` — `CurrentMoveInput`.
-
-**Assembly / Namespace:** `PhysicsDrivenMovement.Character`, file at `Assets/Scripts/Character/CharacterState.cs`.
+**Dependencies:** Phase 3B1.
 
 **Instructions:**
+1. In `FixedUpdate`, read move input into `_currentMoveInput`.
+2. If `_balance.IsFallen`, return.
+3. Convert input to camera-relative world direction on XZ plane.
+4. Apply `Rigidbody.AddForce(worldDir * _moveForce, ForceMode.Force)` only when horizontal speed is below `_maxSpeed`.
+5. Call `_balance.SetFacingDirection(worldDir)` for non-trivial input magnitude (e.g., > 0.1).
+6. Guard missing camera reference with a safe fallback (`Camera.main` once, or world-axis fallback).
 
-1. **Define `CharacterStateType` enum** (same file, outside the class): `Standing`, `Moving`, `Airborne`, `Fallen`, `GettingUp`.
+**Done when:** WASD/stick moves character and speed stays near cap without hard velocity assignment.
 
-2. **Create `CharacterState.cs`** (MonoBehaviour). Attach to Hips.
-
-3. **Public API:**
-   ```csharp
-   public CharacterStateType CurrentState { get; private set; }
-   public event System.Action<CharacterStateType, CharacterStateType> OnStateChanged; // (from, to)
-   ```
-
-4. **Serialised fields:**
-   - `[Range(0f, 5f)] float _getUpDelay = 1f` — seconds the character must be grounded and stationary while fallen before getting up.
-   - `[Range(0f, 5f)] float _knockoutDuration = 3f` — minimum time spent in `Fallen` before `GettingUp` is allowed (used later by `HitReceiver`).
-
-5. **Private fields:** `BalanceController _balance`, `PlayerMovement _movement`, `float _fallenTimer`, `float _getUpForce = 800f` (upward impulse applied to Hips when entering `GettingUp`).
-
-6. **Transition table (implement in `FixedUpdate` as a switch):**
-
-   | From | Condition | To |
-   |---|---|---|
-   | `Standing` | `!IsGrounded` | `Airborne` |
-   | `Standing` | `CurrentMoveInput.magnitude > 0.1f` | `Moving` |
-   | `Standing` | `IsFallen` | `Fallen` |
-   | `Moving` | `!IsGrounded` | `Airborne` |
-   | `Moving` | `CurrentMoveInput.magnitude <= 0.1f` | `Standing` |
-   | `Moving` | `IsFallen` | `Fallen` |
-   | `Airborne` | `IsGrounded && !IsFallen` | `Standing` |
-   | `Airborne` | `IsGrounded && IsFallen` | `Fallen` |
-   | `Fallen` | grounded for `_getUpDelay`s AND `_fallenTimer >= _knockoutDuration` | `GettingUp` |
-   | `GettingUp` | `!IsFallen` | `Standing` |
-   | `GettingUp` | timeout 3s (safety) | `Standing` |
-
-7. **On entering `GettingUp`:** apply `GetComponent<Rigidbody>().AddForce(Vector3.up * _getUpForce, ForceMode.Impulse)` to help the character upright. Re-enable balance torque (it was implicitly skipped while `IsFallen`).
-
-8. **On entering `Fallen`:** reset `_fallenTimer = 0`.
-
-9. **While in `Fallen` and grounded:** increment `_fallenTimer += Time.fixedDeltaTime`.
-
-10. Fire `OnStateChanged` whenever `CurrentState` changes.
-
-**Test criteria:** Observe the Inspector while playing. State transitions correctly: push to fall → `Fallen` → waits ~1s → `GettingUp` → `Standing`. Jumping (covered in 3F) → `Airborne` → lands → `Standing`.
-
-**Output:** `CharacterState.cs` with full FSM, `CharacterStateType` enum.
+**Output:** Updated `PlayerMovement.cs` with movement logic.
 
 ---
 
-### AGENT CARD: Phase 3D — Turning
+### AGENT CARD: Phase 3B3 — Movement Wiring
 
-**Context:** The character moves forward but doesn't visually turn to face the movement direction. This phase wires `PlayerMovement.SetFacingDirection` into the balance controller's yaw torque.
+**Context:** Ensure scene/prefab wiring is deterministic.
 
-**Note:** `PlayerMovement.cs` already calls `_balance.SetFacingDirection(worldDir)` (Phase 3B, step 6). This card verifies the yaw torque in `BalanceController` is correct and adds a dedicated yaw-only torque component separate from the uprighting torque.
-
-**Dependencies:** Phase 3B complete.
-
-**Read first:**
-- `BalanceController.cs` — the current PD torque calculation in `FixedUpdate`. The existing implementation applies a single torque from a combined upright + facing quaternion. We need to split these into:
-  1. **Upright torque** — corrects pitch and roll only.
-  2. **Yaw torque** — corrects yaw toward `_targetFacingRotation`.
+**Dependencies:** Phase 3B2.
 
 **Instructions:**
+1. Add `PlayerMovement` to `Hips` in `PlayerRagdoll.prefab`.
+2. Wire `_camera` in test scene (`Arena_01`) or define explicit runtime fallback.
+3. Validate no duplicate movement components exist.
+4. Confirm `BalanceController` + `Rigidbody` coexist on same object.
 
-1. **Refactor `BalanceController.FixedUpdate`** to compute two separate torques and add them:
+**Done when:** Play mode starts with no missing-reference warnings and movement responds immediately.
 
-   ```csharp
-   // ── Upright (pitch + roll) ──────────────────────────────────────────
-   Vector3 hipsUp   = _rb.rotation * Vector3.up;
-   Vector3 crossErr = Vector3.Cross(hipsUp, Vector3.up);          // pitch/roll axis
-   float   dotErr   = Mathf.Clamp(Vector3.Dot(hipsUp, Vector3.up), -1f, 1f);
-   float   angleErr = Mathf.Acos(dotErr) * Mathf.Rad2Deg;
-   Vector3 uprightTorque = crossErr.normalized * (angleErr * _kP)
-                         - new Vector3(_rb.angularVelocity.x, 0f, _rb.angularVelocity.z) * _kD;
-
-   // ── Yaw (facing direction) ──────────────────────────────────────────
-   Vector3 hipsForward = _rb.rotation * Vector3.forward;
-   Vector3 targetFwd   = _targetFacingRotation * Vector3.forward;
-   hipsForward.y = 0f; hipsForward.Normalize();
-   targetFwd.y   = 0f; targetFwd.Normalize();
-   float   yawErr    = Vector3.SignedAngle(hipsForward, targetFwd, Vector3.up);
-   Vector3 yawTorque = Vector3.up * (yawErr * _kPYaw) - Vector3.up * (_rb.angularVelocity.y * _kDYaw);
-
-   float mult = IsGrounded ? 1f : _airborneMultiplier;
-   if (!IsFallen)
-   {
-       _rb.AddTorque(uprightTorque * mult, ForceMode.Force);
-       _rb.AddTorque(yawTorque, ForceMode.Force);   // yaw always applies (turning in air should work)
-   }
-   ```
-
-2. **Add two new serialised fields** to `BalanceController`:
-   - `[Range(0f, 500f)] float _kPYaw = 200f`
-   - `[Range(0f, 100f)] float _kDYaw = 30f`
-
-3. **Remove the old combined torque block** (the `rotError.ToAngleAxis` block from Phase 2C). Replace entirely with the two-torque version above.
-
-**Test criteria:** Walking in any direction causes the character's Hips forward vector to smoothly rotate toward the move direction within ~0.5s. No spinning or oscillation.
-
-**Output:** Updated `BalanceController.cs` with separated upright and yaw torques.
+**Output:** Prefab/scene updated with movement wiring.
 
 ---
 
-### AGENT CARD: Phase 3E — Leg Animator
+### AGENT CARD: Phase 3C1 — CharacterState API Scaffold
 
-**Context:** The character moves but its legs drag. This phase adds a procedural walking cycle by sinusoidally oscillating the `UpperLeg` joint target rotations.
+**Context:** Build state machine shell first.
 
-**Critical joint convention (read this):** All leg joints in the prefab use `axis = Vector3.right` as the primary axis (Angular X). `LowerLeg` joints use `lowAngX = -120°, highAngX = 0°` (knee bends backward). The `targetRotation` set on a `ConfigurableJoint` is in *joint drive space* — to rotate around the joint's X axis by angle `θ`, set `joint.targetRotation = Quaternion.AngleAxis(-θ, Vector3.right)` (the negation is because drive space is left-handed relative to the joint axis direction in Unity).
-
-**Dependencies:** Phase 3B and 3C complete (`PlayerMovement.CurrentMoveInput`, `CharacterState.CurrentState`).
-
-**Read first:**
-- `RagdollBuilder.cs` segment table, specifically `UpperLeg_L`, `UpperLeg_R`, `LowerLeg_L`, `LowerLeg_R` entries and their `jointAxis` values.
-
-**Assembly / Namespace:** `PhysicsDrivenMovement.Character`, file at `Assets/Scripts/Character/LegAnimator.cs`.
+**Dependencies:** Phase 3B2.
 
 **Instructions:**
+1. Create `Assets/Scripts/Character/CharacterState.cs`.
+2. Define enum `CharacterStateType`: `Standing`, `Moving`, `Airborne`, `Fallen`, `GettingUp`.
+3. Add `CurrentState` property and `OnStateChanged` event.
+4. Add serialized fields: `_getUpDelay`, `_knockoutDuration`, `_getUpForce`.
+5. Cache `BalanceController`, `PlayerMovement`, and `Rigidbody` in `Awake`.
 
-1. **Create `LegAnimator.cs`** (MonoBehaviour). Attach to Hips (same GO as `PlayerMovement`).
+**Done when:** Script compiles, starts in `Standing`, and API is consumable by other systems.
 
-2. **Serialised fields:**
-   - `[Range(0f, 60f)] float _stepAngle = 30f` — peak upper-leg angular swing (degrees away from rest pose).
-   - `[Range(0.5f, 5f)] float _stepFrequency = 2f` — walk cycle frequency at max speed (Hz).
-   - `[Range(0f, 60f)] float _kneeAngle = 20f` — additional bend in the knee during swing.
-
-3. **Private fields:** cache `ConfigurableJoint` for `UpperLeg_L`, `UpperLeg_R`, `LowerLeg_L`, `LowerLeg_R`. Find them with `transform.Find("UpperLeg_L").GetComponent<ConfigurableJoint>()` etc. Also cache `PlayerMovement _movement` and `CharacterState _state`.
-
-4. **In `FixedUpdate`:**
-   - If `_state.CurrentState` is `Fallen` or `GettingUp`, set all four joints' `targetRotation = Quaternion.identity` and return (let drives return legs to rest).
-   - Compute speed fraction: `float speedFrac = _movement.CurrentMoveInput.magnitude`. This is 0–1 for analogue sticks; for WASD it will be 0 or 1.
-   - Accumulate phase: `_phase += _stepFrequency * speedFrac * Time.fixedDeltaTime * Mathf.PI * 2f`.
-   - Left leg leads, right leg trails by π:
-     ```csharp
-     float swingL = Mathf.Sin(_phase)             * _stepAngle * speedFrac;
-     float swingR = Mathf.Sin(_phase + Mathf.PI)  * _stepAngle * speedFrac;
-     ```
-   - Apply to upper legs: `_upperLegL.targetRotation = Quaternion.AngleAxis(-swingL, Vector3.right);`
-   - Apply a partial knee bend when the leg is swinging backward (lifting for a step):
-     ```csharp
-     float kneeBendL = Mathf.Max(0f, -Mathf.Sin(_phase))             * _kneeAngle * speedFrac;
-     float kneeBendR = Mathf.Max(0f, -Mathf.Sin(_phase + Mathf.PI))  * _kneeAngle * speedFrac;
-     _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendL, Vector3.right);
-     ```
-
-5. **On `Standing` (no input):** lerp `_phase` toward 0 gradually and lerp all four joint `targetRotation` back to `Quaternion.identity` — this smooths the legs to the rest stance.
-
-**Test criteria:** Moving with WASD causes visible alternating leg swing. Standing still causes legs to settle straight. Arms should be unaffected (this script only touches leg joints).
-
-**Output:** `LegAnimator.cs`, prefab updated (add component to Hips).
+**Output:** `CharacterState.cs` skeleton + enum.
 
 ---
 
-### AGENT CARD: Phase 3F — Jump
+### AGENT CARD: Phase 3C2 — CharacterState Transitions
 
-**Context:** The character moves and walks. Now add jumping using the state machine from Phase 3C.
+**Context:** Implement deterministic transition logic.
 
-**Dependencies:** Phase 3C (`CharacterState`), Phase 3B (`PlayerMovement` and `_inputActions`).
+**Dependencies:** Phase 3C1.
 
 **Instructions:**
+1. Implement transition rules in `FixedUpdate` for `Standing/Moving/Airborne/Fallen/GettingUp`.
+2. Use helper `ChangeState(newState)` to centralize event firing and entry logic.
+3. Base transitions on `IsGrounded`, `IsFallen`, and `CurrentMoveInput.magnitude`.
+4. Add hysteresis-friendly thresholds for movement input (e.g., 0.1 enter, 0.05 exit).
 
-1. **Add jump logic to `PlayerMovement.cs`** (do not create a new file — jump is part of movement):
-   - Add `[Range(0f, 30f)] float _jumpForce = 15f` serialised field.
-   - Cache a `CharacterState _state` reference in `Awake`.
-   - In `FixedUpdate`, check `_inputActions.Player.Jump.WasPressedThisFrame()`. If true, `_state.CurrentState == CharacterStateType.Standing || CharacterStateType.Moving`, and `_balance.IsGrounded`: apply `_rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse)`.
+**Done when:** State transitions are observable in Inspector and event fires only on actual changes.
 
-2. **Reduce leg spring in air.** In `LegAnimator.cs`, add a handler for `CharacterState.OnStateChanged`:
-   - When entering `Airborne`: call a new method `SetLegSpringMultiplier(0.2f)` that scales the `slerpDrive.positionSpring` on all four leg joints by 0.2.
-   - When leaving `Airborne`: call `SetLegSpringMultiplier(1.0f)` to restore.
-   - Store the original spring values in `Awake` so the multiplier can be correctly applied.
-   - Use a helper: `SetJointSpring(ConfigurableJoint joint, float spring, float damper)` that reconstructs and assigns a `JointDrive`.
-
-**Test criteria:** Pressing Space while standing applies a visible upward impulse. Character briefly goes `Airborne` (visible in Inspector). Legs dangle slightly while in air. Landing returns to `Standing`.
-
-**Output:** Updated `PlayerMovement.cs`, updated `LegAnimator.cs`.
+**Output:** Transition-complete `CharacterState.cs`.
 
 ---
 
-### AGENT CARD: Phase 3G — Camera Follow
+### AGENT CARD: Phase 3C3 — Fallen Timer + GetUp
 
-**Context:** The core character control is complete. Add a third-person follow camera. This has no physics dependency and can be implemented independently of 3A–3F.
+**Context:** Add timed recovery behavior.
 
-**Dependencies:** Phase 1 (prefab exists, `Hips` is the root).
-
-**Assembly / Namespace:** `PhysicsDrivenMovement.Character`, file at `Assets/Scripts/Character/CameraFollow.cs`.
+**Dependencies:** Phase 3C2.
 
 **Instructions:**
+1. Track `_fallenTimer` only while grounded and in `Fallen`.
+2. Enter `GettingUp` only after `_getUpDelay` and `_knockoutDuration` requirements are satisfied.
+3. On entering `GettingUp`, apply upward impulse (`_getUpForce`) once.
+4. Add recovery timeout safety (e.g., 3 seconds) back to `Standing`.
 
-1. **Create `CameraFollow.cs`** (MonoBehaviour). Attach to the Camera GameObject in the scene (not on the ragdoll).
+**Done when:** Character can enter `Fallen` then autonomously recover under normal ground conditions.
 
-2. **Serialised fields:**
-   - `[SerializeField] Transform _target` — drag the `Hips` transform here.
-   - `[Range(1f, 15f)] float _distance = 6f`
-   - `[Range(0f, 10f)] float _height = 3f`
-   - `[Range(1f, 30f)] float _positionSmoothing = 8f`
-   - `[Range(1f, 30f)] float _lookSmoothing = 10f`
+**Output:** Timed recovery completed in `CharacterState.cs`.
 
-3. **In `LateUpdate`** (use `LateUpdate` so camera moves after all physics `FixedUpdate` and interpolation):
-   - Desired camera position: `_target.position - _target.forward * _distance + Vector3.up * _height`. Use the Hips position not rotation for stability: `Vector3 desiredPos = _target.position + Vector3.back * _distance + Vector3.up * _height;`
-   - Smooth position: `transform.position = Vector3.Lerp(transform.position, desiredPos, _positionSmoothing * Time.deltaTime)`.
-   - Smooth look-at: `Quaternion desiredRot = Quaternion.LookRotation(_target.position - transform.position)`. `transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, _lookSmoothing * Time.deltaTime)`.
+---
 
-4. **Assign in scene:** place Camera in the scene, attach `CameraFollow`, drag `Hips` to `_target`. Disable any existing `AudioListener` conflict if needed.
+### AGENT CARD: Phase 3D1 — Split Upright vs Yaw Torque
 
-**Test criteria:** Camera follows the character while walking and jumping. No jitter. Character is always visible in frame.
+**Context:** Refactor turning to avoid coupling yaw with pitch/roll stabilization.
 
-**Output:** `CameraFollow.cs`, camera configured in scene.
+**Dependencies:** Phase 3B2.
+
+**Instructions:**
+1. In `BalanceController`, replace combined torque logic with:
+   - upright torque (pitch/roll axes)
+   - yaw torque around world up
+2. Add serialized fields `_kPYaw`, `_kDYaw`.
+3. Keep airborne multiplier affecting only upright torque.
+4. Keep zero-direction guard in `SetFacingDirection`.
+
+**Done when:** Movement direction rotates hips smoothly without introducing roll instability.
+
+**Output:** Updated `BalanceController.cs` torque model.
+
+---
+
+### AGENT CARD: Phase 3D2 — Yaw Stability Hardening
+
+**Context:** Prevent spin/jitter regressions.
+
+**Dependencies:** Phase 3D1.
+
+**Instructions:**
+1. Clamp/normalize yaw-target vectors before `SignedAngle`.
+2. Add small dead zone for yaw error to prevent micro-oscillation near target.
+3. Ensure behavior is stable with zero movement input (last valid facing retained).
+4. Verify no NaN from normalization paths.
+
+**Done when:** Character converges to facing target without oscillation or continuous spin.
+
+**Output:** Hardened yaw behavior in `BalanceController.cs`.
+
+---
+
+### AGENT CARD: Phase 3E1 — LegAnimator Core Cycle
+
+**Context:** Add procedural stepping first, no airborne spring scaling yet.
+
+**Dependencies:** Phase 3C2.
+
+**Instructions:**
+1. Create `Assets/Scripts/Character/LegAnimator.cs` on `Hips`.
+2. Cache four leg joints (`UpperLeg_L/R`, `LowerLeg_L/R`) and references to `PlayerMovement`, `CharacterState`.
+3. Add serialized gait fields (`_stepAngle`, `_stepFrequency`, `_kneeAngle`).
+4. In `FixedUpdate`, compute phase from move input magnitude and apply sinusoidal target rotations.
+5. If state is `Fallen`/`GettingUp`, return legs to identity and skip gait.
+
+**Done when:** Walking shows alternating leg swing and knee bend.
+
+**Output:** `LegAnimator.cs` gait core.
+
+---
+
+### AGENT CARD: Phase 3E2 — Leg Settle & Idle Blend
+
+**Context:** Smooth transition from moving to idle.
+
+**Dependencies:** Phase 3E1.
+
+**Instructions:**
+1. Add smoothing path to blend upper/lower leg targets back to `Quaternion.identity` when idle.
+2. Decay gait phase toward neutral when no input.
+3. Ensure no abrupt snaps on quick move/stop toggles.
+
+**Done when:** Legs settle naturally at idle with no visible popping.
+
+**Output:** Updated `LegAnimator.cs` idle behavior.
+
+---
+
+### AGENT CARD: Phase 3F1 — Jump Impulse
+
+**Context:** Add jump gate + impulse to movement.
+
+**Dependencies:** Phase 3C3.
+
+**Instructions:**
+1. Add `_jumpForce` to `PlayerMovement`.
+2. Cache `CharacterState` reference.
+3. Allow jump only when:
+   - Jump input pressed this frame,
+   - state is `Standing` or `Moving`,
+   - `_balance.IsGrounded` is true.
+4. Apply `AddForce(Vector3.up * _jumpForce, ForceMode.Impulse)`.
+
+**Done when:** Space/A triggers reliable single jump from grounded states only.
+
+**Output:** Jump behavior in `PlayerMovement.cs`.
+
+---
+
+### AGENT CARD: Phase 3F2 — Airborne Leg Spring Scaling
+
+**Context:** Legs should loosen in air and restore on landing.
+
+**Dependencies:** Phase 3F1, Phase 3E2.
+
+**Instructions:**
+1. In `LegAnimator`, store baseline `slerpDrive` spring/damper for all leg joints.
+2. Subscribe to `CharacterState.OnStateChanged` in `OnEnable`; unsubscribe in `OnDisable`.
+3. On enter `Airborne`: apply spring multiplier (e.g., 0.2).
+4. On exit `Airborne`: restore multiplier to 1.0.
+5. Implement helper to reassign full `JointDrive` safely.
+
+**Done when:** Legs visibly dangle more in air and return to normal stiffness after landing.
+
+**Output:** Updated `LegAnimator.cs` spring modulation.
+
+---
+
+### AGENT CARD: Phase 3G1 — CameraFollow Script
+
+**Context:** Add basic third-person follow implementation.
+
+**Dependencies:** Phase 1.
+
+**Instructions:**
+1. Create `Assets/Scripts/Character/CameraFollow.cs`.
+2. Add serialized fields: `_target`, `_distance`, `_height`, `_positionSmoothing`, `_lookSmoothing`.
+3. In `LateUpdate`, smooth camera position and look rotation toward target.
+4. Guard null target safely.
+
+**Done when:** Script compiles and camera can follow a target in scene.
+
+**Output:** `CameraFollow.cs`.
+
+---
+
+### AGENT CARD: Phase 3G2 — Camera Scene Wiring
+
+**Context:** Wire scene camera and validate feel.
+
+**Dependencies:** Phase 3G1.
+
+**Instructions:**
+1. Attach `CameraFollow` to active scene camera.
+2. Assign `Hips` transform as `_target`.
+3. Resolve `AudioListener` conflicts if multiple cameras exist.
+4. Validate framing during stand, move, jump, fall, and get-up.
+
+**Done when:** Character remains in frame without visible jitter.
+
+**Output:** Scene camera configured.
+
+---
+
+### AGENT CARD: Phase 3T-A — Movement Unit/Integration Tests
+
+**Context:** Lock movement behavior against regressions.
+
+**Dependencies:** 3B1–3B3.
+
+**Instructions:**
+1. Add PlayMode tests in `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs`.
+2. Validate:
+   - no movement force when `IsFallen`,
+   - movement force direction follows camera projection,
+   - horizontal speed remains bounded near `_maxSpeed`.
+3. Add clear assertion messages with measured values.
+
+**Output:** `PlayerMovementTests.cs`.
+
+---
+
+### AGENT CARD: Phase 3T-B — State Machine Tests
+
+**Context:** Ensure transition correctness.
+
+**Dependencies:** 3C1–3C3.
+
+**Instructions:**
+1. Add PlayMode tests in `Assets/Tests/PlayMode/Character/CharacterStateTests.cs`.
+2. Cover critical transitions:
+   - `Standing ↔ Moving`,
+   - grounded-loss to `Airborne`,
+   - high tilt to `Fallen`,
+   - `Fallen -> GettingUp -> Standing` with timer gates.
+3. Validate `OnStateChanged` event sequence.
+
+**Output:** `CharacterStateTests.cs`.
+
+---
+
+### AGENT CARD: Phase 3T-C — Turning Stability Tests
+
+**Context:** Prevent future yaw regressions.
+
+**Dependencies:** 3D1–3D2.
+
+**Instructions:**
+1. Add tests to existing `BalanceControllerTests.cs` or new `BalanceControllerTurningTests.cs`.
+2. Assert yaw converges toward target direction within bounded time.
+3. Assert no runaway spin under zero input.
+4. Assert no NaN/Inf angular velocity components.
+
+**Output:** Turning-focused balance tests.
+
+---
+
+### AGENT CARD: Phase 3T-D — Leg Animator Tests
+
+**Context:** Verify gait output and safe bounds.
+
+**Dependencies:** 3E1–3E2.
+
+**Instructions:**
+1. Add PlayMode tests in `Assets/Tests/PlayMode/Character/LegAnimatorTests.cs`.
+2. Assert upper/lower leg `targetRotation` changes while moving.
+3. Assert rotations return near identity at idle.
+4. Assert only leg joints are modified (arms untouched).
+
+**Output:** `LegAnimatorTests.cs`.
+
+---
+
+### AGENT CARD: Phase 3T-E — Jump + Airborne Spring Tests
+
+**Context:** Validate jump gate and spring restoration.
+
+**Dependencies:** 3F1–3F2.
+
+**Instructions:**
+1. Add PlayMode tests in `Assets/Tests/PlayMode/Character/JumpAndAirborneTests.cs`.
+2. Assert jump occurs only from grounded `Standing/Moving`.
+3. Assert leg spring multiplier applies in `Airborne` and restores after landing.
+4. Assert no duplicate impulse from single button press frame.
+
+**Output:** `JumpAndAirborneTests.cs`.
+
+---
+
+### AGENT CARD: Phase 3T-F — Arena_01 Locomotion Smoke
+
+**Context:** Validate behavior in production scene, not just synthetic rigs.
+
+**Dependencies:** 3B–3G complete.
+
+**Instructions:**
+1. Add `Assets/Tests/PlayMode/Character/Arena01LocomotionSmokeTests.cs`.
+2. Load `Arena_01`, find active player rig, run 8–12 seconds.
+3. Validate non-catastrophic locomotion metrics:
+   - movement input produces displacement,
+   - no sustained fallen lock,
+   - camera keeps player in frame (coarse check).
+4. Reuse physics/layer snapshot-restore hygiene pattern from Phase 2E tests.
+
+**Output:** `Arena01LocomotionSmokeTests.cs`.
+
+---
+
+### AGENT CARD: Phase 3T-G — Test Execution & Artifacts
+
+**Context:** Final verification gate for Phase 3.
+
+**Dependencies:** 3T-A through 3T-F.
+
+**Instructions:**
+1. Run EditMode then PlayMode tests sequentially (never parallel Unity instances).
+2. Save outputs to `TestResults/EditMode.xml` and `TestResults/PlayMode.xml` (+ logs).
+3. If failing, include metric-driven failure summary and suspected subsystem.
+4. Confirm lock-caveat handling follows `AGENT_TEST_RUNNING.md` guidance.
+
+**Output:** Fresh `TestResults/` XML + logs and pass/fail summary.
 
 ---
 
