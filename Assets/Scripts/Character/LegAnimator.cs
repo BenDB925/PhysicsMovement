@@ -1,3 +1,4 @@
+using System.IO;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -165,6 +166,11 @@ namespace PhysicsDrivenMovement.Character
                  "the torso is pitched forward). Toggle for side-by-side comparison.")]
         private bool _useWorldSpaceSwing = true;
 
+        [SerializeField]
+        [Tooltip("When true, writes one debug line every 10 FixedUpdate frames to " +
+                 "Logs/debug_gait.txt and also outputs to Debug.Log. Disabled by default.")]
+        private bool _debugLog = false;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -206,6 +212,26 @@ namespace PhysicsDrivenMovement.Character
         /// cleanly to identity without any residual sway.
         /// </summary>
         private float _smoothedInputMag;
+
+        /// <summary>Counter incremented each FixedUpdate; used to gate debug logging every 10 frames.</summary>
+        private int _debugFrameCounter;
+
+        /// <summary>
+        /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/>.
+        /// Exposed as a field so it can be included in debug log output without recomputing.
+        /// Zero when world-space swing was not applied this frame.
+        /// </summary>
+        private Vector3 _worldSwingAxis;
+
+        /// <summary>Last target Euler angles (degrees) applied to UpperLeg_L's ConfigurableJoint targetRotation.</summary>
+        private Vector3 _upperLegLTargetEuler;
+
+        /// <summary>Last target Euler angles (degrees) applied to LowerLeg_L's ConfigurableJoint targetRotation.</summary>
+        private Vector3 _lowerLegLTargetEuler;
+
+        /// <summary>Absolute path to the debug gait log file.</summary>
+        private static readonly string DebugLogPath =
+            @"H:\Work\PhysicsDrivenMovementDemo\Logs\debug_gait.txt";
 
         // ── Unity Lifecycle ─────────────────────────────────────────────────
 
@@ -271,6 +297,22 @@ namespace PhysicsDrivenMovement.Character
             if (_lowerLegR == null)
             {
                 Debug.LogWarning("[LegAnimator] 'LowerLeg_R' ConfigurableJoint not found in children.", this);
+            }
+        }
+
+        private void Start()
+        {
+            // STEP: If debug logging is enabled, clear the log file at startup so each play
+            //       session starts with a fresh file rather than appending to stale data.
+            if (_debugLog)
+            {
+                string dir = Path.GetDirectoryName(DebugLogPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                File.WriteAllText(DebugLogPath, string.Empty);
             }
         }
 
@@ -391,6 +433,17 @@ namespace PhysicsDrivenMovement.Character
 
                 SetAllLegTargetsToIdentity();
             }
+
+            // STEP 8: Debug logging — write one line every 10 FixedUpdate frames when enabled.
+            if (_debugLog)
+            {
+                _debugFrameCounter++;
+                if (_debugFrameCounter >= 10)
+                {
+                    _debugFrameCounter = 0;
+                    WriteDebugLogLine();
+                }
+            }
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -416,6 +469,7 @@ namespace PhysicsDrivenMovement.Character
             if (gaitForward.sqrMagnitude < 0.0001f)
             {
                 // No direction available — use local-space fallback to avoid zero-vector issues.
+                _worldSwingAxis = Vector3.zero;
                 ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
                 return;
             }
@@ -434,12 +488,17 @@ namespace PhysicsDrivenMovement.Character
             {
                 // gaitForward is parallel to world up (degenerate — character facing straight
                 // up or down). Fall back to local-space behaviour.
+                _worldSwingAxis = Vector3.zero;
                 ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
                 return;
             }
 
+            // Store the computed world swing axis so it can be included in debug log output.
+            _worldSwingAxis = worldSwingAxis;
+
             // STEP C: Apply upper-leg targets in world space, converted to joint-local frame.
             ApplyWorldSpaceJointTarget(_upperLegL, leftSwingDeg,  worldSwingAxis);
+            if (_upperLegL != null) { _upperLegLTargetEuler = _upperLegL.targetRotation.eulerAngles; }
             ApplyWorldSpaceJointTarget(_upperLegR, rightSwingDeg, worldSwingAxis);
 
             // STEP D: Apply lower-leg knee-bend targets.
@@ -447,6 +506,7 @@ namespace PhysicsDrivenMovement.Character
             //         movement) — same worldSwingAxis, but opposite sign convention
             //         so the lower leg folds in the physiologically correct direction.
             ApplyWorldSpaceJointTarget(_lowerLegL, -kneeBendDeg, worldSwingAxis);
+            if (_lowerLegL != null) { _lowerLegLTargetEuler = _lowerLegL.targetRotation.eulerAngles; }
             ApplyWorldSpaceJointTarget(_lowerLegR, -kneeBendDeg, worldSwingAxis);
         }
 
@@ -568,6 +628,7 @@ namespace PhysicsDrivenMovement.Character
             if (_upperLegL != null)
             {
                 _upperLegL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _swingAxis);
+                _upperLegLTargetEuler = _upperLegL.targetRotation.eulerAngles;
             }
 
             if (_upperLegR != null)
@@ -578,11 +639,49 @@ namespace PhysicsDrivenMovement.Character
             if (_lowerLegL != null)
             {
                 _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+                _lowerLegLTargetEuler = _lowerLegL.targetRotation.eulerAngles;
             }
 
             if (_lowerLegR != null)
             {
                 _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+            }
+        }
+
+        /// <summary>
+        /// Formats and writes one gait debug line to <see cref="DebugLogPath"/> and to
+        /// <see cref="Debug.Log"/>. Called every 10 FixedUpdate frames when
+        /// <see cref="_debugLog"/> is true. Captures velocity, gait forward direction,
+        /// world swing axis, and target/actual Euler angles for both left leg joints.
+        /// </summary>
+        private void WriteDebugLogLine()
+        {
+            float velMag = _hipsRigidbody != null ? _hipsRigidbody.linearVelocity.magnitude : 0f;
+            Vector3 gf = GetWorldGaitForward();
+
+            Vector3 ulActual = _upperLegL != null ? _upperLegL.transform.localEulerAngles : Vector3.zero;
+            Vector3 llActual = _lowerLegL != null ? _lowerLegL.transform.localEulerAngles : Vector3.zero;
+
+            string line =
+                $"FRAME:{Time.frameCount}" +
+                $" vel:{velMag:F2}" +
+                $" gaitFwd:{gf.x:F2},{gf.y:F2},{gf.z:F2}" +
+                $" swingAxis:{_worldSwingAxis.x:F2},{_worldSwingAxis.y:F2},{_worldSwingAxis.z:F2}" +
+                $" UL_targetEuler:{_upperLegLTargetEuler.x:F0},{_upperLegLTargetEuler.y:F0},{_upperLegLTargetEuler.z:F0}" +
+                $" UL_actualEuler:{ulActual.x:F0},{ulActual.y:F0},{ulActual.z:F0}" +
+                $" LL_targetEuler:{_lowerLegLTargetEuler.x:F0},{_lowerLegLTargetEuler.y:F0},{_lowerLegLTargetEuler.z:F0}" +
+                $" LL_actualEuler:{llActual.x:F0},{llActual.y:F0},{llActual.z:F0}" +
+                $" worldSpacePath:{_useWorldSpaceSwing}";
+
+            Debug.Log(line);
+
+            try
+            {
+                File.AppendAllText(DebugLogPath, line + "\n");
+            }
+            catch (IOException ex)
+            {
+                Debug.LogWarning($"[LegAnimator] Failed to write debug log: {ex.Message}");
             }
         }
 
