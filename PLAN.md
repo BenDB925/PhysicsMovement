@@ -137,7 +137,7 @@ Hips (root, no joint)
 | 3.6 | **3C2 — FSM transitions.** Implement `Standing/Moving/Airborne/Fallen/GettingUp` transition rules. |
 | 3.7 | **3C3 — Get-up behavior.** Add fallen timer, get-up delay/timeout, and upward recovery impulse. |
 | 3.8 | **3D1 — Turning torque split.** Refactor balance control into separate upright torque (pitch/roll) and yaw torque. |
-| 3.9 | **3D2 — Turning stabilization.** Tune/guard yaw behavior (no spin, no oscillation, safe zero-input handling). |
+| 3.9 | **3D2 — Turning stabilization.** Tune/guard yaw behavior (no spin, no oscillation, safe zero-input handling). ✅ Complete (2026-02-22) |
 | 3.10 | **3E1 — Leg animation core.** Add `LegAnimator.cs` with gait phase and upper/lower leg target rotations. |
 | 3.11 | **3E2 — Leg settle behavior.** Add idle return-to-rest smoothing and fallen/get-up bypass behavior. |
 | 3.12 | **3F1 — Jump impulse.** Add grounded/state-gated jump to `PlayerMovement`. |
