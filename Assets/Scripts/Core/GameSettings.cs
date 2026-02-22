@@ -41,6 +41,13 @@ namespace PhysicsDrivenMovement.Core
         public const int LayerPlayer4Parts = 11;
         /// <summary>Layer index for static environment geometry.</summary>
         public const int LayerEnvironment = 12;
+        /// <summary>
+        /// Layer index for lower leg ragdoll segments (LowerLeg_L, LowerLeg_R).
+        /// Lower legs are placed on this dedicated layer so their ground collision can be
+        /// suppressed without affecting the hips, torso, or upper legs which need to
+        /// remain in contact with the ground for balance physics.
+        /// </summary>
+        public const int LayerLowerLegParts = 13;
 
         // ─── Unity Lifecycle ─────────────────────────────────────────────────
 

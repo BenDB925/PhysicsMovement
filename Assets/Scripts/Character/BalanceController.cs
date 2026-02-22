@@ -25,17 +25,19 @@ namespace PhysicsDrivenMovement.Character
 
         // ─── Serialised Fields ──────────────────────────────────────────────
 
-        [SerializeField, Range(0f, 2000f)]
+        [SerializeField, Range(0f, 5000f)]
         [Tooltip("Proportional gain for the upright (pitch + roll) correction torque. " +
                  "Higher = snappier recovery, lower = softer wobble. " +
-                 "Only affects pitch and roll axes; yaw is controlled by _kPYaw separately.")]
-        private float _kP = 800f;
+                 "Only affects pitch and roll axes; yaw is controlled by _kPYaw separately. " +
+                 "Default 2000: high enough to resist forward lean from move force (raised from 800).")]
+        private float _kP = 2000f;
 
         [SerializeField, Range(0f, 500f)]
         [Tooltip("Derivative gain for the upright (pitch + roll) damping term. " +
                  "Increase if the character oscillates, decrease if it is too sluggish. " +
-                 "Only affects pitch and roll axes.")]
-        private float _kD = 80f;
+                 "Only affects pitch and roll axes. " +
+                 "Default 200: maintains 10:1 P/D ratio with _kP = 2000 (raised from 80).")]
+        private float _kD = 200f;
 
         [SerializeField, Range(0f, 2000f)]
         [Tooltip("Proportional gain for the yaw correction torque (rotation around world Y). " +

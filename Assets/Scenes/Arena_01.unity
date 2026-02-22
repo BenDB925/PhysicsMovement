@@ -683,7 +683,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _kP
-      value: 1500
+      value: 2000
       objectReference: {fileID: 0}
     - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _debugStateTransitions
@@ -707,7 +707,7 @@ PrefabInstance:
       objectReference: {fileID: 404821462}
     - target: {fileID: 6044111111111111111, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _moveForce
-      value: 200
+      value: 150
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -756,8 +756,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _stepAngle: 50.3
+  _stepFrequencyScale: 1.5
   _stepFrequency: 2
   _kneeAngle: -30
+  _upperLegLiftBoost: 15
   _idleBlendSpeed: 5
   _swingAxis: {x: 0, y: 1, z: 0}
   _kneeAxis: {x: 0, y: 1, z: 0}

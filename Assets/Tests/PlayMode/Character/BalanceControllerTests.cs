@@ -75,6 +75,46 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return bc;
         }
 
+        // ─── FIX 1: _kP default value test ───────────────────────────────────
+
+        /// <summary>
+        /// Verifies that the default value of the upright proportional gain (_kP) is at
+        /// least 2000. A value of 800 was too weak to counteract the forward lean from
+        /// the move force, causing the character to hunch. Raising to 2000 gives enough
+        /// upright authority.
+        ///
+        /// The field is private+serialized so we read it via reflection. This test will
+        /// fail (and alert us) if someone accidentally reduces _kP below 2000 in future.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator KP_DefaultValue_IsAtLeast2000()
+        {
+            // Arrange — create a fresh BalanceController with no manual field overrides.
+            BalanceController bc = CreateMinimalHips(out _, out GameObject hipsGo);
+
+            yield return new WaitForFixedUpdate();
+
+            // Act — read _kP via reflection (it is a private serialized field).
+            System.Reflection.FieldInfo field = typeof(BalanceController)
+                .GetField("_kP",
+                          System.Reflection.BindingFlags.NonPublic |
+                          System.Reflection.BindingFlags.Instance);
+
+            Assert.That(field, Is.Not.Null,
+                "_kP field must exist in BalanceController. " +
+                "If it was renamed, update this test.");
+
+            float kP = (float)field.GetValue(bc);
+
+            // Assert
+            Assert.That(kP, Is.GreaterThanOrEqualTo(2000f),
+                $"BalanceController._kP default must be >= 2000 to give the character " +
+                $"sufficient upright authority against move-force lean. " +
+                $"Found {kP}. Was it accidentally reset to the old 800 default?");
+
+            Object.Destroy(hipsGo);
+        }
+
         // ─── IsGrounded ───────────────────────────────────────────────────────
 
         /// <summary>
