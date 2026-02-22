@@ -27,14 +27,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 545393512186983329}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.23, y: 0.08, z: 0}
+  m_LocalRotation: {x: 0.5, y: -0.5, z: 0.5, w: 0.5}
+  m_LocalPosition: {x: 0.22699976, y: 0.07999998, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8661815612185684901}
   m_Father: {fileID: 6393934769873506288}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 90}
 --- !u!54 &7625213697705590229
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -888,8 +888,8 @@ MonoBehaviour:
   _enableComStabilization: 1
   _comStabilizationStrength: 400
   _comStabilizationDamping: 60
-  _comMovementOffsetScale: 0.12
-  _comMovingStrengthMultiplier: 0.55
+  _comMovementOffsetScale: 0
+  _comMovingStrengthMultiplier: 0.95
   _enableHeightMaintenance: 1
   _standingHipsHeight: 0.95
   _heightMaintenanceStrength: 1500
@@ -926,7 +926,7 @@ MonoBehaviour:
   _maxSpeed: 5
   _jumpImpulse: 20
   _jumpCooldown: 0.3
-  _footForceFraction: 0.7
+  _footForceFraction: 0.85
   _camera: {fileID: 0}
 --- !u!114 &4632267047828400493
 MonoBehaviour:
@@ -941,7 +941,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.RagdollMeshFollower
   _modelRoot: {fileID: 2974999652493341855}
-  _debugMapping: 0
 --- !u!1 &1889336342083505185
 GameObject:
   m_ObjectHideFlags: 0
@@ -1358,14 +1357,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5383982986113063260}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.23, y: 0.08, z: 0}
+  m_LocalRotation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+  m_LocalPosition: {x: -0.23000002, y: 0.08, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 7394668730802601522}
   m_Father: {fileID: 6393934769873506288}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -90, y: 0, z: -90}
 --- !u!54 &2907851372082815428
 Rigidbody:
   m_ObjectHideFlags: 0

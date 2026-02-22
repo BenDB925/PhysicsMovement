@@ -51,7 +51,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Rest angle (degrees) applied around body-local Z to bring the upper arms " +
                  "from the T-pose rest orientation down to the character's sides. " +
                  "~80° produces a natural hanging pose. The gait swing layers on top.")]
-        private float _armRestAngle = 80f;
+        private float _armRestAngle = 0f;
 
         // ── Private Fields ──────────────────────────────────────────────────
 
