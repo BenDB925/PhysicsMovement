@@ -26,18 +26,33 @@ namespace PhysicsDrivenMovement.Character
         // ─── Serialised Fields ──────────────────────────────────────────────
 
         [SerializeField, Range(0f, 2000f)]
-        [Tooltip("Proportional gain: strength of the upright correction torque. " +
-                 "Higher = snappier recovery, lower = softer wobble.")]
+        [Tooltip("Proportional gain for the upright (pitch + roll) correction torque. " +
+                 "Higher = snappier recovery, lower = softer wobble. " +
+                 "Only affects pitch and roll axes; yaw is controlled by _kPYaw separately.")]
         private float _kP = 800f;
 
         [SerializeField, Range(0f, 500f)]
-        [Tooltip("Derivative gain: angular-velocity damping that prevents oscillation. " +
-                 "Increase if the character oscillates, decrease if it is too sluggish.")]
+        [Tooltip("Derivative gain for the upright (pitch + roll) damping term. " +
+                 "Increase if the character oscillates, decrease if it is too sluggish. " +
+                 "Only affects pitch and roll axes.")]
         private float _kD = 80f;
 
+        [SerializeField, Range(0f, 2000f)]
+        [Tooltip("Proportional gain for the yaw correction torque (rotation around world Y). " +
+                 "Controls how quickly the character turns to face the desired direction. " +
+                 "Airborne multiplier does NOT apply to yaw torque.")]
+        private float _kPYaw = 400f;
+
+        [SerializeField, Range(0f, 500f)]
+        [Tooltip("Derivative gain for yaw damping. Prevents the character from spinning " +
+                 "past the target facing direction. " +
+                 "Airborne multiplier does NOT apply to yaw torque.")]
+        private float _kDYaw = 40f;
+
         [SerializeField, Range(0f, 1f)]
-        [Tooltip("Multiplier applied to PD torque while airborne. " +
-             "Lower values reduce in-air correction and preserve floppy feel.")]
+        [Tooltip("Multiplier applied to upright (pitch + roll) PD torque while airborne. " +
+                 "Lower values reduce in-air correction and preserve floppy feel. " +
+                 "This multiplier does NOT affect yaw torque.")]
         private float _airborneMultiplier = 0.2f;
 
         [SerializeField, Range(0f, 90f)]
@@ -510,41 +525,75 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            // STEP 4: Compute the error quaternion — the rotation needed to go from
-            //         the current Hips orientation to the desired upright+facing pose.
-            Quaternion currentRot = _rb.rotation;
-            Quaternion errorQuat  = _targetFacingRotation * Quaternion.Inverse(currentRot);
+            // ─── STEP 4: Compute upright (pitch + roll) torque ─────────────────
+            // We isolate the pitch/roll error by comparing the current Hips up-vector
+            // to world up. We use Quaternion.FromToRotation to get the shortest-arc
+            // rotation from current-up to world-up, then extract axis-angle.
+            // The axis is in world space and lies in the horizontal plane (XZ) for a
+            // pure pitch/roll error.
+            //
+            // Airborne multiplier applies here only (not to yaw).
+            //
+            // When IsFallen, torque continues to support recovery (ragdoll can get back
+            // up via the same correction forces). The GettingUp state (Phase 3C3) may
+            // disable balance entirely during a controlled get-up animation, but that is
+            // a separate concern.
+            Quaternion currentRot   = _rb.rotation;
+            Vector3    currentUp    = currentRot * Vector3.up;
+            Quaternion uprightError = Quaternion.FromToRotation(currentUp, Vector3.up);
 
-            // STEP 5: Convert the error quaternion to axis-angle representation.
-            //         Unity's ToAngleAxis returns angle in [0, 360). We normalise to [-180, 180]
-            //         so the torque always takes the shorter arc.
-            errorQuat.ToAngleAxis(out float angleDeg, out Vector3 axis);
-            if (angleDeg > 180f)
+            uprightError.ToAngleAxis(out float uprightAngleDeg, out Vector3 uprightAxis);
+            if (uprightAngleDeg > 180f) uprightAngleDeg -= 360f;
+
+            // Damp only the pitch/roll (XZ) component of angular velocity to avoid
+            // coupling the derivative term with the separate yaw damping below.
+            Vector3 angVel = _rb.angularVelocity;
+            Vector3 pitchRollAngVel = new Vector3(angVel.x, 0f, angVel.z);
+
+            if (uprightAxis.sqrMagnitude > 0.001f)
             {
-                angleDeg -= 360f;
+                float   uprightRad    = uprightAngleDeg * Mathf.Deg2Rad;
+                Vector3 uprightTorque = _kP * uprightRad * uprightAxis - _kD * pitchRollAngVel;
+
+                float uprightMultiplier = _hasBeenGrounded
+                    ? (effectivelyGrounded ? 1f : _airborneMultiplier)
+                    : 1f;
+                _rb.AddTorque(uprightTorque * uprightMultiplier, ForceMode.Force);
             }
 
-            // Guard against the degenerate case where the error is (near) zero:
-            // ToAngleAxis can return an undefined axis with angle ≈ 0.
-            if (axis.sqrMagnitude < 0.001f)
+            // ─── STEP 5: Compute yaw torque ────────────────────────────────────
+            // Extract the yaw error: the signed angle around world Y from the current
+            // Hips forward direction (projected onto XZ) to the desired facing direction.
+            //
+            // We compute this independently from upright error so that changing the
+            // facing direction never introduces roll instability.
+            //
+            // Yaw torque is only applied when NOT fallen: when the character is severely
+            // tilted or upside-down, the horizontal projection of the forward vector is
+            // unreliable and can produce a spurious 180° yaw error that fights recovery.
+            // While fallen, we rely solely on the upright torque to assist self-recovery.
+            //
+            // Airborne multiplier does NOT apply to yaw — the character should always
+            // be able to turn in air.
+            if (!IsFallen)
             {
-                return;
+                Vector3 currentForwardXZ = Vector3.ProjectOnPlane(currentRot * Vector3.forward, Vector3.up);
+                Vector3 targetForwardXZ  = Vector3.ProjectOnPlane(_targetFacingRotation * Vector3.forward, Vector3.up);
+
+                // Guard degenerate cases (character is near-vertical — forward projects near zero).
+                if (currentForwardXZ.sqrMagnitude > 0.001f && targetForwardXZ.sqrMagnitude > 0.001f)
+                {
+                    float yawErrorDeg = Vector3.SignedAngle(
+                        currentForwardXZ.normalized,
+                        targetForwardXZ.normalized,
+                        Vector3.up);
+
+                    float yawErrorRad  = yawErrorDeg * Mathf.Deg2Rad;
+                    float yawAngVelY   = angVel.y;
+                    float yawTorqueY   = _kPYaw * yawErrorRad - _kDYaw * yawAngVelY;
+                    _rb.AddTorque(Vector3.up * yawTorqueY, ForceMode.Force);
+                }
             }
-
-            // STEP 6: Apply the PD control law.
-            //         torque = kP * angleError_in_radians * axis
-            //                - kD * currentAngularVelocity
-            //         The axis from ToAngleAxis is already in world space (Quaternion.ToAngleAxis
-            //         returns world-space axis for a world-space quaternion).
-            float   angleRad         = angleDeg * Mathf.Deg2Rad;
-            Vector3 proportionalTerm = _kP * angleRad * axis;
-            Vector3 derivativeTerm   = _kD * _rb.angularVelocity;
-            Vector3 torque           = proportionalTerm - derivativeTerm;
-
-            float multiplier = _hasBeenGrounded
-                ? (effectivelyGrounded ? 1f : _airborneMultiplier)
-                : 1f;
-            _rb.AddTorque(torque * multiplier, ForceMode.Force);
         }
 
         private void LogRecoveryTelemetry(
