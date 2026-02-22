@@ -4,10 +4,11 @@ namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
     /// Drives procedural gait animation on the ragdoll's four leg ConfigurableJoints
-    /// by advancing a phase accumulator from movement input magnitude and applying
-    /// sinusoidal target rotations each FixedUpdate.
+    /// by advancing a phase accumulator from actual Rigidbody horizontal speed and
+    /// applying sinusoidal target rotations each FixedUpdate.
     /// Left and right upper legs are offset by π (half-cycle), producing an alternating
-    /// stepping pattern. Lower legs receive a constant knee-bend target during gait.
+    /// stepping pattern. Lower legs receive a constant knee-bend target during gait plus
+    /// an optional upward lift boost on the forward-swinging leg.
     ///
     /// Axis convention (Bug fix — Phase 3E1 axis correction):
     /// Unity's ConfigurableJoint.targetRotation maps the joint's primary axis (joint.axis)
@@ -64,6 +65,21 @@ namespace PhysicsDrivenMovement.Character
     /// on quick move/stop/move toggles while preserving the correct L/R alternating gait
     /// phase relationship at all times.
     ///
+    /// Velocity-driven gait speed (Phase 3E4 — gait-velocity-knees):
+    /// The phase accumulator now advances based on actual Rigidbody horizontal speed
+    /// (metres per second) rather than raw input magnitude. This eliminates the
+    /// body-outruns-legs and tap-dancing-at-idle problems: legs always cycle at a
+    /// cadence proportional to how fast the character is actually moving.
+    ///   effectiveCyclesPerSec = max(_stepFrequency, horizontalSpeed × _stepFrequencyScale)
+    /// <see cref="_stepFrequencyScale"/> maps m/s to cycles/s (default 1.5: at 2 m/s → 3 Hz).
+    /// <see cref="_stepFrequency"/> is the minimum cadence (default 0: legs are still at idle).
+    ///
+    /// Aggressive knee lift (Phase 3E4 — gait-velocity-knees):
+    /// <see cref="_kneeAngle"/> default raised from 20° to 55° for powerful, deliberate strides.
+    /// <see cref="_upperLegLiftBoost"/> (default 15°, range 0–45°) adds an extra upward component
+    /// to the upper leg that is in the forward-swing phase (sin > 0), biasing the knee toward
+    /// the chest rather than just swinging the leg forward flat.
+    ///
     /// When the character is in the <see cref="CharacterStateType.Fallen"/> or
     /// <see cref="CharacterStateType.GettingUp"/> state, all leg joints are returned
     /// immediately to <see cref="Quaternion.identity"/> and the phase / scale are reset
@@ -82,15 +98,27 @@ namespace PhysicsDrivenMovement.Character
                  "Controls the visible stride amplitude. Typical range: 15–35°.")]
         private float _stepAngle = 25f;
 
+        [SerializeField, Range(0.1f, 5f)]
+        [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
+                 "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
+                 "Eliminates body-outruns-legs: cadence is always proportional to real speed.")]
+        private float _stepFrequencyScale = 1.5f;
+
         [SerializeField, Range(0f, 10f)]
-        [Tooltip("Number of full step cycles per second. Higher = faster cadence. " +
-                 "Match roughly to _maxSpeed / stride_length for realistic feel. Typical: 1.5–3 Hz.")]
-        private float _stepFrequency = 2f;
+        [Tooltip("Minimum gait cadence in cycles per second, applied even when the character " +
+                 "is nearly stationary (optional slow idle cycle). Default 0 = legs still at idle.")]
+        private float _stepFrequency = 0f;
 
         [SerializeField, Range(0f, 60f)]
         [Tooltip("Constant knee-bend angle (degrees) applied to lower leg joints during gait. " +
-                 "Adds visible flexion to the lower leg. Typical range: 10–30°.")]
-        private float _kneeAngle = 20f;
+                 "Larger values = more aggressive, deliberate stride. Default 55°.")]
+        private float _kneeAngle = 55f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra upward lift bias (degrees) added to the upper leg that is in the " +
+                 "forward-swing phase (sin(phase) > 0). Biases the knee toward the chest " +
+                 "for a powerful, high-stepping gait. Default 15°.")]
+        private float _upperLegLiftBoost = 15f;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Controls three related smooth-transition behaviours:\n" +
@@ -268,19 +296,31 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 3: Read move input magnitude (0–1).
-            //         Input magnitude drives both phase advancement speed and implicitly
-            //         represents walking speed. No force is applied here — this script
-            //         only sets ConfigurableJoint.targetRotation.
+            // STEP 3: Read move input magnitude (0–1) to gate gait on/off.
+            //         Input magnitude is used only as a binary gate (> 0.01 = moving);
+            //         phase advancement speed is now driven by actual Rigidbody speed
+            //         so cadence is always proportional to real movement, eliminating
+            //         body-outruns-legs and tap-dancing-with-no-momentum problems.
             float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
 
             if (inputMagnitude > 0.01f)
             {
-                // STEP 4a: MOVING — advance phase accumulator.
-                //          Phase is in radians, cycling [0, 2π).
-                //          Scale by 2π × frequency × deltaTime so one full cycle takes exactly
-                //          1/_stepFrequency seconds at full input.
-                _phase += inputMagnitude * 2f * Mathf.PI * _stepFrequency * Time.fixedDeltaTime;
+                // STEP 4a: MOVING — advance phase accumulator based on actual speed.
+                //          effectiveCycles = max(_stepFrequency, horizontalSpeed × _stepFrequencyScale)
+                //          This ensures:
+                //            • At idle (zero velocity, non-zero input) we get _stepFrequency cycles/sec
+                //              (default 0 = stationary legs until the body actually moves).
+                //            • At 2 m/s with scale 1.5 → 3 cycles/sec.
+                //            • Legs never outrun or lag the body.
+                float horizontalSpeed = 0f;
+                if (_hipsRigidbody != null)
+                {
+                    Vector3 hVel = _hipsRigidbody.linearVelocity;
+                    horizontalSpeed = new Vector3(hVel.x, 0f, hVel.z).magnitude;
+                }
+
+                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeed * _stepFrequencyScale);
+                _phase += effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
                 // Wrap phase to [0, 2π) to prevent float overflow over time.
                 if (_phase >= 2f * Mathf.PI)
@@ -291,20 +331,27 @@ namespace PhysicsDrivenMovement.Character
                 // STEP 4b: Ramp up the smoothed input magnitude toward the actual value.
                 //          This is the anti-pop mechanism: instead of the gait amplitude
                 //          snapping to full value on frame 1 of resumed movement, it ramps
-                //          up smoothly.  At blendSpeed 5 and dt 0.01, t ≈ 0.05 per frame,
-                //          reaching 95% amplitude in about 60 frames / 0.6 s.
-                //          We lerp in float space (not quaternion space) to avoid touching
-                //          the joint targetRotation directly, preserving the L/R phase
-                //          relationship perfectly.
+                //          up smoothly. We use inputMagnitude (not speed) as the target here
+                //          so the ramp works even at zero actual velocity (starting to push).
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
                 _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, inputMagnitude, t);
 
-                // STEP 5: Compute sinusoidal upper-leg swing angles.
+                // STEP 5: Compute sinusoidal upper-leg swing angles with optional lift boost.
                 //         Left leg uses phase directly; right leg is offset by π (half-cycle)
                 //         so they always swing in opposite directions — the alternating gait.
                 //         We scale amplitude by _smoothedInputMag to get the anti-pop ramp.
-                float leftSwingDeg  = Mathf.Sin(_phase)            * _stepAngle * _smoothedInputMag;
-                float rightSwingDeg = Mathf.Sin(_phase + Mathf.PI) * _stepAngle * _smoothedInputMag;
+                //
+                //         _upperLegLiftBoost adds extra upward bias to the forward-swinging leg
+                //         (whichever has sin > 0). This biases the knee toward the chest rather
+                //         than simply swinging the leg forward flat, for a high, deliberate stride.
+                float sinL = Mathf.Sin(_phase);
+                float sinR = Mathf.Sin(_phase + Mathf.PI);
+
+                float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
+                float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
+
+                float leftSwingDeg  = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
+                float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
 
                 // STEP 6: Compute lower-leg knee-bend angle.
                 //         The knee holds a constant positive bend during gait so the character

@@ -53,6 +53,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _hips = new GameObject("Hips");
             _hipsRb = _hips.AddComponent<Rigidbody>();
             _hipsRb.useGravity = false;
+            // Simulate walking velocity so velocity-driven gait cadence is non-zero.
+            // At 2 m/s with default _stepFrequencyScale=1.5 → 3 cycles/sec.
+            _hipsRb.linearVelocity = new Vector3(0f, 0f, 2f);
 
             // ── Leg GameObjects as children of Hips ─────────────────────
             _upperLegL = CreateLegJoint(_hips, "UpperLeg_L");
@@ -778,7 +781,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// LegAnimator's targetRotation commands.
         ///
         /// Threshold rationale (5°):
-        ///   - LegAnimator default _kneeAngle = 20°, applied immediately once input starts.
+        ///   - LegAnimator default _kneeAngle = 55° (raised for aggressive gait).
         ///   - RagdollSetup applies lowerLegSpring = 1200 Nm/rad; at 20° = 0.35 rad,
         ///     spring torque ≈ 420 Nm vs gravity torque ≈ 4.2 Nm — the joint wins 100:1.
         ///   - The _smoothedInputMag ramp means amplitude is only ~5% at frame 1, ramping
@@ -841,7 +844,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
             PlayerMovement physicsMovement = physicsHips.AddComponent<PlayerMovement>();
             physicsHips.AddComponent<CharacterState>();
-            physicsHips.AddComponent<LegAnimator>();
+            LegAnimator physicsLegAnimator = physicsHips.AddComponent<LegAnimator>();
 
             // ── Configure test seams so gait runs without falling ──────────────
             physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
@@ -853,6 +856,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Inject non-zero move input so LegAnimator's phase accumulates.
             physicsMovement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Set a minimum cadence so phase advances even though the kinematic hips
+            // body reports zero velocity. 2 cycles/sec gives 50 frames × (1/100 s) × 2π × 2
+            // ≈ π radians of phase — enough for clear gait rotation.
+            SetPrivateField(physicsLegAnimator, "_stepFrequency", 2f);
 
             // Wait one frame for all Awake/Start calls to complete.
             yield return null;
@@ -1119,24 +1127,29 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// character is actually moving, not sideways or backwards.
         ///
         /// Method:
-        ///   Record each lower leg's world position at frame 0 and frame 80.
-        ///   Compute net horizontal displacement (XZ) for each leg.
-        ///   Select the leg with the larger total displacement magnitude.
-        ///   Assert: dot(displacement, moveDir) > 0 (displacement has a positive forward
-        ///   component — the foot ended up further forward than it started).
+        ///   Record each lower leg's world position at frame 0 and track the maximum
+        ///   forward displacement over 80 frames (peak forward, not net end-to-end).
+        ///   Select the leg with the larger peak forward displacement.
+        ///   Assert: maxForwardDisplacement > MinForwardExcursion (foot reached forward
+        ///   of its start position at some point during the gait cycle).
         ///
-        /// Threshold rationale (0.0f — just positive dot product):
-        ///   - We only require a positive dot product, not a minimum magnitude, to avoid
-        ///     sensitivity to the amount of spring oscillation in the rig.
-        ///   - Any net forward component proves the drive axis is correct; a zero or
-        ///     negative result means the foot swung sideways or backwards (wrong axis).
-        ///   - This is the minimal correctness assertion: direction is right, not magnitude.
+        /// Why peak (not net end-to-end)?
+        ///   Net displacement over a non-integer number of gait cycles accumulates
+        ///   spring oscillation residuals. Peak forward excursion is a more robust signal:
+        ///   any leg that swings forward at all will produce a clear positive value,
+        ///   while a laterally-swinging or stationary leg will show near zero.
+        ///
+        /// Threshold rationale (0.005 m = 5 mm):
+        ///   - _stepAngle=25°, upper leg length ~0.3 m → peak excursion ~0.3 × sin(25°) ≈ 0.13 m
+        ///   - 5 mm is ~4% of the expected peak, very conservative against spring damping
+        ///   - A leg swinging purely sideways (wrong axis) would show ≈0 forward excursion
         /// </summary>
         [UnityTest]
         public IEnumerator LowerLeg_WhenWalking_StepDirectionMatchesMovement()
         {
             // ── Arrange ────────────────────────────────────────────────────────
             const int PhysicsFrames = 80;
+            const float MinForwardExcursionMetres = 0.005f;  // 5 mm — see threshold rationale above
 
             Vector2 moveInput = new Vector2(0f, 1f);
             Vector3 moveDir3D  = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
@@ -1148,42 +1161,308 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             physMovement.SetMoveInputForTest(moveInput);
             yield return null;  // allow Awake/Start
 
-            // Record starting positions after Awake
-            Vector3 startPosL = new Vector3(
-                physLowerLegL.transform.position.x, 0f, physLowerLegL.transform.position.z);
-            Vector3 startPosR = new Vector3(
-                physLowerLegR.transform.position.x, 0f, physLowerLegR.transform.position.z);
+            // Record starting forward position (projected onto move direction)
+            float startForwardL = Vector3.Dot(physLowerLegL.transform.position, moveDir3D);
+            float startForwardR = Vector3.Dot(physLowerLegR.transform.position, moveDir3D);
 
-            // ── Act ────────────────────────────────────────────────────────────
+            // ── Act: track peak forward excursion over gait frames ────────────
+            float maxExcursionL = 0f;
+            float maxExcursionR = 0f;
+
             for (int i = 0; i < PhysicsFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
+
+                float fwdL = Vector3.Dot(physLowerLegL.transform.position, moveDir3D);
+                float fwdR = Vector3.Dot(physLowerLegR.transform.position, moveDir3D);
+
+                float excursionL = fwdL - startForwardL;
+                float excursionR = fwdR - startForwardR;
+
+                if (excursionL > maxExcursionL) { maxExcursionL = excursionL; }
+                if (excursionR > maxExcursionR) { maxExcursionR = excursionR; }
             }
 
-            // ── Measure ────────────────────────────────────────────────────────
-            Vector3 endPosL = new Vector3(
-                physLowerLegL.transform.position.x, 0f, physLowerLegL.transform.position.z);
-            Vector3 endPosR = new Vector3(
-                physLowerLegR.transform.position.x, 0f, physLowerLegR.transform.position.z);
-
-            Vector3 dispL = endPosL - startPosL;
-            Vector3 dispR = endPosR - startPosR;
-
-            // Pick the leg with the larger total displacement magnitude as the representative
-            Vector3 dispChosen = (dispL.magnitude >= dispR.magnitude) ? dispL : dispR;
-            string chosenName = (dispL.magnitude >= dispR.magnitude) ? "LowerLeg_L" : "LowerLeg_R";
-            float dotProduct = Vector3.Dot(dispChosen, moveDir3D);
-
             // ── Assert ─────────────────────────────────────────────────────────
-            Assert.That(dotProduct, Is.GreaterThan(0f),
-                $"Net horizontal displacement of {chosenName} over {PhysicsFrames} frames must have " +
-                $"a positive dot product with move direction {moveDir3D}. " +
-                $"Dot product={dotProduct:F4}. Displacement={dispChosen}. " +
-                $"A zero or negative value means the foot is stepping sideways or backwards — " +
+            float maxExcursionEither = Mathf.Max(maxExcursionL, maxExcursionR);
+            string chosenName = maxExcursionL >= maxExcursionR ? "LowerLeg_L" : "LowerLeg_R";
+
+            Assert.That(maxExcursionEither, Is.GreaterThanOrEqualTo(MinForwardExcursionMetres),
+                $"During {PhysicsFrames} frames, at least one lower leg must swing forward by " +
+                $"≥{MinForwardExcursionMetres * 100f:F0} cm in the movement direction. " +
+                $"MaxExcursionL={maxExcursionL:F4} m, MaxExcursionR={maxExcursionR:F4} m. " +
+                $"A value below threshold means neither foot ever moved forward — " +
                 $"world-space swing axis is misaligned with movement direction.");
 
             // ── Cleanup ────────────────────────────────────────────────────────
             UnityEngine.Object.Destroy(physicsHips);
+        }
+
+        // ─── Velocity-Scaled Step Frequency Tests (Phase 3E4) ───────────────
+
+        /// <summary>
+        /// LegAnimator must expose a serialized _stepFrequencyScale field (float)
+        /// that maps metres-per-second to gait cycles per second.
+        /// Default must be 1.5 (at 2 m/s → 3 cycles/sec).
+        /// Range must be [0.1, 5].
+        /// </summary>
+        [UnityTest]
+        public IEnumerator StepFrequencyScale_FieldExists_AndDefaultsTo1Point5()
+        {
+            // Arrange
+            yield return null;
+
+            // Act
+            FieldInfo field = typeof(LegAnimator).GetField("_stepFrequencyScale",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Assert: field exists and is float
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_stepFrequencyScale'.");
+            Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
+                "_stepFrequencyScale must be a float.");
+
+            // Assert: default 1.5
+            float defaultValue = (float)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(1.5f).Within(0.001f),
+                $"_stepFrequencyScale must default to 1.5. Got: {defaultValue}.");
+        }
+
+        /// <summary>
+        /// _stepFrequency must now be the minimum cadence (default 0, not 2).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator StepFrequency_DefaultIsZero()
+        {
+            // Arrange
+            yield return null;
+
+            // Act
+            FieldInfo field = typeof(LegAnimator).GetField("_stepFrequency",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_stepFrequency'.");
+
+            float defaultValue = (float)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(0f).Within(0.001f),
+                $"_stepFrequency must default to 0 (minimum cadence). Got: {defaultValue}.");
+        }
+
+        /// <summary>
+        /// When Rigidbody has non-zero horizontal velocity, phase must advance faster
+        /// than when velocity is near-zero (with same input magnitude).
+        /// This verifies the velocity-driven gait core: faster movement → faster cadence.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PhaseAccumulator_AdvancesFasterAtHigherVelocity()
+        {
+            // Arrange
+            yield return null;
+
+            // Run at low velocity: zero out hipsRb velocity, run 10 frames, measure phase advance
+            _hipsRb.linearVelocity = Vector3.zero;
+            SetPrivateField(_legAnimator, "_phase", 0f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 0f);
+            // Use a minimum freq of 0 so only velocity contributes
+            SetPrivateField(_legAnimator, "_stepFrequency", 0f);
+            SetPrivateField(_legAnimator, "_stepFrequencyScale", 1.5f);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+            float phaseAtLowVel = GetPhaseAccumulator();
+
+            // Reset phase, then run at high velocity
+            SetPrivateField(_legAnimator, "_phase", 0f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 0f);
+            _hipsRb.linearVelocity = new Vector3(0f, 0f, 4f);  // 4 m/s → scale 1.5 → 6 cycles/sec
+
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+            float phaseAtHighVel = GetPhaseAccumulator();
+
+            // Assert: phase advanced more at higher velocity
+            Assert.That(phaseAtHighVel, Is.GreaterThan(phaseAtLowVel),
+                $"Phase must advance faster when Rigidbody has higher horizontal velocity. " +
+                $"LowVelPhase={phaseAtLowVel:F4} HighVelPhase={phaseAtHighVel:F4}.");
+        }
+
+        /// <summary>
+        /// When Rigidbody velocity is near zero and _stepFrequency is 0, phase must
+        /// not advance (legs stay still at idle with no velocity).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PhaseAccumulator_DoesNotAdvance_WhenVelocityZeroAndMinFreqZero()
+        {
+            // Arrange
+            yield return null;
+            _hipsRb.linearVelocity = Vector3.zero;
+            SetPrivateField(_legAnimator, "_phase", 0f);
+            SetPrivateField(_legAnimator, "_stepFrequency", 0f);
+            SetPrivateField(_legAnimator, "_stepFrequencyScale", 1.5f);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Act
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Assert
+            float phase = GetPhaseAccumulator();
+            Assert.That(phase, Is.EqualTo(0f).Within(0.001f),
+                $"Phase must not advance when velocity is zero and _stepFrequency is 0. Phase={phase:F4}.");
+        }
+
+        /// <summary>
+        /// When _stepFrequency (min cadence) is non-zero and velocity is zero, phase
+        /// must still advance at the minimum rate — so idle cycling works if desired.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PhaseAccumulator_AdvancesAtMinFrequency_WhenVelocityZero()
+        {
+            // Arrange
+            yield return null;
+            _hipsRb.linearVelocity = Vector3.zero;
+            SetPrivateField(_legAnimator, "_phase", 0f);
+            SetPrivateField(_legAnimator, "_stepFrequency", 1f);   // 1 cycle/sec minimum
+            SetPrivateField(_legAnimator, "_stepFrequencyScale", 1.5f);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Act — 10 frames at 100 Hz = 0.1 s → expect ≈ 2π × 1 × 0.1 = 0.628 rad
+            for (int i = 0; i < 10; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Assert: phase has advanced by roughly 1 cycle/sec × 0.1 s × 2π (ignore smoothing)
+            float phase = GetPhaseAccumulator();
+            Assert.That(phase, Is.GreaterThan(0.3f),
+                $"Phase must advance at minimum cadence even when velocity is zero. Phase={phase:F4}.");
+        }
+
+        // ─── Aggressive Knee Lift Tests (Phase 3E4) ─────────────────────────
+
+        /// <summary>
+        /// _kneeAngle must default to 55 degrees (raised from 20 for aggressive knee lift).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator KneeAngle_DefaultIs55Degrees()
+        {
+            // Arrange
+            yield return null;
+
+            // Act
+            FieldInfo field = typeof(LegAnimator).GetField("_kneeAngle",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_kneeAngle'.");
+
+            float defaultValue = (float)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(55f).Within(0.001f),
+                $"_kneeAngle must default to 55°. Got: {defaultValue}.");
+        }
+
+        /// <summary>
+        /// LegAnimator must expose a _upperLegLiftBoost field (float, default 15°, range 0–45°)
+        /// that adds upward bias to the forward-swinging upper leg.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator UpperLegLiftBoost_FieldExists_AndDefaultsTo15()
+        {
+            // Arrange
+            yield return null;
+
+            // Act
+            FieldInfo field = typeof(LegAnimator).GetField("_upperLegLiftBoost",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Assert: field exists and is float
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must have a private serialized field named '_upperLegLiftBoost'.");
+            Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
+                "_upperLegLiftBoost must be a float.");
+
+            // Assert: default 15
+            float defaultValue = (float)field.GetValue(_legAnimator);
+            Assert.That(defaultValue, Is.EqualTo(15f).Within(0.001f),
+                $"_upperLegLiftBoost must default to 15°. Got: {defaultValue}.");
+        }
+
+        /// <summary>
+        /// When _upperLegLiftBoost is non-zero, the forward-swinging upper leg must
+        /// produce a larger targetRotation angle than when the boost is zero.
+        /// This confirms the boost actually increases the angular target of the forward leg.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator UpperLegLiftBoost_WhenNonZero_IncreasesForwardLegSwingAngle()
+        {
+            // Arrange
+            yield return null;
+            // Configure a stable mid-cycle phase where left leg is forward (sin > 0)
+            // so liftBoostL is active.
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 0.5f);  // sin = 1 → max forward swing
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);     // no ramp — full amplitude
+            SetPrivateField(_legAnimator, "_stepAngle", 25f);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false); // local-space for determinism
+            _hipsRb.linearVelocity = Vector3.zero;
+
+            // Measure with boost = 0
+            SetPrivateField(_legAnimator, "_upperLegLiftBoost", 0f);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            yield return new WaitForFixedUpdate();
+            float angleWithoutBoost = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            // Measure with boost = 15
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 0.5f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);
+            SetPrivateField(_legAnimator, "_upperLegLiftBoost", 15f);
+            yield return new WaitForFixedUpdate();
+            float angleWithBoost = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            // Assert: boost produces a larger angle on the forward-swinging leg
+            Assert.That(angleWithBoost, Is.GreaterThan(angleWithoutBoost),
+                $"_upperLegLiftBoost=15° must produce a larger swing angle on the forward-swinging leg. " +
+                $"WithoutBoost={angleWithoutBoost:F2}° WithBoost={angleWithBoost:F2}°.");
+        }
+
+        /// <summary>
+        /// The lift boost must only apply to the leg swinging FORWARD (sin > 0), not the
+        /// leg swinging backward (sin ≤ 0). At phase=π/2, left leg is forward (boost applied),
+        /// right leg is backward (no boost). The left-leg angle must exceed the right-leg angle
+        /// by at least the boost amount when viewed symmetrically around the step angle.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator UpperLegLiftBoost_OnlyAppliesOnForwardSwingPhase()
+        {
+            // Arrange
+            yield return null;
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 0.5f); // left forward, right backward
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);
+            SetPrivateField(_legAnimator, "_stepAngle", 25f);
+            SetPrivateField(_legAnimator, "_upperLegLiftBoost", 15f);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            _hipsRb.linearVelocity = Vector3.zero;
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            float angleL = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+            float angleR = Quaternion.Angle(Quaternion.identity, _upperLegRJoint.targetRotation);
+
+            // Assert: left (forward-swinging) > right (backward-swinging)
+            // At phase π/2: sinL=1 (boost+step angle both positive), sinR=-1 (backward, no boost)
+            // Expected: angleL ≈ 25+15=40°, angleR ≈ 25° (backward swing, no boost)
+            Assert.That(angleL, Is.GreaterThan(angleR),
+                $"Forward-swinging leg (L at phase π/2) must have a larger swing angle than backward leg (R). " +
+                $"angleL={angleL:F2}° angleR={angleR:F2}°.");
         }
 
         // ─── Gait Quality Rig Builder ─────────────────────────────────────────
@@ -1240,12 +1519,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
             physMovement = physicsHips.AddComponent<PlayerMovement>();
             physicsHips.AddComponent<CharacterState>();
-            physicsHips.AddComponent<LegAnimator>();
+            LegAnimator gaitQualityLegAnimator = physicsHips.AddComponent<LegAnimator>();
 
             // ── Configure test seams ────────────────────────────────────────
             physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             physicsBalance.enabled = false;
             physMovement.enabled   = false;
+
+            // Set minimum cadence so the kinematic hips body (zero velocity) still drives
+            // phase accumulation. 2 cycles/sec gives clear gait rotation in 80 frames.
+            SetPrivateField(gaitQualityLegAnimator, "_stepFrequency", 2f);
 
             return physicsHips;
         }
