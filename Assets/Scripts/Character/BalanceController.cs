@@ -162,12 +162,12 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         [Tooltip("At full speed, shifts the COM balance target forward in the velocity direction " +
                  "by this fraction of horizontal speed, so locomotion lean isn't fought.")]
-        private float _comMovementOffsetScale = 0.12f;
+        private float _comMovementOffsetScale = 0f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Multiplier applied to COM stabilization strength at full speed (lerped over 0–2 m/s). " +
                  "Reduces the 400 N/m spring during movement so the character can lean into locomotion.")]
-        private float _comMovingStrengthMultiplier = 0.55f;
+        private float _comMovingStrengthMultiplier = 0.95f;
 
         // ─── Height Maintenance ─────────────────────────────────────────────
 
@@ -193,7 +193,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Multiplier applied to height maintenance strength at full speed (lerped over 0–2 m/s). " +
                  "Allows natural body compression during movement.")]
-        private float _heightMovingMultiplier = 0.7f;
+        private float _heightMovingMultiplier = 0.9f;
 
         // ─── Private Fields ──────────────────────────────────────────────────
 

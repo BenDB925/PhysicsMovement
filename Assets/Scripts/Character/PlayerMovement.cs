@@ -31,12 +31,19 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Minimum time between consecutive jumps to prevent spamming.")]
         private float _jumpCooldown = 0.3f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Fraction of movement force applied at the feet (rest goes to Hips). " +
+                 "Higher values push from the ground up, preventing forward lean and knee buckling.")]
+        private float _footForceFraction = 0.7f;
+
         [SerializeField]
         private Camera _camera;
 
         private Rigidbody _rb;
         private BalanceController _balance;
         private PlayerInputActions _inputActions;
+        private Rigidbody _footL;
+        private Rigidbody _footR;
         private Vector2 _currentMoveInput;
         private bool _jumpRequested;
         private float _lastJumpTime = -10f;
@@ -78,7 +85,16 @@ namespace PhysicsDrivenMovement.Character
                 _camera = Camera.main;
             }
 
-            // STEP 3: Create and enable PlayerInputActions for the local movement map.
+            // STEP 3: Cache foot Rigidbodies for ground-up force distribution.
+            Rigidbody[] bodies = GetComponentsInChildren<Rigidbody>(includeInactive: true);
+            for (int i = 0; i < bodies.Length; i++)
+            {
+                string bodyName = bodies[i].gameObject.name;
+                if (_footL == null && bodyName == "Foot_L") _footL = bodies[i];
+                else if (_footR == null && bodyName == "Foot_R") _footR = bodies[i];
+            }
+
+            // STEP 4: Create and enable PlayerInputActions for the local movement map.
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
         }
@@ -193,7 +209,25 @@ namespace PhysicsDrivenMovement.Character
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             if (horizontalVelocity.magnitude < _maxSpeed)
             {
-                _rb.AddForce(worldDirection * _moveForce, ForceMode.Force);
+                Vector3 totalForce = worldDirection * _moveForce;
+                float footShare = _footForceFraction;
+                float hipsShare = 1f - footShare;
+
+                // Apply the hips portion.
+                _rb.AddForce(totalForce * hipsShare, ForceMode.Force);
+
+                // Split the foot portion between both feet, pushing from the ground up.
+                if (_footL != null && _footR != null)
+                {
+                    Vector3 perFootForce = totalForce * (footShare * 0.5f);
+                    _footL.AddForce(perFootForce, ForceMode.Force);
+                    _footR.AddForce(perFootForce, ForceMode.Force);
+                }
+                else
+                {
+                    // Fallback: no feet found, apply everything at hips.
+                    _rb.AddForce(totalForce * footShare, ForceMode.Force);
+                }
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
