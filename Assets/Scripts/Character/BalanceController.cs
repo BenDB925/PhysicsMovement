@@ -153,7 +153,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1000f)]
         [Tooltip("Horizontal spring strength pulling hips toward the feet midpoint. " +
                  "Higher = snappier COM correction, lower = more wobbly.")]
-        private float _comStabilizationStrength = 400f;
+        private float _comStabilizationStrength = 500f;
 
         [SerializeField, Range(0f, 200f)]
         [Tooltip("Horizontal velocity damping for COM stabilization. Reduces oscillation.")]

@@ -34,7 +34,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Fraction of movement force applied at the feet (rest goes to Hips). " +
                  "Higher values push from the ground up, preventing forward lean and knee buckling.")]
-        private float _footForceFraction = 0.7f;
+        private float _footForceFraction = 0.85f;
 
         [SerializeField]
         private Camera _camera;

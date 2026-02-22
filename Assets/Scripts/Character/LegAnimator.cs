@@ -3,13 +3,14 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Drives procedural gait animation on the ragdoll's four leg ConfigurableJoints
+    /// Drives procedural gait animation on the ragdoll's leg and arm ConfigurableJoints
     /// by advancing a phase accumulator from movement input magnitude and applying
     /// sinusoidal target rotations each FixedUpdate.
     /// Left and right upper legs are offset by π (half-cycle), producing an alternating
-    /// stepping pattern. Lower legs receive a constant knee-bend target during gait.
+    /// stepping pattern. Arms swing in counter-phase to their opposite leg (natural gait).
+    /// Lower legs receive a constant knee-bend target and lower arms a slight elbow bend.
     /// When the character is in the <see cref="CharacterStateType.Fallen"/> or
-    /// <see cref="CharacterStateType.GettingUp"/> state, all leg joints are returned
+    /// <see cref="CharacterStateType.GettingUp"/> state, all joints are returned
     /// to <see cref="Quaternion.identity"/> and gait is suspended.
     /// Attach to the Hips (root) GameObject alongside <see cref="BalanceController"/>,
     /// <see cref="PlayerMovement"/>, and <see cref="CharacterState"/>.
@@ -35,6 +36,23 @@ namespace PhysicsDrivenMovement.Character
                  "Adds visible flexion to the lower leg. Typical range: 10–30°.")]
         private float _kneeAngle = 30f;
 
+        [Header("Arm Swing")]
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Peak forward/backward swing angle (degrees) for upper arm joints during gait. " +
+                 "Arms swing in counter-phase to the opposite leg. Typical range: 10–25°.")]
+        private float _armSwingAngle = 20f;
+
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Constant elbow-bend angle (degrees) applied to lower arm joints during gait. " +
+                 "Adds a natural slight bend rather than straight dangling arms. Typical range: 5–20°.")]
+        private float _elbowBendAngle = 15f;
+
+        [SerializeField, Range(0f, 100f)]
+        [Tooltip("Rest angle (degrees) applied around body-local Z to bring the upper arms " +
+                 "from the T-pose rest orientation down to the character's sides. " +
+                 "~80° produces a natural hanging pose. The gait swing layers on top.")]
+        private float _armRestAngle = 80f;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -48,6 +66,18 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Right lower leg ConfigurableJoint, found by name in Awake.</summary>
         private ConfigurableJoint _lowerLegR;
+
+        /// <summary>Left upper arm ConfigurableJoint, found by name in Awake.</summary>
+        private ConfigurableJoint _upperArmL;
+
+        /// <summary>Right upper arm ConfigurableJoint, found by name in Awake.</summary>
+        private ConfigurableJoint _upperArmR;
+
+        /// <summary>Left lower arm ConfigurableJoint, found by name in Awake.</summary>
+        private ConfigurableJoint _lowerArmL;
+
+        /// <summary>Right lower arm ConfigurableJoint, found by name in Awake.</summary>
+        private ConfigurableJoint _lowerArmR;
 
         /// <summary>Sibling PlayerMovement component used to read current move input magnitude.</summary>
         private PlayerMovement _playerMovement;
@@ -98,10 +128,27 @@ namespace PhysicsDrivenMovement.Character
                     case "LowerLeg_R":
                         _lowerLegR = joint;
                         break;
+                    case "UpperArm_L":
+                        _upperArmL = joint;
+                        break;
+                    case "UpperArm_R":
+                        _upperArmR = joint;
+                        break;
+                    case "LowerArm_L":
+                        _lowerArmL = joint;
+                        break;
+                    case "LowerArm_R":
+                        _lowerArmR = joint;
+                        break;
                 }
             }
 
-            // STEP 3: Warn about missing joints so misconfigured prefabs are obvious.
+            // STEP 3: Remove angular limits on upper-arm joints so the rest-hang
+            //         rotation and gait swing aren't clipped by the baked prefab limits.
+            FreeArmRotation(_upperArmL);
+            FreeArmRotation(_upperArmR);
+
+            // STEP 4: Warn about missing joints so misconfigured prefabs are obvious.
             if (_upperLegL == null)
             {
                 Debug.LogWarning("[LegAnimator] 'UpperLeg_L' ConfigurableJoint not found in children.", this);
@@ -196,13 +243,50 @@ namespace PhysicsDrivenMovement.Character
             {
                 _lowerLegR.targetRotation = Quaternion.Euler(-kneeBendDeg, 0f, 0f);
             }
+
+            // STEP 8: Compute arm swing targets.
+            //         Arms swing in counter-phase to the opposite leg — natural walking gait.
+            //         Left arm swings with right leg timing (phase + π), right arm with left (phase).
+            float leftArmSwingDeg  = Mathf.Sin(_phase + Mathf.PI) * _armSwingAngle * inputMagnitude;
+            float rightArmSwingDeg = Mathf.Sin(_phase)            * _armSwingAngle * inputMagnitude;
+            float elbowBendDeg     = _elbowBendAngle * inputMagnitude;
+
+            // STEP 9: Apply arm rotations via quaternion multiplication.
+            //         Hang: AngleAxis around forward (Z) rotates the horizontal T-pose capsules
+            //         down to the character's sides. Left arm = +angle, right arm = -angle.
+            //         Swing: AngleAxis around right (X) tilts the hanging arm forward/backward.
+            //         Composed as swing * hang so the swing operates in the original (world)
+            //         frame — not the rotated frame that Euler composition would produce.
+            if (_upperArmL != null)
+            {
+                Quaternion hangL  = Quaternion.AngleAxis(_armRestAngle, Vector3.forward);
+                Quaternion swingL = Quaternion.AngleAxis(leftArmSwingDeg, Vector3.right);
+                _upperArmL.targetRotation = swingL * hangL;
+            }
+
+            if (_upperArmR != null)
+            {
+                Quaternion hangR  = Quaternion.AngleAxis(-_armRestAngle, Vector3.forward);
+                Quaternion swingR = Quaternion.AngleAxis(rightArmSwingDeg, Vector3.right);
+                _upperArmR.targetRotation = swingR * hangR;
+            }
+
+            if (_lowerArmL != null)
+            {
+                _lowerArmL.targetRotation = Quaternion.Euler(elbowBendDeg, 0f, 0f);
+            }
+
+            if (_lowerArmR != null)
+            {
+                _lowerArmR.targetRotation = Quaternion.Euler(elbowBendDeg, 0f, 0f);
+            }
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Sets all four leg joint <c>targetRotation</c> values to <see cref="Quaternion.identity"/>,
-        /// removing any active gait pose and letting the joint's natural drive return the
+        /// Sets all leg and arm joint <c>targetRotation</c> values to <see cref="Quaternion.identity"/>,
+        /// removing any active gait pose and letting each joint's natural drive return the
         /// limb to its resting orientation.
         /// Called when the character state is <see cref="CharacterStateType.Fallen"/> or
         /// <see cref="CharacterStateType.GettingUp"/>.
@@ -213,6 +297,24 @@ namespace PhysicsDrivenMovement.Character
             if (_upperLegR != null) _upperLegR.targetRotation = Quaternion.identity;
             if (_lowerLegL != null) _lowerLegL.targetRotation = Quaternion.identity;
             if (_lowerLegR != null) _lowerLegR.targetRotation = Quaternion.identity;
+            // Keep arms at rest-hang pose so they stay by the character's sides
+            // even when fallen/idle, rather than snapping back to T-pose.
+            if (_upperArmL != null) _upperArmL.targetRotation = Quaternion.AngleAxis(_armRestAngle, Vector3.forward);
+            if (_upperArmR != null) _upperArmR.targetRotation = Quaternion.AngleAxis(-_armRestAngle, Vector3.forward);
+            if (_lowerArmL != null) _lowerArmL.targetRotation = Quaternion.identity;
+            if (_lowerArmR != null) _lowerArmR.targetRotation = Quaternion.identity;
+        }
+
+        /// <summary>
+        /// Sets upper-arm angular motions to Free so the SLERP drive can reach the
+        /// full rest-hang angle without being clamped by baked joint limits.
+        /// </summary>
+        private static void FreeArmRotation(ConfigurableJoint joint)
+        {
+            if (joint == null) return;
+            joint.angularXMotion = ConfigurableJointMotion.Free;
+            joint.angularYMotion = ConfigurableJointMotion.Free;
+            joint.angularZMotion = ConfigurableJointMotion.Free;
         }
     }
 }

@@ -132,58 +132,58 @@ namespace PhysicsDrivenMovement.Editor
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(150f, 15f, 500f)),
 
-            // ── Left Arm ────────────────────────────────────────────────────────
+            // ── Left Arm (T-pose: capsules extend along X to match Mixamo mesh) ──
             new SegmentDef(
                 name: "UpperArm_L", parent: "Torso", mass: 2f,
                 localPos: new Vector3(-0.23f, 0.08f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
-                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 0,
+                lowAngX: -100f, highAngX: 100f, angY: 60f, angZ: 40f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_L", parent: "UpperArm_L", mass: 1.5f,
-                localPos: new Vector3(0f, -0.27f, 0f),
+                localPos: new Vector3(-0.27f, 0f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 0,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_L", parent: "LowerArm_L", mass: 0.5f,
-                localPos: new Vector3(0f, -0.22f, 0f),
+                localPos: new Vector3(-0.22f, 0f, 0f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                boxSize: new Vector3(0.10f, 0.08f, 0.04f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(50f, 5f, 200f)),
 
-            // ── Right Arm ───────────────────────────────────────────────────────
+            // ── Right Arm (T-pose: capsules extend along X to match Mixamo mesh) ─
             new SegmentDef(
                 name: "UpperArm_R", parent: "Torso", mass: 2f,
                 localPos: new Vector3(0.23f, 0.08f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
-                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 0,
+                lowAngX: -100f, highAngX: 100f, angY: 60f, angZ: 40f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_R", parent: "UpperArm_R", mass: 1.5f,
-                localPos: new Vector3(0f, -0.27f, 0f),
+                localPos: new Vector3(0.27f, 0f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 0,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_R", parent: "LowerArm_R", mass: 0.5f,
-                localPos: new Vector3(0f, -0.22f, 0f),
+                localPos: new Vector3(0.22f, 0f, 0f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                boxSize: new Vector3(0.10f, 0.08f, 0.04f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(50f, 5f, 200f)),

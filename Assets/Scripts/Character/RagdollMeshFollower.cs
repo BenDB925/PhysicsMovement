@@ -4,14 +4,14 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Copies world-space transforms from ragdoll physics segments to the corresponding
-    /// bones of a skinned mesh model each LateUpdate. This keeps the SkinnedMeshRenderer
-    /// deforming to match the ragdoll without reparenting bones or touching the
-    /// SkinnedMeshRenderer.bones array.
-    /// Attach to the Hips (root) GameObject of the ragdoll hierarchy. The skinned model
-    /// should be an immediate child (instantiated by SkinnedRagdollBuilder or placed manually).
-    /// Lifecycle: Awake (discover bones), LateUpdate (copy transforms).
-    /// Collaborators: <see cref="RagdollSetup"/>, SkinnedRagdollBuilder (editor).
+    /// Creates proxy transforms that match each model bone's initial world pose,
+    /// parents them under the corresponding ragdoll segment, then swaps them into
+    /// the SkinnedMeshRenderer's bones array. The original bindposes stay untouched
+    /// because each proxy starts at exactly the same world transform as the bone it
+    /// replaces. When the ragdoll moves, the proxies (as children) move with it,
+    /// and Unity's built-in skinning deforms the mesh automatically.
+    /// Attach to the Hips (root) GameObject of the ragdoll hierarchy.
+    /// Lifecycle: Awake only (one-time setup).
     /// </summary>
     public class RagdollMeshFollower : MonoBehaviour
     {
@@ -26,28 +26,18 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Log bone mapping results to the console on startup.")]
         private bool _debugMapping;
 
-        // ─── Private Fields ─────────────────────────────────────────────────
-
-        /// <summary>Parallel arrays: ragdoll segment transform → model bone transform.</summary>
-        private Transform[] _ragdollSegments;
-        private Transform[] _modelBones;
-
-        /// <summary>
-        /// Per-bone rotation offset captured at startup:
-        /// offset = Inverse(ragdollRestRotation) * modelRestRotation.
-        /// Applied each frame so differing rest poses don't scramble the mesh.
-        /// </summary>
-        private Quaternion[] _rotationOffsets;
-
-        private int _mappedCount;
-
         // ─── Bone Mapping Table ─────────────────────────────────────────────
         // ragdoll segment name → Mixamo bone name
         private static readonly (string ragdoll, string mixamo)[] BoneMap = new[]
         {
             ("Hips",        "mixamorig:Hips"),
+            ("Hips",        "mixamorig:Spine"),
+            ("Torso",       "mixamorig:Spine1"),
             ("Torso",       "mixamorig:Spine2"),
+            ("Torso",       "mixamorig:Neck"),
             ("Head",        "mixamorig:Head"),
+            ("Torso",       "mixamorig:LeftShoulder"),
+            ("Torso",       "mixamorig:RightShoulder"),
             ("UpperLeg_L",  "mixamorig:LeftUpLeg"),
             ("LowerLeg_L",  "mixamorig:LeftLeg"),
             ("Foot_L",      "mixamorig:LeftFoot"),
@@ -66,11 +56,8 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Resolve model root if not assigned.
             if (_modelRoot == null)
-            {
                 _modelRoot = FindModelRoot();
-            }
 
             if (_modelRoot == null)
             {
@@ -80,90 +67,104 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 2: Build the bone lookup from the model hierarchy.
-            var modelBonesByName = new Dictionary<string, Transform>(64);
-            CollectBones(_modelRoot, modelBonesByName);
-
-            // STEP 3: Map ragdoll segments to model bones.
-            var ragdollList = new List<Transform>(BoneMap.Length);
-            var modelList   = new List<Transform>(BoneMap.Length);
-
-            foreach ((string ragdollName, string mixamoName) in BoneMap)
+            SkinnedMeshRenderer smr = _modelRoot.GetComponentInChildren<SkinnedMeshRenderer>();
+            if (smr == null)
             {
-                Transform ragdollSegment = FindSegment(ragdollName);
-                if (ragdollSegment == null)
-                {
-                    if (_debugMapping)
-                        Debug.LogWarning($"[RagdollMeshFollower] Ragdoll segment '{ragdollName}' not found.", this);
-                    continue;
-                }
-
-                if (!modelBonesByName.TryGetValue(mixamoName, out Transform modelBone))
-                {
-                    if (_debugMapping)
-                        Debug.LogWarning($"[RagdollMeshFollower] Model bone '{mixamoName}' not found.", this);
-                    continue;
-                }
-
-                ragdollList.Add(ragdollSegment);
-                modelList.Add(modelBone);
+                Debug.LogError($"[RagdollMeshFollower] '{name}': no SkinnedMeshRenderer found.", this);
+                enabled = false;
+                return;
             }
 
-            _ragdollSegments = ragdollList.ToArray();
-            _modelBones      = modelList.ToArray();
-            _mappedCount     = _ragdollSegments.Length;
-
-            // STEP 4: Capture rest-pose rotation offsets.
-            // offset = Inverse(ragdollRest) * modelRest
-            // At runtime: modelBone.rotation = ragdollSegment.rotation * offset
-            // This accounts for the different rest orientations between the ragdoll
-            // primitives and the Mixamo skeleton.
-            _rotationOffsets = new Quaternion[_mappedCount];
-            for (int i = 0; i < _mappedCount; i++)
-            {
-                _rotationOffsets[i] = Quaternion.Inverse(_ragdollSegments[i].rotation)
-                                      * _modelBones[i].rotation;
-            }
-
-            if (_debugMapping)
-            {
-                Debug.Log($"[RagdollMeshFollower] '{name}': mapped {_mappedCount}/{BoneMap.Length} bones.", this);
-            }
+            RebindBones(smr);
         }
 
-        private void LateUpdate()
+        // ─── Core ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// For each bone in the SkinnedMeshRenderer, creates a proxy GameObject at the
+        /// bone's exact world position/rotation/scale, parents it under the matching
+        /// ragdoll segment, then swaps the proxy into the bones array.
+        /// The original mesh and bindposes are NOT modified.
+        /// </summary>
+        private void RebindBones(SkinnedMeshRenderer smr)
         {
-            // Pass 1: Set rotations only — don't touch individual bone positions.
-            // Setting world position on bones inside a scaled hierarchy (FBX 0.01
-            // import scale) corrupts the skeleton chain for child bones.
-            for (int i = 0; i < _mappedCount; i++)
+            var modelToRagdoll = new Dictionary<string, string>(BoneMap.Length);
+            foreach (var (ragdoll, mixamo) in BoneMap)
+                modelToRagdoll[mixamo] = ragdoll;
+
+            var ragdollCache = new Dictionary<string, Transform>(16);
+            Transform hipsFallback = FindSegment("Hips");
+
+            Transform[] bones = smr.bones;
+            int replaced = 0;
+
+            for (int i = 0; i < bones.Length; i++)
             {
-                _modelBones[i].rotation = _ragdollSegments[i].rotation * _rotationOffsets[i];
+                if (bones[i] == null) continue;
+
+                Transform ragdollSegment = FindRagdollForBone(
+                    bones[i], modelToRagdoll, ragdollCache);
+
+                if (ragdollSegment == null)
+                    ragdollSegment = hipsFallback;
+
+                // Create a proxy at the model bone's exact world transform.
+                // Parenting under the ragdoll segment makes it follow physics.
+                // The original bindposes work because the proxy's initial
+                // localToWorldMatrix matches the original bone's.
+                var proxy = new GameObject(bones[i].name);
+                Transform pt = proxy.transform;
+                pt.SetPositionAndRotation(bones[i].position, bones[i].rotation);
+                pt.localScale = bones[i].lossyScale;
+                pt.SetParent(ragdollSegment, worldPositionStays: true);
+
+                if (_debugMapping)
+                    Debug.Log($"[RagdollMeshFollower] bone[{i}] {bones[i].name} → {ragdollSegment.name}", this);
+
+                bones[i] = pt;
+                replaced++;
             }
 
-            // Pass 2: Translate the entire model root so the model's Hips bone
-            // lands exactly on the ragdoll Hips world position. This preserves
-            // the skeleton's internal scale chain and bone lengths.
-            if (_mappedCount > 0)
-            {
-                Vector3 hipsError = _ragdollSegments[0].position - _modelBones[0].position;
-                _modelRoot.position += hipsError;
-            }
+            smr.bones = bones;
+            smr.updateWhenOffscreen = true;
+
+            Debug.Log($"[RagdollMeshFollower] Created {replaced} proxy bones under ragdoll segments.");
         }
 
         // ─── Private Helpers ────────────────────────────────────────────────
 
         /// <summary>
-        /// Searches immediate children for a GameObject containing an Animator or
-        /// SkinnedMeshRenderer, indicating it is the model root.
+        /// Finds the ragdoll segment for a model bone by name, walking up the model
+        /// hierarchy to find the nearest mapped ancestor for unmapped leaf bones.
         /// </summary>
+        private Transform FindRagdollForBone(
+            Transform modelBone,
+            Dictionary<string, string> modelToRagdoll,
+            Dictionary<string, Transform> ragdollCache)
+        {
+            Transform current = modelBone;
+            while (current != null && current != _modelRoot.parent)
+            {
+                if (modelToRagdoll.TryGetValue(current.name, out string ragdollName))
+                {
+                    if (!ragdollCache.TryGetValue(ragdollName, out Transform segment))
+                    {
+                        segment = FindSegment(ragdollName);
+                        ragdollCache[ragdollName] = segment;
+                    }
+                    return segment;
+                }
+                current = current.parent;
+            }
+            return null;
+        }
+
         private Transform FindModelRoot()
         {
             for (int i = 0; i < transform.childCount; i++)
             {
                 Transform child = transform.GetChild(i);
 
-                // Skip ragdoll physics segments (they have Rigidbodies).
                 if (child.GetComponent<Rigidbody>() != null)
                     continue;
 
@@ -177,30 +178,11 @@ namespace PhysicsDrivenMovement.Character
             return null;
         }
 
-        /// <summary>
-        /// Recursively collects all transforms under <paramref name="root"/> into
-        /// <paramref name="dict"/> keyed by GameObject name.
-        /// </summary>
-        private static void CollectBones(Transform root, Dictionary<string, Transform> dict)
-        {
-            dict[root.name] = root;
-            for (int i = 0; i < root.childCount; i++)
-            {
-                CollectBones(root.GetChild(i), dict);
-            }
-        }
-
-        /// <summary>
-        /// Finds a ragdoll segment by name in this hierarchy. Searches children
-        /// (not the model subtree) for a GameObject matching the name.
-        /// </summary>
         private Transform FindSegment(string segmentName)
         {
-            // Check this GameObject first (Hips is the root).
-            if (gameObject.name == segmentName)
+            if (segmentName == "Hips")
                 return transform;
 
-            // Search ragdoll children (skip the model subtree by checking for Rigidbody).
             Rigidbody[] bodies = GetComponentsInChildren<Rigidbody>(includeInactive: true);
             for (int i = 0; i < bodies.Length; i++)
             {

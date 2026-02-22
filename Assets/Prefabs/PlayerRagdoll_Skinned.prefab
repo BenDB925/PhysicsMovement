@@ -888,13 +888,13 @@ MonoBehaviour:
   _enableComStabilization: 1
   _comStabilizationStrength: 400
   _comStabilizationDamping: 60
-  _comMovementOffsetScale: 0.3
-  _comMovingStrengthMultiplier: 0.3
+  _comMovementOffsetScale: 0.12
+  _comMovingStrengthMultiplier: 0.55
   _enableHeightMaintenance: 1
   _standingHipsHeight: 0.95
   _heightMaintenanceStrength: 1500
   _heightMaintenanceDamping: 120
-  _heightMovingMultiplier: 0.5
+  _heightMovingMultiplier: 0.9
 --- !u!114 &1692663064900285257
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -926,6 +926,7 @@ MonoBehaviour:
   _maxSpeed: 5
   _jumpImpulse: 20
   _jumpCooldown: 0.3
+  _footForceFraction: 0.7
   _camera: {fileID: 0}
 --- !u!114 &4632267047828400493
 MonoBehaviour:

@@ -4,7 +4,12 @@
       "Bash(echo:*)",
       "Bash(\"C:/Program Files/Unity/Hub/Editor/6000.3.9f1/Editor/Unity.exe\":*)",
       "Bash(tasklist:*)",
-      "Bash(\"/c/Program Files/Unity/Hub/Editor/6000.0.33f1/Editor/Unity.exe\":*)"
+      "Bash(\"/c/Program Files/Unity/Hub/Editor/6000.0.33f1/Editor/Unity.exe\":*)",
+      "Bash(cd:*)",
+      "Bash(powershell:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)"
     ]
   }
 }
