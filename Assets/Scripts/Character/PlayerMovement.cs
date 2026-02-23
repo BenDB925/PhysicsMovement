@@ -258,6 +258,10 @@ namespace PhysicsDrivenMovement.Character
         private void ApplyMovementForces(Vector2 moveInput)
         {
             // STEP 1: Convert 2D move input into camera-relative XZ world movement direction.
+            //         We derive movement direction from the camera's YAW only (not its full
+            //         forward vector) so steep pitch angles don't affect WASD direction.
+            //         Extracting yaw from the camera's euler angles gives a stable flat
+            //         forward regardless of how far up or down the camera is pitched.
             // STEP 2: Skip force application when input is near zero or speed is capped.
             // STEP 3: Apply force using ForceMode.Force and update facing direction.
             if (_rb == null || _balance == null || _balance.IsFallen)
@@ -273,21 +277,11 @@ namespace PhysicsDrivenMovement.Character
             Vector3 worldDirection;
             if (_camera != null)
             {
-                Vector3 cameraForward = Vector3.ProjectOnPlane(_camera.transform.forward, Vector3.up);
-                Vector3 cameraRight = Vector3.ProjectOnPlane(_camera.transform.right, Vector3.up);
-
-                if (cameraForward.sqrMagnitude < 0.0001f)
-                {
-                    cameraForward = Vector3.forward;
-                }
-
-                if (cameraRight.sqrMagnitude < 0.0001f)
-                {
-                    cameraRight = Vector3.right;
-                }
-
-                cameraForward.Normalize();
-                cameraRight.Normalize();
+                // Use camera yaw only — extract flat forward from yaw rotation so that
+                // pitching the camera up/down never changes the movement direction.
+                float   cameraYaw     = _camera.transform.eulerAngles.y;
+                Vector3 cameraForward = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.forward;
+                Vector3 cameraRight   = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.right;
 
                 worldDirection = cameraRight * moveInput.x + cameraForward * moveInput.y;
             }
