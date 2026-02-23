@@ -171,12 +171,19 @@ namespace PhysicsDrivenMovement.Character
                  "movement direction so legs always step forward regardless of torso pitch angle. " +
                  "When false, the legacy local-frame swing is used (may cause feet to drag when " +
                  "the torso is pitched forward). Toggle for side-by-side comparison.")]
-        private bool _useWorldSpaceSwing = false;
+        private bool _useWorldSpaceSwing = true;
 
         [SerializeField]
         [Tooltip("When true, writes one debug line every 10 FixedUpdate frames to " +
                  "Logs/debug_gait.txt and also outputs to Debug.Log. Disabled by default.")]
         private bool _debugLog = false;
+
+        // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Fraction of the baseline joint spring applied while the character is Airborne. " +
+                 "0.15 = legs go loose/dangly mid-air; 1.0 = no change. Restored to 1.0 on landing.")]
+        private float _airborneSpringMultiplier = 0.15f;
 
         // ── Private Fields ──────────────────────────────────────────────────
 
@@ -231,6 +238,17 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Whether the character was moving last frame — used to detect movement restarts.</summary>
         private bool _wasMoving;
+
+        // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
+
+        /// <summary>Baseline SLERP drive stored from each leg joint at Start, restored on landing.</summary>
+        private JointDrive _baselineUpperLegLDrive;
+        private JointDrive _baselineUpperLegRDrive;
+        private JointDrive _baselineLowerLegLDrive;
+        private JointDrive _baselineLowerLegRDrive;
+
+        /// <summary>True while CharacterState is Airborne; used to suppress gait phase advancement.</summary>
+        private bool _isAirborne;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -351,6 +369,35 @@ namespace PhysicsDrivenMovement.Character
 
                 File.WriteAllText(DebugLogPath, string.Empty);
             }
+
+            // STEP (Phase 3F2): Capture the baseline SLERP drive values for all four leg joints
+            //                   so they can be restored after an Airborne state exit.
+            //                   This runs after Awake (joints are already cached) and after
+            //                   RagdollSetup.Awake has applied its authoritative spring values,
+            //                   so the captured baseline matches the actual runtime springs.
+            CaptureBaselineDrives();
+        }
+
+        private void OnEnable()
+        {
+            // STEP (Phase 3F2): Subscribe to CharacterState.OnStateChanged so we can react to
+            //                   Airborne entry/exit and scale leg springs accordingly.
+            //                   Guard against null (characterState is cached in Awake; if that
+            //                   failed, the warning was already logged there).
+            if (_characterState != null)
+            {
+                _characterState.OnStateChanged += OnCharacterStateChanged;
+            }
+        }
+
+        private void OnDisable()
+        {
+            // STEP (Phase 3F2): Unsubscribe to avoid dangling delegates after this component
+            //                   is disabled or the GameObject is destroyed.
+            if (_characterState != null)
+            {
+                _characterState.OnStateChanged -= OnCharacterStateChanged;
+            }
         }
 
         private void FixedUpdate()
@@ -401,6 +448,16 @@ namespace PhysicsDrivenMovement.Character
             }
 
             bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.05f;
+
+            // STEP 3c (Phase 3F2): Suppress gait phase advancement while airborne.
+            //          Legs shouldn't keep cycling mid-air — force isMoving = false
+            //          when CharacterState is Airborne. The spring scaling itself is
+            //          handled reactively via OnCharacterStateChanged; this suppresses
+            //          the gait cycle so legs don't flap mid-jump.
+            if (_isAirborne)
+            {
+                isMoving = false;
+            }
 
             // STEP 3b-yaw: Suppress leg swing while the torso is still turning to face
             //              the movement direction. If input direction is more than
@@ -848,6 +905,93 @@ namespace PhysicsDrivenMovement.Character
             if (_upperLegR != null) { _upperLegR.targetRotation = Quaternion.identity; }
             if (_lowerLegL != null) { _lowerLegL.targetRotation = Quaternion.identity; }
             if (_lowerLegR != null) { _lowerLegR.targetRotation = Quaternion.identity; }
+        }
+
+        // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
+
+        /// <summary>
+        /// Captures the current <c>slerpDrive</c> from each leg ConfigurableJoint as the
+        /// baseline. Called from <see cref="Start"/> after <see cref="RagdollSetup.Awake"/>
+        /// has applied the authoritative spring/damper values, so the captured values
+        /// accurately reflect the intended runtime stiffness.
+        /// </summary>
+        private void CaptureBaselineDrives()
+        {
+            if (_upperLegL != null) { _baselineUpperLegLDrive = _upperLegL.slerpDrive; }
+            if (_upperLegR != null) { _baselineUpperLegRDrive = _upperLegR.slerpDrive; }
+            if (_lowerLegL != null) { _baselineLowerLegLDrive = _lowerLegL.slerpDrive; }
+            if (_lowerLegR != null) { _baselineLowerLegRDrive = _lowerLegR.slerpDrive; }
+        }
+
+        /// <summary>
+        /// Applies a spring multiplier to all four leg joint SLERP drives.
+        /// When <paramref name="multiplier"/> is less than 1, springs are reduced and legs
+        /// go loose (airborne dangly). When multiplier is 1, baseline springs are restored.
+        /// The damper is kept at the baseline value in all cases.
+        /// </summary>
+        /// <param name="multiplier">
+        /// Fraction of baseline positionSpring to apply. 0 = fully limp; 1 = full stiffness.
+        /// </param>
+        private void SetLegSpringMultiplier(float multiplier)
+        {
+            // DESIGN: We rebuild the JointDrive struct each time because it is a value type —
+            // modifying a copied field would not affect the joint. We multiply spring only,
+            // keeping the damper at baseline so the joint still settles without oscillation.
+
+            if (_upperLegL != null)
+            {
+                JointDrive drive = _baselineUpperLegLDrive;
+                drive.positionSpring = _baselineUpperLegLDrive.positionSpring * multiplier;
+                _upperLegL.slerpDrive = drive;
+            }
+
+            if (_upperLegR != null)
+            {
+                JointDrive drive = _baselineUpperLegRDrive;
+                drive.positionSpring = _baselineUpperLegRDrive.positionSpring * multiplier;
+                _upperLegR.slerpDrive = drive;
+            }
+
+            if (_lowerLegL != null)
+            {
+                JointDrive drive = _baselineLowerLegLDrive;
+                drive.positionSpring = _baselineLowerLegLDrive.positionSpring * multiplier;
+                _lowerLegL.slerpDrive = drive;
+            }
+
+            if (_lowerLegR != null)
+            {
+                JointDrive drive = _baselineLowerLegRDrive;
+                drive.positionSpring = _baselineLowerLegRDrive.positionSpring * multiplier;
+                _lowerLegR.slerpDrive = drive;
+            }
+        }
+
+        /// <summary>
+        /// Reacts to <see cref="CharacterState.OnStateChanged"/> events.
+        /// Entering <see cref="CharacterStateType.Airborne"/>: reduces all leg joint springs
+        /// by <see cref="_airborneSpringMultiplier"/> (legs go loose/dangly).
+        /// Exiting <see cref="CharacterStateType.Airborne"/> (any landing): restores all
+        /// leg joint springs to baseline values.
+        /// Also sets/clears <see cref="_isAirborne"/> to suppress gait cycling mid-air.
+        /// </summary>
+        /// <param name="previousState">The state the character was in before the transition.</param>
+        /// <param name="newState">The state the character has just entered.</param>
+        private void OnCharacterStateChanged(CharacterStateType previousState, CharacterStateType newState)
+        {
+            if (newState == CharacterStateType.Airborne)
+            {
+                // Entering airborne: loosen springs so legs dangle naturally.
+                _isAirborne = true;
+                SetLegSpringMultiplier(_airborneSpringMultiplier);
+            }
+            else if (previousState == CharacterStateType.Airborne)
+            {
+                // Exiting airborne (any landing — Standing, Moving, Fallen, GettingUp):
+                // restore full spring stiffness.
+                _isAirborne = false;
+                SetLegSpringMultiplier(1f);
+            }
         }
     }
 }

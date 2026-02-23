@@ -129,7 +129,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6530a7c5c642fa74ba08456af3569673, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _kP: 2000
+  _kP: 1400
   _kD: 80
   _kPYaw: 400
   _kDYaw: 40
@@ -191,6 +191,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _moveForce: 150
   _maxSpeed: 5
+  _jumpForce: 120
   _camera: {fileID: 0}
 --- !u!114 &9097617084092325405
 MonoBehaviour:
@@ -232,7 +233,7 @@ MonoBehaviour:
   _swingAxis: {x: 1, y: 0, z: 0}
   _kneeAxis: {x: 1, y: 0, z: 0}
   _useWorldSpaceSwing: 0
-  _debugLog: 1
+  _debugLog: 0
 --- !u!114 &8048645500669517749
 MonoBehaviour:
   m_ObjectHideFlags: 0

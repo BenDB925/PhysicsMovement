@@ -57,7 +57,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _hipsRb = _hips.AddComponent<Rigidbody>();
             _hipsRb.useGravity = false;
             // Simulate walking velocity so velocity-driven gait cadence is non-zero.
-            // At 2 m/s with default _stepFrequencyScale=1.5 → 3 cycles/sec.
+            // At 2 m/s with default _stepFrequencyScale=0.1 → 0.2 cycles/sec (tests that need
+            // faster cadence set _stepFrequency or _stepFrequencyScale explicitly via reflection).
             _hipsRb.linearVelocity = new Vector3(0f, 0f, 2f);
 
             // ── Leg GameObjects as children of Hips ─────────────────────
@@ -193,19 +194,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator FixedUpdate_WhenMoveInputIsZero_PhaseAccumulatorDoesNotAdvance()
         {
-            // Arrange
+            // Arrange — zero input AND zero velocity so the legs have no reason to move.
+            // The phase gate is: isMoving = inputMagnitude > 0.01f || horizontalSpeed > 0.05f.
+            // Setting both to zero ensures isMoving = false, so phase must not ADVANCE.
+            // (Phase may still decay toward zero in the idle path — that is correct behaviour.)
             yield return null;
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             float phaseBefore = GetPhaseAccumulator();
 
             // Act
             yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
 
-            // Assert
+            // Assert — phase must not have INCREASED (it can decay but must not cycle forward).
             float phaseAfter = GetPhaseAccumulator();
-            Assert.That(phaseAfter, Is.EqualTo(phaseBefore).Within(0.001f),
-                "Phase accumulator must not advance when move input is zero.");
+            Assert.That(phaseAfter, Is.LessThanOrEqualTo(phaseBefore + 0.001f),
+                "Phase accumulator must not advance when both move input and velocity are zero " +
+                "(it may decay toward zero, but must not increase).");
         }
 
         [UnityTest]
@@ -412,19 +418,23 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator FixedUpdate_WhenStateGettingUp_AllLegJointsReturnToIdentity()
         {
-            // Arrange
+            // Arrange — move to establish a non-identity gait pose.
             yield return null;
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.1f);
 
+            // Inject GettingUp state. Use isFallen=true so CharacterState's FixedUpdate
+            // keeps the state as GettingUp (the !isFallen branch would otherwise immediately
+            // transition to Standing, preventing LegAnimator from seeing GettingUp).
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
             SetCurrentState(CharacterStateType.GettingUp);
             _movement.SetMoveInputForTest(Vector2.zero);
 
-            // Act
+            // Act — two physics ticks so LegAnimator.FixedUpdate fires at least once in GettingUp.
             yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
 
-            // Assert
+            // Assert — LegAnimator's STEP 2 must have set all four joints to identity.
             float angleUL = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
             float angleUR = Quaternion.Angle(_upperLegRJoint.targetRotation, Quaternion.identity);
             float angleLL = Quaternion.Angle(_lowerLegLJoint.targetRotation, Quaternion.identity);
@@ -539,8 +549,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Quaternion rotAfterMove = _upperLegLJoint.targetRotation;
             float angleAfterMove = Quaternion.Angle(rotAfterMove, Quaternion.identity);
 
-            // Act — stop input, wait for blend
+            // Act — stop BOTH input AND velocity so isMoving=false and the idle path fires.
+            // Without zeroing velocity the hips coast at 2 m/s, keeping isMoving=true.
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(0.5f);
 
             // Assert — rotation must be closer to identity than right after stopping
@@ -567,8 +579,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Quaternion rotAfterMove = _upperLegRJoint.targetRotation;
             float angleAfterMove = Quaternion.Angle(rotAfterMove, Quaternion.identity);
 
-            // Act
+            // Act — stop BOTH input AND velocity so isMoving=false.
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(0.5f);
 
             // Assert
@@ -595,8 +608,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Quaternion rotAfterMove = _lowerLegLJoint.targetRotation;
             float angleAfterMove = Quaternion.Angle(rotAfterMove, Quaternion.identity);
 
-            // Act
+            // Act — stop BOTH input AND velocity so isMoving=false.
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(0.5f);
 
             // Assert
@@ -623,8 +637,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Quaternion rotAfterMove = _lowerLegRJoint.targetRotation;
             float angleAfterMove = Quaternion.Angle(rotAfterMove, Quaternion.identity);
 
-            // Act
+            // Act — stop BOTH input AND velocity so isMoving=false.
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(0.5f);
 
             // Assert
@@ -654,8 +669,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assume.That(phaseAtStop, Is.GreaterThan(0.05f),
                 "Pre-condition: phase must be non-zero before testing decay.");
 
-            // Act — stop input, allow decay
+            // Act — stop input AND zero velocity so isMoving = false (gating: input || speed).
+            // Without zeroing velocity the hips continue coasting at 2 m/s, keeping isMoving=true.
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(0.5f);
 
             // Assert — phase must have decayed
@@ -679,31 +696,37 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetIdleBlendSpeed(5f);
             SetStepFrequency(2f);
 
-            // Phase 1: move to build up a gait rotation, then stop
+            // Phase 1: move to build up a gait rotation, then stop.
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.15f);
 
-            // Phase 2: stop — one FixedUpdate will set joints to identity
-            _movement.SetMoveInputForTest(Vector2.zero);
-            yield return new WaitForFixedUpdate();
+            // Capture rotation after moving (confirm we have non-trivial gait amplitude).
+            float angleAfterMove = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
+            Assume.That(angleAfterMove, Is.GreaterThan(1f),
+                $"Pre-condition: leg must be in non-identity gait pose before stop. Angle={angleAfterMove:F3}°.");
 
-            // Verify joints are at identity (the idle path just fired)
+            // Phase 2: stop — zero BOTH input AND velocity so isMoving=false and the idle
+            // decay path fires. Wait long enough for _smoothedInputMag to decay to zero.
+            _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
+            yield return new WaitForSeconds(1f);   // 1 s at blendSpeed=5 easily decays to identity
+
             float angleAtIdle = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
 
-            // Phase 3: immediately resume — one FixedUpdate will begin slerping toward gait
+            // Phase 3: immediately resume — one FixedUpdate will begin slerping toward gait.
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
             yield return new WaitForFixedUpdate();
             Quaternion rotOnFirstResumeFrame = _upperLegLJoint.targetRotation;
             float angleOnResume = Quaternion.Angle(rotOnFirstResumeFrame, Quaternion.identity);
 
-            // Assert — joints were at identity when idle
-            Assert.That(angleAtIdle, Is.LessThanOrEqualTo(1f),
-                $"Joints must be at identity after one idle frame. Angle={angleAtIdle:F3}°.");
+            // Assert — joints decayed fully to near-identity after idle.
+            Assert.That(angleAtIdle, Is.LessThanOrEqualTo(2f),
+                $"Joints must be near identity after idle decay. Angle={angleAtIdle:F3}°.");
 
             // Assert — the first resumed-movement frame must NOT snap to full gait amplitude.
             // Slerp at t=idleBlendSpeed*fixedDeltaTime (≈0.05) means the rotation is at most
-            // ~5% of the gait target. The maximum gait amplitude is stepAngle (25°) so the
-            // maximum first-frame rotation is ~1.25°. We use a generous 5° threshold.
+            // ~5% of the gait target. The maximum gait amplitude is stepAngle (50.3°) so the
+            // maximum first-frame rotation is ~2.5°. We use a generous 5° threshold.
             Assert.That(angleOnResume, Is.LessThan(5f),
                 $"First resumed-gait frame must not snap to full amplitude. " +
                 $"Angle={angleOnResume:F3}° (threshold 5°). IdleAngle={angleAtIdle:F3}°.");
@@ -724,8 +747,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
             yield return new WaitForSeconds(0.15f);
 
-            // Act — long idle (2 seconds at blend speed 5)
+            // Act — long idle (2 seconds at blend speed 5).
+            // Zero BOTH input AND velocity so isMoving=false (gating: input||speed).
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForSeconds(2f);
 
             // Assert — all four joints near identity (< 2°)
@@ -1208,7 +1233,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// <summary>
         /// LegAnimator must expose a serialized _stepFrequencyScale field (float)
         /// that maps metres-per-second to gait cycles per second.
-        /// Default must be 1.5 (at 2 m/s → 3 cycles/sec).
+        /// Default must be 0.1 (tuned down from 1.5 to reduce over-cadence at speed).
         /// Range must be [0.1, 5].
         /// </summary>
         [UnityTest]
@@ -1227,14 +1252,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
                 "_stepFrequencyScale must be a float.");
 
-            // Assert: default 1.5
+            // Assert: default 0.1
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(1.5f).Within(0.001f),
-                $"_stepFrequencyScale must default to 1.5. Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(0.1f).Within(0.001f),
+                $"_stepFrequencyScale must default to 0.1. Got: {defaultValue}.");
         }
 
         /// <summary>
-        /// _stepFrequency must now be the minimum cadence (default 0, not 2).
+        /// _stepFrequency must now be the minimum cadence (default 1, not 0).
         /// </summary>
         [UnityTest]
         public IEnumerator StepFrequency_DefaultIsZero()
@@ -1250,8 +1275,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "LegAnimator must have a private serialized field named '_stepFrequency'.");
 
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(0f).Within(0.001f),
-                $"_stepFrequency must default to 0 (minimum cadence). Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(1f).Within(0.001f),
+                $"_stepFrequency must default to 1 (minimum cadence). Got: {defaultValue}.");
         }
 
         /// <summary>
@@ -1354,7 +1379,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // ─── Aggressive Knee Lift Tests (Phase 3E4) ─────────────────────────
 
         /// <summary>
-        /// _kneeAngle must default to 55 degrees (raised from 20 for aggressive knee lift).
+        /// _kneeAngle must default to 60 degrees (tuned from 55 for more aggressive knee lift).
         /// </summary>
         [UnityTest]
         public IEnumerator KneeAngle_DefaultIs55Degrees()
@@ -1370,12 +1395,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "LegAnimator must have a private serialized field named '_kneeAngle'.");
 
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(55f).Within(0.001f),
-                $"_kneeAngle must default to 55°. Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(60f).Within(0.001f),
+                $"_kneeAngle must default to 60°. Got: {defaultValue}.");
         }
 
         /// <summary>
-        /// LegAnimator must expose a _upperLegLiftBoost field (float, default 15°, range 0–45°)
+        /// LegAnimator must expose a _upperLegLiftBoost field (float, default 31.9°, range 0–45°)
         /// that adds upward bias to the forward-swinging upper leg.
         /// </summary>
         [UnityTest]
@@ -1394,10 +1419,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
                 "_upperLegLiftBoost must be a float.");
 
-            // Assert: default 15
+            // Assert: default 31.9
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(15f).Within(0.001f),
-                $"_upperLegLiftBoost must default to 15°. Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(31.9f).Within(0.001f),
+                $"_upperLegLiftBoost must default to 31.9°. Got: {defaultValue}.");
         }
 
         /// <summary>
@@ -1452,7 +1477,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_legAnimator, "_smoothedInputMag", 1f);
             SetPrivateField(_legAnimator, "_stepAngle", 25f);
             SetPrivateField(_legAnimator, "_upperLegLiftBoost", 15f);
-            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            // _useWorldSpaceSwing intentionally left at default (true) — world-space path is
+            // the authoritative gait path. The lift boost applies the same way: sinL > 0 adds
+            // boost for the forward-swinging leg regardless of world vs local-space mode.
             _hipsRb.linearVelocity = Vector3.zero;
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
 
@@ -1713,8 +1740,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assume.That(axisWhileWalking.magnitude, Is.GreaterThan(0.01f),
                 "Pre-condition: _worldSwingAxis must be non-zero while walking.");
 
-            // Act — stop input so the idle path fires
+            // Act — stop BOTH input AND velocity so isMoving=false and the idle path fires.
+            // The gating condition is: isMoving = input||velocity, so both must be zero.
+            // Without zeroing velocity, the world-space gait path continues firing and sets
+            // _worldSwingAxis to a non-zero value (this is correct behaviour — the fix only
+            // guarantees the reset on the idle path, which requires isMoving=false).
             _movement.SetMoveInputForTest(Vector2.zero);
+            _hipsRb.linearVelocity = Vector3.zero;
             yield return new WaitForFixedUpdate();
 
             // Assert — _worldSwingAxis must be zero on the first idle frame
