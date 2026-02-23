@@ -874,7 +874,7 @@ namespace PhysicsDrivenMovement.Character
                 $"FRAME:{Time.frameCount}" +
                 $" vel:{velMag:F2}" +
                 $" gaitFwd:{gf.x:F2},{gf.y:F2},{gf.z:F2}" +
-                $" swingAxis:{_worldSwingAxis.x:F2},{_worldSwingAxis.y:F2},{_worldSwingAxis.z:F2}" +
+                $" swingAxis:{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).x:F2},{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).y:F2},{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).z:F2}" +
                 $" UL_targetEuler:{_upperLegLTargetEuler.x:F0},{_upperLegLTargetEuler.y:F0},{_upperLegLTargetEuler.z:F0}" +
                 $" UL_actualEuler:{ulActual.x:F0},{ulActual.y:F0},{ulActual.z:F0}" +
                 $" LL_targetEuler:{_lowerLegLTargetEuler.x:F0},{_lowerLegLTargetEuler.y:F0},{_lowerLegLTargetEuler.z:F0}" +
