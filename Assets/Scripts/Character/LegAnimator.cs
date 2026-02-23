@@ -449,13 +449,32 @@ namespace PhysicsDrivenMovement.Character
                 //          the first computed rotation is small, reducing the visual pop even
                 //          further on top of the smoothed-input ramp.
                 //
-                //          SMOOTH SCALE RESET: Reset _smoothedInputMag immediately to 0 so
-                //          that when input next arrives the ramp starts from 0.
+                //          SMOOTH SCALE DECAY: Lerp _smoothedInputMag toward 0 rather than
+                //          snapping. This prevents mid-stride leg snap when key is released —
+                //          legs finish their current arc naturally before returning to rest.
                 float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
                 _phase = Mathf.Max(0f, _phase - decayStep);
-                _smoothedInputMag = 0f;
+                float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
+                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
 
-                SetAllLegTargetsToIdentity();
+                // Only reset joints to identity once smoothed magnitude is negligible.
+                if (_smoothedInputMag < 0.01f)
+                {
+                    _smoothedInputMag = 0f;
+                    SetAllLegTargetsToIdentity();
+                }
+                else
+                {
+                    // Continue driving joints at decaying amplitude so legs land smoothly.
+                    float sinL = Mathf.Sin(_phase);
+                    float sinR = Mathf.Sin(_phase + Mathf.PI);
+                    float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
+                    float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
+                    float leftSwingDeg  = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
+                    float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
+                    float kneeBendDeg   = _kneeAngle * _smoothedInputMag;
+                    ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                }
             }
 
             // STEP 8: Debug logging — write one line every 10 FixedUpdate frames when enabled.
