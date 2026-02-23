@@ -37,6 +37,42 @@ Every task — bug fix, feature, refactor — MUST follow these phases **in orde
 6. **Run tests from the terminal** to confirm they fail. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §2–3 for exact commands. Parse the NUnit XML results to verify `failed > 0`.
 7. If Unity exits but `TestResults/*.xml` is missing, treat it as a transient infrastructure race (lock/licensing/startup), rerun up to 2–3 attempts, and only conclude failure after retries still produce no XML.
 
+### Phase C+: Outcome Tests & Parameter Optimizers
+
+> **Ask yourself:** *Is there a "what's the best this system can do?" question worth answering?*
+
+For any feature that involves **tunable numeric parameters** (forces, gains, angles, speeds, thresholds), consider writing an **outcome test** and/or a **parameter optimizer** alongside the unit tests.
+
+#### Outcome Tests
+Outcome tests verify system-level behaviour that unit tests miss — e.g. "character travels ≥ 2.5m in 5 seconds of walking." They always pass/fail cleanly and catch regressions that only manifest at runtime. See `GaitOutcomeTests.cs` for the pattern.
+
+When to write one:
+- The feature is physics-based or emergent (unit tests can pass while the system is broken)
+- There's a meaningful threshold that defines "working" (displacement, stability, response time)
+- A previous bug would have been caught by this test (regression value)
+
+#### Parameter Optimizers
+Optimizers run a grid sweep across parameter values, score each combination, and write a ranked report. They always `Assert.Pass` — they are not pass/fail tests but **diagnostic tools**. See `GaitOptimizerTests.cs` for the pattern.
+
+When to write one:
+- You're setting numeric defaults that affect feel or performance
+- The parameters interact non-linearly (tuning one changes what the best value for another is)
+- You'd otherwise set values "by feel" and adjust later
+
+**Naming convention:**
+- Outcome tests: `SystemName_Condition_ExpectedResult` (standard)
+- Optimizer sweeps: `SystemName_SweepParameters_WritesRankedReport`
+- Sensitivity tests: `SystemName_FieldName_Sensitivity_LogsDisplacementPerValue`
+
+**Optimizer scoring pattern:**
+```
+score = primaryMetric - penaltyA × countA - penaltyB × countB
+```
+Common metrics: displacement, time-to-stable, recovery frames, lap completion.
+Common penalties: spins detected, fallen at end, waypoints missed.
+
+**Report output:** Always write to `Logs/` (e.g. `Logs/system-optimizer-results.txt`) so results persist across sessions and can be read by Zé to update the prefab.
+
 ### Phase D: Implement to Pass Tests
 
 1. Write the minimum code required to make all tests from Phase C pass.
