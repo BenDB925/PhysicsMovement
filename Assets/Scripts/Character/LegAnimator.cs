@@ -130,6 +130,13 @@ namespace PhysicsDrivenMovement.Character
                  "Higher = faster transition; 0 = no smoothing. Typical: 3–8.")]
         private float _idleBlendSpeed = 5f;
 
+        [SerializeField, Range(0f, 90f)]
+        [Tooltip("Angle (degrees) between the hips' current forward and the input direction below which " +
+                 "leg stride is suppressed. Legs stay idle while BC rotates the torso to face the new " +
+                 "direction, preventing tangled steps on sharp turns. 0 = always stride, 90 = stride only " +
+                 "when fully aligned. Default 45°.")]
+        private float _yawAlignThresholdDeg = 45f;
+
         // DESIGN: _swingAxis and _kneeAxis are specified in ConfigurableJoint targetRotation
         //         space, which maps joint.axis (the primary hinge) to the Z component of the
         //         Euler/quaternion rotation — NOT the X component as intuition might suggest.
@@ -393,7 +400,7 @@ namespace PhysicsDrivenMovement.Character
                 Vector3 hipsForward = new Vector3(transform.forward.x, 0f, transform.forward.z).normalized;
                 float yawDot = Vector3.Dot(hipsForward, inputWorld);
                 // dot < cos(45°) ≈ 0.707 means >45° misalignment — suppress stride.
-                if (yawDot < 0.707f)
+                if (yawDot < Mathf.Cos(_yawAlignThresholdDeg * Mathf.Deg2Rad))
                 {
                     isMoving = false;
                 }
