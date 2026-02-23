@@ -10,7 +10,7 @@ A multiplayer online brawler featuring **Gang Beasts–style active ragdoll move
 
 | Concern | Choice |
 |---------|--------|
-| Engine | Unity 2022.3 LTS+ (Built-in Render Pipeline) |
+| Engine | Unity 6 (6000.3.9f1, Built-in Render Pipeline) |
 | Physics | PhysX (built-in 3D physics) |
 | Networking | Unity Netcode for GameObjects (NGO) |
 | Transport | Unity Transport + Unity Relay (optional, for NAT traversal) |
