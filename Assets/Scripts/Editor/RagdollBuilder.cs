@@ -321,10 +321,43 @@ namespace PhysicsDrivenMovement.Editor
             // STEP 4: Add RagdollSetup to the root (Hips).
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
             rootGO.AddComponent<RagdollSetup>();
-            rootGO.AddComponent<BalanceController>();
+
+            // STEP 4a: Add and configure BalanceController with production-tuned values.
+            BalanceController bc = rootGO.AddComponent<BalanceController>();
+            {
+                using var so = new SerializedObject(bc);
+                so.FindProperty("_kP").floatValue                        = 2000f;
+                so.FindProperty("_kD").floatValue                        = 350f;
+                so.FindProperty("_kPYaw").floatValue                     = 160f;
+                so.FindProperty("_kDYaw").floatValue                     = 40f;
+                so.FindProperty("_comStabilizationStrength").floatValue  = 200f;
+                so.FindProperty("_comStabilizationDamping").floatValue   = 40f;
+                so.FindProperty("_heightMaintenanceStrength").floatValue  = 1500f;
+                so.FindProperty("_heightMaintenanceDamping").floatValue   = 160f;
+                so.FindProperty("_jumpForce").floatValue                 = 120f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            // STEP 4b: Add and configure LegAnimator with production-tuned values.
+            LegAnimator la = rootGO.AddComponent<LegAnimator>();
+            {
+                using var so = new SerializedObject(la);
+                so.FindProperty("_kneeAngle").floatValue           = 65f;
+                so.FindProperty("_upperLegLiftBoost").floatValue   = 45f;
+                so.FindProperty("_stepAngle").floatValue           = 60f;
+                so.FindProperty("_stepFrequencyScale").floatValue  = 0.1f;
+                so.FindProperty("_stepFrequency").floatValue       = 1f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            // STEP 4c: Add ArmAnimator, CharacterState, PlayerMovement.
+            rootGO.AddComponent<ArmAnimator>();
+            rootGO.AddComponent<CharacterState>();
+            rootGO.AddComponent<PlayerMovement>();
+
             rootGO.AddComponent<DebugPushForce>();
 
-            // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.
+            // STEP 4d: Add GroundSensor to both feet and assign the Environment LayerMask.
             AttachGroundSensor(goMap["Foot_L"]);
             AttachGroundSensor(goMap["Foot_R"]);
 
