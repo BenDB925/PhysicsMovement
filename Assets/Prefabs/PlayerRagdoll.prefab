@@ -129,9 +129,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6530a7c5c642fa74ba08456af3569673, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _kP: 1400
+  _kP: 2000
   _kD: 80
-  _kPYaw: 400
+  _kPYaw: 160
   _kDYaw: 40
   _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
@@ -191,7 +191,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _moveForce: 150
   _maxSpeed: 5
-  _jumpForce: 120
+  _jumpForce: 100
   _camera: {fileID: 0}
 --- !u!114 &9097617084092325405
 MonoBehaviour:
@@ -223,17 +223,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 282eae0f717f82a4bb8ead682de9086d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _stepAngle: 53
+  _stepAngle: 60
   _stepFrequencyScale: 0.1
   _stepFrequency: 1.25
-  _kneeAngle: 39.2
-  _upperLegLiftBoost: 44
+  _kneeAngle: 65
+  _upperLegLiftBoost: 45
   _idleBlendSpeed: 5
-  _yawAlignThresholdDeg: 45
+  _yawAlignThresholdDeg: 90
   _swingAxis: {x: 1, y: 0, z: 0}
   _kneeAxis: {x: 1, y: 0, z: 0}
   _useWorldSpaceSwing: 0
   _debugLog: 0
+  _airborneSpringMultiplier: 0.15
 --- !u!114 &8048645500669517749
 MonoBehaviour:
   m_ObjectHideFlags: 0

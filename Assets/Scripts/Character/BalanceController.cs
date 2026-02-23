@@ -43,13 +43,13 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Proportional gain for the yaw correction torque (rotation around world Y). " +
                  "Controls how quickly the character turns to face the desired direction. " +
                  "Airborne multiplier does NOT apply to yaw torque.")]
-        private float _kPYaw = 400f;
+        private float _kPYaw = 80f;
 
         [SerializeField, Range(0f, 500f)]
         [Tooltip("Derivative gain for yaw damping. Prevents the character from spinning " +
                  "past the target facing direction. " +
                  "Airborne multiplier does NOT apply to yaw torque.")]
-        private float _kDYaw = 40f;
+        private float _kDYaw = 60f;
 
         [SerializeField, Range(0f, 10f)]
         [Tooltip("Minimum yaw error in degrees before any yaw torque is applied. " +

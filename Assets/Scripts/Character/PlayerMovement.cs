@@ -26,10 +26,10 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 20f)]
         private float _maxSpeed = 5f;
 
-        [SerializeField, Range(0f, 50f)]
+        [SerializeField, Range(0f, 500f)]
         [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
                  "Jump is only allowed from Standing or Moving state while grounded.")]
-        private float _jumpForce = 15f;
+        private float _jumpForce = 100f;
 
         [SerializeField]
         private Camera _camera;

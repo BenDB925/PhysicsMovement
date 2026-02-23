@@ -110,16 +110,16 @@ namespace PhysicsDrivenMovement.Character
                  "is nearly stationary (optional slow idle cycle). Default 0 = legs still at idle.")]
         private float _stepFrequency = 1f;
 
-        [SerializeField, Range(0f, 60f)]
+        [SerializeField, Range(0f, 75f)]
         [Tooltip("Constant knee-bend angle (degrees) applied to lower leg joints during gait. " +
-                 "Larger values = more aggressive, deliberate stride. Default 55°.")]
+                 "Larger values = more aggressive, deliberate stride. Default 65°.")]
         private float _kneeAngle = 60f;
 
-        [SerializeField, Range(0f, 45f)]
+        [SerializeField, Range(0f, 55f)]
         [Tooltip("Extra upward lift bias (degrees) added to the upper leg that is in the " +
                  "forward-swing phase (sin(phase) > 0). Biases the knee toward the chest " +
                  "for a powerful, high-stepping gait. Default 15°.")]
-        private float _upperLegLiftBoost = 31.9f;
+        private float _upperLegLiftBoost = 45;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Controls three related smooth-transition behaviours:\n" +
@@ -130,12 +130,12 @@ namespace PhysicsDrivenMovement.Character
                  "Higher = faster transition; 0 = no smoothing. Typical: 3–8.")]
         private float _idleBlendSpeed = 5f;
 
-        [SerializeField, Range(0f, 90f)]
-        [Tooltip("Angle (degrees) between the hips' current forward and the input direction below which " +
-                 "leg stride is suppressed. Legs stay idle while BC rotates the torso to face the new " +
-                 "direction, preventing tangled steps on sharp turns. 0 = always stride, 90 = stride only " +
-                 "when fully aligned. Default 45°.")]
-        private float _yawAlignThresholdDeg = 45f;
+        [SerializeField, Range(0f, 180f)]
+        [Tooltip("Suppress leg swing when hips are more than this many degrees from the input direction. " +
+                 "Prevents leg tangle on sharp turns (e.g. 180° reversal). " +
+                 "Keep high (≥90°) for smooth straight-line walking — lower values cause gait " +
+                 "stalls when leg forces nudge the hips slightly off-axis mid-stride. Default 90°.")]
+        private float _yawAlignThresholdDeg = 90f;
 
         // DESIGN: _swingAxis and _kneeAxis are specified in ConfigurableJoint targetRotation
         //         space, which maps joint.axis (the primary hinge) to the Z component of the
@@ -354,12 +354,6 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[LegAnimator] 'LowerLeg_R' ConfigurableJoint not found in children.", this);
             }
 
-            // STEP (Phase 3F2 fix): Capture baseline drives here in Awake, not in Start.
-            // OnEnable fires BEFORE Start in Unity's lifecycle — if CharacterState fires
-            // a state transition before Start runs, OnCharacterStateChanged would call
-            // SetLegSpringMultiplier with all baselines at zero, permanently zeroing springs.
-            // Capturing here ensures baselines are valid before any event can fire.
-            CaptureBaselineDrives();
         }
 
         private void Start()
@@ -376,6 +370,13 @@ namespace PhysicsDrivenMovement.Character
 
                 File.WriteAllText(DebugLogPath, string.Empty);
             }
+
+            // STEP (Phase 3F2 fix): Capture baseline drives in Start, not Awake.
+            // RagdollSetup.Awake applies the authoritative spring/damper values — but
+            // Unity does not guarantee Awake execution order between scripts on the same
+            // GameObject. Start is guaranteed to run after ALL Awakes, so by the time
+            // we get here RagdollSetup has already written the correct spring values.
+            CaptureBaselineDrives();
         }
 
         private void OnEnable()
@@ -447,7 +448,7 @@ namespace PhysicsDrivenMovement.Character
                 horizontalSpeedGate = new Vector3(hVelGate.x, 0f, hVelGate.z).magnitude;
             }
 
-            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.05f;
+            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.02f;
 
             // STEP 3c (Phase 3F2): Suppress gait phase advancement while airborne.
             //          Legs shouldn't keep cycling mid-air — force isMoving = false
@@ -488,7 +489,7 @@ namespace PhysicsDrivenMovement.Character
                 ? _playerMovement.CurrentMoveInput.normalized
                 : Vector2.zero;
 
-            bool restarting = !_wasMoving && isMoving;
+            bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
             bool sharpTurn  = _prevInputDir.sqrMagnitude > 0.01f
                 && currentInputDir.sqrMagnitude > 0.01f
                 && Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
@@ -937,6 +938,13 @@ namespace PhysicsDrivenMovement.Character
             // DESIGN: We rebuild the JointDrive struct each time because it is a value type —
             // modifying a copied field would not affect the joint. We multiply spring only,
             // keeping the damper at baseline so the joint still settles without oscillation.
+            // GUARD: If baselines are zero (CaptureBaselineDrives not yet called — i.e. this
+            // fires in the OnEnable→Start window), bail out silently. The correct springs are
+            // already on the joints from RagdollSetup; don't overwrite them with zeros.
+            if (_baselineUpperLegLDrive.positionSpring <= 0f)
+            {
+                return;
+            }
 
             if (_upperLegL != null)
             {
