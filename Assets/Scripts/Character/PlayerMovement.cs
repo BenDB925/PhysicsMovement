@@ -67,6 +67,13 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private bool _overrideJumpInput;
 
+        /// <summary>
+        /// Override flag set by <see cref="SetJumpHeldForTest"/>. When true,
+        /// _jumpHeld is controlled by the test seam and persists across frames
+        /// (unlike _overrideJumpInput which is consumed after one FixedUpdate).
+        /// </summary>
+        private bool _overrideJumpHeld;
+
         // ─── Move input override ───────────────────────────────────────────
 
         private bool _overrideMoveInput;
@@ -105,6 +112,20 @@ namespace PhysicsDrivenMovement.Character
         {
             _jumpPressedThisFrame = pressed;
             _overrideJumpInput = true;
+        }
+
+        /// <summary>
+        /// Test seam: directly inject persistent jump-held state, bypassing the Input System.
+        /// Unlike <see cref="SetJumpInputForTest"/> which is consumed after one FixedUpdate,
+        /// this override persists across frames until explicitly cleared by calling with
+        /// <paramref name="held"/> = <c>false</c>. Used for wall-climb tests that need
+        /// continuous _jumpHeld = true across multiple physics frames.
+        /// Do not call from production code.
+        /// </summary>
+        public void SetJumpHeldForTest(bool held)
+        {
+            _jumpHeld = held;
+            _overrideJumpHeld = held;
         }
 
         // ─── Unity Lifecycle ────────────────────────────────────────────────
@@ -162,6 +183,9 @@ namespace PhysicsDrivenMovement.Character
             {
                 _jumpPressedThisFrame = _inputActions != null &&
                                         _inputActions.Player.Jump.WasPressedThisFrame();
+            }
+            if (!_overrideJumpHeld && !_overrideJumpInput)
+            {
                 _jumpHeld = _inputActions != null &&
                             _inputActions.Player.Jump.IsPressed();
             }

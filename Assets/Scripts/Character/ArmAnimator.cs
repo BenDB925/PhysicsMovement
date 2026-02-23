@@ -122,9 +122,24 @@ namespace PhysicsDrivenMovement.Character
         // Input for raise-hands action.
         private PlayerInputActions _inputActions;
         private bool _raiseInputHeld;
+        private bool _overrideRaiseInput;
 
         /// <summary>0 = arms at rest, 1 = fully raised. Ramped gradually to force front-path.</summary>
         private float _raiseT;
+
+        // ── Test Seams ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Test seam: directly inject persistent raise-hands input state, bypassing the
+        /// Input System. The override persists across frames until explicitly cleared by
+        /// calling with <paramref name="held"/> = <c>false</c>.
+        /// Do not call from production code.
+        /// </summary>
+        public void SetRaiseInputForTest(bool held)
+        {
+            _raiseInputHeld = held;
+            _overrideRaiseInput = held;
+        }
 
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -191,9 +206,12 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // Read raise-hands input.
-            _raiseInputHeld = _inputActions != null &&
-                              _inputActions.Player.RaiseHands.IsPressed();
+            // Read raise-hands input (unless overridden by test seam).
+            if (!_overrideRaiseInput)
+            {
+                _raiseInputHeld = _inputActions != null &&
+                                  _inputActions.Player.RaiseHands.IsPressed();
+            }
 
             // STEP 0: Ramp raise progress. Gradual sweep ensures the SLERP drive
             //         always takes the front path (each incremental step is small).
