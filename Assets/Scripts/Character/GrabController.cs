@@ -121,6 +121,15 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True if the right hand was grabbing at the start of the current FixedUpdate (before release).</summary>
         public bool WasGrabbingRight => _wasGrabbingRight;
 
+        /// <summary>True when the left hand is grabbing static geometry (wall/floor).</summary>
+        public bool IsWallGrabbingLeft => _zoneL != null && _zoneL.IsGrabbing && _zoneL.IsWorldGrab;
+
+        /// <summary>True when the right hand is grabbing static geometry (wall/floor).</summary>
+        public bool IsWallGrabbingRight => _zoneR != null && _zoneR.IsGrabbing && _zoneR.IsWorldGrab;
+
+        /// <summary>True when either hand is grabbing static geometry (wall/floor).</summary>
+        public bool IsWallGrabbing => IsWallGrabbingLeft || IsWallGrabbingRight;
+
         /// <summary>The Rigidbody currently grabbed by the left hand, or null.</summary>
         public Rigidbody GrabbedTargetLeft => _zoneL != null ? _zoneL.GrabbedTarget : null;
 

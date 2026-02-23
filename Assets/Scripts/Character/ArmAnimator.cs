@@ -255,27 +255,33 @@ namespace PhysicsDrivenMovement.Character
         // ── Private Methods ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Drives both arms into a raised pose (hands up). Grabbed arms are
-        /// still driven so the character can lift props overhead. Only punching
-        /// arms are skipped (punch has its own short-lived target).
+        /// Drives both arms into a raised pose (hands up). Arms grabbing dynamic
+        /// objects (props) are still driven so the character can lift them overhead.
+        /// Arms wall-grabbing (world anchor) and punching arms are skipped to avoid
+        /// fighting the FixedJoint or the punch target.
         /// </summary>
         private void ApplyRaisedPose()
         {
             bool leftPunching = _punchController != null && _punchController.IsPunchingLeft;
             bool rightPunching = _punchController != null && _punchController.IsPunchingRight;
+            bool leftWallGrab = _grabController != null && _grabController.IsWallGrabbingLeft;
+            bool rightWallGrab = _grabController != null && _grabController.IsWallGrabbingRight;
+
+            bool skipLeft = leftPunching || leftWallGrab;
+            bool skipRight = rightPunching || rightWallGrab;
 
             float currentAngle = _raiseT * _raiseAngle;
             Quaternion upperTarget = Quaternion.AngleAxis(-currentAngle, _armSwingAxis);
             float currentElbow = _raiseT * _raiseElbowAngle;
             Quaternion elbowTarget = Quaternion.AngleAxis(-currentElbow, _elbowAxis);
 
-            if (_upperArmL != null && !leftPunching)
+            if (_upperArmL != null && !skipLeft)
                 _upperArmL.targetRotation = upperTarget;
-            if (_upperArmR != null && !rightPunching)
+            if (_upperArmR != null && !skipRight)
                 _upperArmR.targetRotation = upperTarget;
-            if (_lowerArmL != null && !leftPunching)
+            if (_lowerArmL != null && !skipLeft)
                 _lowerArmL.targetRotation = elbowTarget;
-            if (_lowerArmR != null && !rightPunching)
+            if (_lowerArmR != null && !skipRight)
                 _lowerArmR.targetRotation = elbowTarget;
         }
 

@@ -31,12 +31,20 @@ namespace PhysicsDrivenMovement.Character
                  "Jump is only allowed from Standing or Moving state while grounded.")]
         private float _jumpForce = 100f;
 
+        [Header("Wall Climb")]
+        [SerializeField, Range(0f, 5000f)]
+        [Tooltip("Continuous upward force applied to the Hips while holding Jump during a wall grab. " +
+                 "Must overcome gravity × total ragdoll mass to climb. Default 1500.")]
+        private float _climbForce = 1500f;
+
         [SerializeField]
         private Camera _camera;
 
         private Rigidbody _rb;
         private BalanceController _balance;
         private CharacterState _characterState;
+        private GrabController _grabController;
+        private RagdollSetup _ragdollSetup;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
 
@@ -48,6 +56,9 @@ namespace PhysicsDrivenMovement.Character
         /// enforce the one-frame consume rule — the impulse never fires twice per press.
         /// </summary>
         private bool _jumpPressedThisFrame;
+
+        /// <summary>True while the jump button is held (used for continuous wall climb).</summary>
+        private bool _jumpHeld;
 
         /// <summary>
         /// Override flag set by <see cref="SetJumpInputForTest"/>. When true,
@@ -113,10 +124,10 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 2: Cache CharacterState — needed for jump gate (Standing/Moving only).
-            //         CharacterState may be added after PlayerMovement in component order, so
-            //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
+            // STEP 2: Cache CharacterState, GrabController, and RagdollSetup.
             TryGetComponent(out _characterState);
+            TryGetComponent(out _grabController);
+            TryGetComponent(out _ragdollSetup);
 
             // STEP 3: Resolve a camera reference (serialized value preferred, main camera fallback).
             if (_camera == null)
@@ -144,13 +155,15 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            // STEP 1: Read Jump action (button, WasPressedThisFrame) unless overridden.
-            //         Use WasPressedThisFrame so the impulse fires on the leading edge
-            //         of the button press and cannot repeat while held.
+            // STEP 1: Read Jump action unless overridden.
+            //         WasPressedThisFrame = one-shot for ground jump.
+            //         IsPressed = continuous for wall climb.
             if (!_overrideJumpInput)
             {
                 _jumpPressedThisFrame = _inputActions != null &&
                                         _inputActions.Player.Jump.WasPressedThisFrame();
+                _jumpHeld = _inputActions != null &&
+                            _inputActions.Player.Jump.IsPressed();
             }
 
             // STEP 2: Early-out when required dependencies are missing.
@@ -165,13 +178,26 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 3: Attempt jump before movement forces.
-            //         Jump is gated on:
-            //           (a) jump input pressed this frame,
-            //           (b) CharacterState is Standing or Moving,
-            //           (c) BalanceController.IsGrounded is true.
-            //         The input flag is consumed immediately regardless of whether the
-            //         jump succeeded, enforcing the one-frame consume rule.
             TryApplyJump();
+
+            // STEP 3b: Wall climb — continuous upward force while holding jump during a wall grab.
+            //          Force is distributed across all ragdoll bodies so the whole character
+            //          lifts evenly rather than just stretching the arm joints.
+            if (_jumpHeld && _grabController != null && _grabController.IsWallGrabbing)
+            {
+                if (_ragdollSetup != null && _ragdollSetup.AllBodies != null)
+                {
+                    Vector3 forcePerBody = Vector3.up * _climbForce / _ragdollSetup.AllBodies.Count;
+                    foreach (Rigidbody body in _ragdollSetup.AllBodies)
+                    {
+                        body.AddForce(forcePerBody, ForceMode.Force);
+                    }
+                }
+                else
+                {
+                    _rb.AddForce(Vector3.up * _climbForce, ForceMode.Force);
+                }
+            }
 
             // STEP 4: Movement forces. Skip when character is fallen.
             if (!_balance.IsFallen)
