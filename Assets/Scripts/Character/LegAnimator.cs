@@ -119,7 +119,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Extra upward lift bias (degrees) added to the upper leg that is in the " +
                  "forward-swing phase (sin(phase) > 0). Biases the knee toward the chest " +
                  "for a powerful, high-stepping gait. Default 15°.")]
-        private float _upperLegLiftBoost = 45;
+        private float _upperLegLiftBoost = 31.9f;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Controls three related smooth-transition behaviours:\n" +
