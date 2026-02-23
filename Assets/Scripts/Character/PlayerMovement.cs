@@ -7,12 +7,15 @@ namespace PhysicsDrivenMovement.Character
     /// <summary>
     /// Converts player input into locomotion forces for the active ragdoll hips body.
     /// This component belongs to the Character locomotion system and is responsible for
-    /// camera-relative movement, speed limiting, and forwarding facing direction intent
-    /// to <see cref="BalanceController"/>.
+    /// camera-relative movement, speed limiting, jump impulse, and forwarding facing
+    /// direction intent to <see cref="BalanceController"/>.
+    /// Jump is only permitted when the character is grounded and in the
+    /// <see cref="CharacterStateType.Standing"/> or <see cref="CharacterStateType.Moving"/>
+    /// state; a one-frame consume prevents repeated impulses while the button is held.
     /// Lifecycle: caches dependencies in Awake, samples input in Update, and applies
-    /// movement forces in FixedUpdate.
-    /// Collaborators: <see cref="BalanceController"/>, <see cref="Rigidbody"/>,
-    /// <see cref="PlayerInputActions"/>.
+    /// movement and jump forces in FixedUpdate.
+    /// Collaborators: <see cref="BalanceController"/>, <see cref="CharacterState"/>,
+    /// <see cref="Rigidbody"/>, <see cref="PlayerInputActions"/>.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerMovement : MonoBehaviour
@@ -23,16 +26,46 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 20f)]
         private float _maxSpeed = 5f;
 
+        [SerializeField, Range(0f, 50f)]
+        [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
+                 "Jump is only allowed from Standing or Moving state while grounded.")]
+        private float _jumpForce = 15f;
+
         [SerializeField]
         private Camera _camera;
 
         private Rigidbody _rb;
         private BalanceController _balance;
+        private CharacterState _characterState;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
 
+        // ─── Jump state ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// True when the jump button was pressed this frame (or injected via test seam).
+        /// Consumed (cleared) in FixedUpdate after the jump attempt is processed to
+        /// enforce the one-frame consume rule — the impulse never fires twice per press.
+        /// </summary>
+        private bool _jumpPressedThisFrame;
+
+        /// <summary>
+        /// Override flag set by <see cref="SetJumpInputForTest"/>. When true,
+        /// FixedUpdate reads <see cref="_jumpPressedThisFrame"/> directly and does not
+        /// poll the Input System for the jump button.
+        /// </summary>
+        private bool _overrideJumpInput;
+
+        // ─── Move input override ───────────────────────────────────────────
+
+        private bool _overrideMoveInput;
+
+        // ─── Public Properties ─────────────────────────────────────────────
+
         /// <summary>Latest sampled movement input from the Player action map.</summary>
         public Vector2 CurrentMoveInput => _currentMoveInput;
+
+        // ─── Test Seams ────────────────────────────────────────────────────
 
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
@@ -45,7 +78,25 @@ namespace PhysicsDrivenMovement.Character
             _overrideMoveInput = true;
         }
 
-        private bool _overrideMoveInput;
+        /// <summary>
+        /// Test seam: directly inject a jump-button state, bypassing the Input System.
+        /// When <paramref name="pressed"/> is <c>true</c>, a jump attempt will be made
+        /// on the next FixedUpdate and then consumed (one-frame rule applies exactly as
+        /// in production — call again with <c>true</c> to fire a second jump).
+        /// FixedUpdate will not poll the Input System for jump while this override is active.
+        /// Do not call from production code.
+        /// </summary>
+        /// <param name="pressed">
+        /// <c>true</c> to simulate the jump button pressed this frame;
+        /// <c>false</c> to simulate the button released (clears the pending jump).
+        /// </param>
+        public void SetJumpInputForTest(bool pressed)
+        {
+            _jumpPressedThisFrame = pressed;
+            _overrideJumpInput = true;
+        }
+
+        // ─── Unity Lifecycle ────────────────────────────────────────────────
 
         private void Awake()
         {
@@ -62,13 +113,18 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 2: Resolve a camera reference (serialized value preferred, main camera fallback).
+            // STEP 2: Cache CharacterState — needed for jump gate (Standing/Moving only).
+            //         CharacterState may be added after PlayerMovement in component order, so
+            //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
+            TryGetComponent(out _characterState);
+
+            // STEP 3: Resolve a camera reference (serialized value preferred, main camera fallback).
             if (_camera == null)
             {
                 _camera = Camera.main;
             }
 
-            // STEP 3: Create and enable PlayerInputActions for the local movement map.
+            // STEP 4: Create and enable PlayerInputActions for the local movement map.
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
         }
@@ -88,8 +144,17 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            // STEP 1: Early-out when dependencies are missing or character is fallen.
-            if (_rb == null || _balance == null || _balance.IsFallen)
+            // STEP 1: Read Jump action (button, WasPressedThisFrame) unless overridden.
+            //         Use WasPressedThisFrame so the impulse fires on the leading edge
+            //         of the button press and cannot repeat while held.
+            if (!_overrideJumpInput)
+            {
+                _jumpPressedThisFrame = _inputActions != null &&
+                                        _inputActions.Player.Jump.WasPressedThisFrame();
+            }
+
+            // STEP 2: Early-out when required dependencies are missing.
+            if (_rb == null || _balance == null)
             {
                 return;
             }
@@ -99,10 +164,20 @@ namespace PhysicsDrivenMovement.Character
                 _camera = Camera.main;
             }
 
-            // STEP 2: Convert move input to camera-relative world direction on XZ plane.
-            // STEP 3: Apply AddForce only when below configured horizontal speed cap.
-            // STEP 4: Forward non-trivial movement direction to BalanceController facing target.
-            ApplyMovementForces(_currentMoveInput);
+            // STEP 3: Attempt jump before movement forces.
+            //         Jump is gated on:
+            //           (a) jump input pressed this frame,
+            //           (b) CharacterState is Standing or Moving,
+            //           (c) BalanceController.IsGrounded is true.
+            //         The input flag is consumed immediately regardless of whether the
+            //         jump succeeded, enforcing the one-frame consume rule.
+            TryApplyJump();
+
+            // STEP 4: Movement forces. Skip when character is fallen.
+            if (!_balance.IsFallen)
+            {
+                ApplyMovementForces(_currentMoveInput);
+            }
         }
 
         private void OnDestroy()
@@ -113,6 +188,71 @@ namespace PhysicsDrivenMovement.Character
                 _inputActions.Dispose();
                 _inputActions = null;
             }
+        }
+
+        // ─── Private Helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Evaluates the jump gate and, if all conditions are met, applies a single upward
+        /// impulse to the Hips Rigidbody.  The jump input flag is consumed (cleared)
+        /// unconditionally at the end of this method, enforcing the one-frame consume rule
+        /// so the impulse cannot repeat while the button is held.
+        ///
+        /// Gate conditions (ALL must be true):
+        ///   1. <see cref="_jumpPressedThisFrame"/> is set.
+        ///   2. <see cref="CharacterState.CurrentState"/> is
+        ///      <see cref="CharacterStateType.Standing"/> or
+        ///      <see cref="CharacterStateType.Moving"/>.
+        ///   3. <see cref="BalanceController.IsGrounded"/> is true.
+        /// </summary>
+        private void TryApplyJump()
+        {
+            // Always consume the jump flag first — this is the one-frame consume.
+            // Doing it unconditionally ensures that even a rejected jump cannot fire
+            // on a later frame from the same button press.
+            bool wantsJump = _jumpPressedThisFrame;
+            _jumpPressedThisFrame = false;
+
+            // When using the test seam, reset the override so the next frame is
+            // clean unless the test explicitly calls SetJumpInputForTest again.
+            if (_overrideJumpInput)
+            {
+                _overrideJumpInput = false;
+            }
+
+            if (!wantsJump)
+            {
+                return;
+            }
+
+            // Gate 1: CharacterState must be Standing or Moving.
+            // Lazy-resolve in case CharacterState was added after PlayerMovement in component order.
+            if (_characterState == null)
+            {
+                TryGetComponent(out _characterState);
+            }
+
+            if (_characterState == null)
+            {
+                return;
+            }
+
+            CharacterStateType state = _characterState.CurrentState;
+            bool canJumpFromState = state == CharacterStateType.Standing ||
+                                    state == CharacterStateType.Moving;
+            if (!canJumpFromState)
+            {
+                return;
+            }
+
+            // Gate 2: must be grounded.
+            if (!_balance.IsGrounded)
+            {
+                return;
+            }
+
+            // All gates passed — apply impulse.
+            _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
         }
 
         private void ApplyMovementForces(Vector2 moveInput)
