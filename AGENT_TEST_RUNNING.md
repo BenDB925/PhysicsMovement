@@ -28,7 +28,7 @@ C:\Program Files\Unity\Hub\Editor\<VERSION>\Editor\Unity.exe
    Get-Content "<ProjectRoot>\ProjectSettings\ProjectVersion.txt"
    ```
 
-   The first line contains:  `m_EditorVersion: 6000.0.33f1`  (example).
+   The first line contains:  `m_EditorVersion: 6000.3.9f1`  (example).
 
 2. **Construct the executable path:**
 
