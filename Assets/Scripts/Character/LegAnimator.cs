@@ -171,7 +171,7 @@ namespace PhysicsDrivenMovement.Character
                  "movement direction so legs always step forward regardless of torso pitch angle. " +
                  "When false, the legacy local-frame swing is used (may cause feet to drag when " +
                  "the torso is pitched forward). Toggle for side-by-side comparison.")]
-        private bool _useWorldSpaceSwing = true;
+        private bool _useWorldSpaceSwing = false;
 
         [SerializeField]
         [Tooltip("When true, writes one debug line every 10 FixedUpdate frames to " +
@@ -353,6 +353,13 @@ namespace PhysicsDrivenMovement.Character
             {
                 Debug.LogWarning("[LegAnimator] 'LowerLeg_R' ConfigurableJoint not found in children.", this);
             }
+
+            // STEP (Phase 3F2 fix): Capture baseline drives here in Awake, not in Start.
+            // OnEnable fires BEFORE Start in Unity's lifecycle — if CharacterState fires
+            // a state transition before Start runs, OnCharacterStateChanged would call
+            // SetLegSpringMultiplier with all baselines at zero, permanently zeroing springs.
+            // Capturing here ensures baselines are valid before any event can fire.
+            CaptureBaselineDrives();
         }
 
         private void Start()
@@ -369,13 +376,6 @@ namespace PhysicsDrivenMovement.Character
 
                 File.WriteAllText(DebugLogPath, string.Empty);
             }
-
-            // STEP (Phase 3F2): Capture the baseline SLERP drive values for all four leg joints
-            //                   so they can be restored after an Airborne state exit.
-            //                   This runs after Awake (joints are already cached) and after
-            //                   RagdollSetup.Awake has applied its authoritative spring values,
-            //                   so the captured baseline matches the actual runtime springs.
-            CaptureBaselineDrives();
         }
 
         private void OnEnable()
