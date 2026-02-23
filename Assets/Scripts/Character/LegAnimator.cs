@@ -193,6 +193,28 @@ namespace PhysicsDrivenMovement.Character
                  "Gait re-enables with hysteresis at threshold × 0.5 held for 5 consecutive frames.")]
         private float _angularVelocityGaitThreshold = 8f;
 
+        // ── Stuck-Leg Recovery (Option D) ────────────────────────────────
+
+        [SerializeField]
+        [Tooltip("Number of consecutive FixedUpdate frames where stuck conditions must be met " +
+                 "before recovery pose is triggered. Default 25.")]
+        private int _stuckFrameThreshold = 25;
+
+        [SerializeField]
+        [Tooltip("Horizontal speed (m/s) below which the character is considered stuck when " +
+                 "input is also non-zero. Default 0.15 m/s.")]
+        private float _stuckSpeedThreshold = 0.15f;
+
+        [SerializeField]
+        [Tooltip("Number of FixedUpdate frames to hold the recovery pose before resuming " +
+                 "normal gait. Default 30.")]
+        private int _recoveryFrames = 30;
+
+        [SerializeField]
+        [Tooltip("Spring multiplier applied to both upper-leg joints during recovery to drive " +
+                 "the legs forcefully into the forward-split pose. Default 2.5.")]
+        private float _recoverySpringMultiplier = 2.5f;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -268,6 +290,17 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private int _spinSuppressFrames;
 
+        // ── Stuck-Leg Recovery — Runtime State ───────────────────────────
+
+        /// <summary>Counts consecutive frames where stuck conditions are all true.</summary>
+        private int _stuckFrameCounter;
+
+        /// <summary>True while the recovery pose is being actively applied.</summary>
+        private bool _isRecovering;
+
+        /// <summary>Counts FixedUpdate frames remaining in the current recovery window.</summary>
+        private int _recoveryFrameCounter;
+
         // ── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -283,6 +316,12 @@ namespace PhysicsDrivenMovement.Character
         /// can blend their effects in/out in sync with the leg gait amplitude.
         /// </summary>
         public float SmoothedInputMag => _smoothedInputMag;
+
+        /// <summary>
+        /// True while the stuck-leg recovery pose is being actively applied.
+        /// Exposed for test verification; read-only at runtime.
+        /// </summary>
+        public bool IsRecovering => _isRecovering;
 
         /// <summary>
         /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/> this frame.
@@ -542,6 +581,66 @@ namespace PhysicsDrivenMovement.Character
             _prevInputDir = currentInputDir;
             _wasMoving    = isMoving;
 
+            // ── STEP 3E: Stuck-Leg Recovery (Option D) ────────────────────────────────
+            //   Detection: character is stuck when ALL of the following are true for
+            //   _stuckFrameThreshold consecutive frames:
+            //     - SmoothedInputMag > 0.5 (actively trying to move)
+            //     - horizontalSpeedGate < _stuckSpeedThreshold (not actually moving)
+            //     - CharacterState is Standing or Moving (not Fallen/GettingUp/Airborne)
+            //   Recovery: drive both UpperLeg joints to forward-split pose (AngleAxis(-30f, _swingAxis))
+            //   with spring multiplier _recoverySpringMultiplier for _recoveryFrames frames,
+            //   then restore spring and resume normal gait.
+
+            bool stateAllowsRecovery = state == CharacterStateType.Standing ||
+                                       state == CharacterStateType.Moving;
+
+            if (!_isRecovering)
+            {
+                // Update stuck counter.
+                bool stuckCondition = _smoothedInputMag > 0.5f
+                    && horizontalSpeedGate < _stuckSpeedThreshold
+                    && stateAllowsRecovery;
+
+                if (stuckCondition)
+                {
+                    _stuckFrameCounter++;
+                }
+                else
+                {
+                    _stuckFrameCounter = 0;
+                }
+
+                // Trigger recovery when stuck long enough.
+                if (_stuckFrameCounter >= _stuckFrameThreshold && stateAllowsRecovery)
+                {
+                    _isRecovering = true;
+                    _recoveryFrameCounter = _recoveryFrames;
+                    _stuckFrameCounter = 0;
+                    SetLegSpringMultiplier(_recoverySpringMultiplier);
+                }
+            }
+
+            if (_isRecovering)
+            {
+                // Apply forward-split recovery pose to both UpperLeg joints.
+                Quaternion recoveryPose = Quaternion.AngleAxis(-30f, _swingAxis);
+                if (_upperLegL != null) { _upperLegL.targetRotation = recoveryPose; }
+                if (_upperLegR != null) { _upperLegR.targetRotation = recoveryPose; }
+
+                _recoveryFrameCounter--;
+                if (_recoveryFrameCounter <= 0)
+                {
+                    // Recovery complete: restore spring and resume normal gait.
+                    _isRecovering = false;
+                    _stuckFrameCounter = 0;
+                    SetLegSpringMultiplier(1f);
+                }
+
+                // Skip normal gait this frame — recovery pose is already applied.
+                return;
+            }
+
+            // ────────────────────────────────────────────────────────────────────────────────
             if (isMoving)
             {
                 // STEP 4a: MOVING — advance phase accumulator based on actual speed.

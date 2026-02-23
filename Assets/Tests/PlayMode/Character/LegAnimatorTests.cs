@@ -2189,5 +2189,110 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Phase must continue advancing after the velocity dip. " +
                 $"Phase after dip: {phaseAfterDip:F4}, phase after 20 more frames: {phaseAfterResume:F4}.");
         }
+
+        // ─── Stuck-Leg Recovery Tests (Option D) ────────────────────────────────
+
+        /// <summary>
+        /// When the character has input but is stuck (zero horizontal velocity for
+        /// _stuckFrameThreshold frames while smoothedInputMag > 0.5), LegAnimator must
+        /// drive both UpperLeg joints to the recovery pose (AngleAxis(-30, swingAxis)),
+        /// which should be significantly different from identity (> 10 degrees).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WhenStuck_RecoveryPoseIsApplied()
+        {
+            // Arrange
+            yield return null;
+
+            // Set state to Moving so recovery state guard passes.
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+
+            // Apply forward move input.
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Zero velocity to simulate stuck (hips position-frozen).
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezePosition | RigidbodyConstraints.FreezeRotation;
+
+            // Pre-seed _smoothedInputMag to 1.0f so stuck detection triggers within
+            // _stuckFrameThreshold frames (otherwise we would need ~14 additional frames
+            // for _smoothedInputMag to ramp past the 0.5 threshold).
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Reduce _stuckFrameThreshold to 10 for test speed (default 25 would require
+            // ~35 frames at 100Hz = 350 ms idle in test runner).
+            SetPrivateField(_legAnimator, "_stuckFrameThreshold", 10);
+
+            // Act: wait enough frames for stuck detection to fire.
+            // Need _stuckFrameThreshold + 5 extra to ensure recovery has been entered.
+            for (int i = 0; i < 15; i++)
+            {
+                _hipsRb.linearVelocity = Vector3.zero; // keep velocity zeroed each frame
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Assert 1: UpperLeg_L targetRotation should NOT be identity (recovery pose applied).
+            float angleL = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
+            Assert.That(angleL, Is.GreaterThan(10f),
+                $"UpperLeg_L targetRotation must be in recovery pose (> 10 degrees from identity). " +
+                $"Actual angle from identity: {angleL:F2}°. " +
+                "LegAnimator stuck detection may not have fired, or recovery pose not applied.");
+
+            // Assert 2: UpperLeg_R targetRotation should also be in recovery pose.
+            float angleR = Quaternion.Angle(_upperLegRJoint.targetRotation, Quaternion.identity);
+            Assert.That(angleR, Is.GreaterThan(10f),
+                $"UpperLeg_R targetRotation must be in recovery pose (> 10 degrees from identity). " +
+                $"Actual angle from identity: {angleR:F2}°. " +
+                "Both upper-leg joints must receive recovery pose during stuck recovery.");
+        }
+
+        /// <summary>
+        /// After the recovery window (_recoveryFrames) expires, _isRecovering must return
+        /// to false, confirming that normal gait resumes and the recovery is self-terminating.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AfterRecovery_GaitResumes()
+        {
+            // Arrange
+            yield return null;
+
+            // Set state to Moving.
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezePosition | RigidbodyConstraints.FreezeRotation;
+
+            // Pre-seed smoothedInputMag so detection is immediate.
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Use small thresholds to keep the test fast.
+            const int testStuckThreshold = 5;
+            const int testRecoveryFrames = 10;
+            SetPrivateField(_legAnimator, "_stuckFrameThreshold", testStuckThreshold);
+            SetPrivateField(_legAnimator, "_recoveryFrames", testRecoveryFrames);
+
+            // Act Phase 1: wait through detection + recovery window + buffer.
+            int totalFrames = testStuckThreshold + testRecoveryFrames + 10;
+            for (int i = 0; i < totalFrames; i++)
+            {
+                _hipsRb.linearVelocity = Vector3.zero;
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Release constraint to allow movement.
+            _hipsRb.constraints = RigidbodyConstraints.None;
+
+            // Act Phase 2: wait 20 more frames.
+            for (int i = 0; i < 20; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Assert: _isRecovering must be false (recovery completed).
+            bool isRecoveringAfter = _legAnimator.IsRecovering;
+            Assert.That(isRecoveringAfter, Is.False,
+                "IsRecovering must be false after the recovery window expires. " +
+                "Recovery must self-terminate after _recoveryFrames frames.");
+        }
     }
 }
