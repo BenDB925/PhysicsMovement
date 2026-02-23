@@ -310,17 +310,17 @@ namespace PhysicsDrivenMovement.Editor
                 ConfigureJoint(goMap[seg.Name], goMap[seg.ParentName].GetComponent<Rigidbody>(), seg);
             }
 
-            // STEP 4: Add RagdollSetup to the root (Hips).
+            // STEP 4: Add runtime components to root (Hips).
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
-            rootGO.AddComponent<RagdollSetup>();
-            rootGO.AddComponent<BalanceController>();
-            rootGO.AddComponent<PlayerMovement>();
-            rootGO.AddComponent<CharacterState>();
-            rootGO.AddComponent<LegAnimator>();
-            rootGO.AddComponent<ArmAnimator>();
-            rootGO.AddComponent<DebugPushForce>();
+            AttachRagdollSetup(rootGO);
+            AttachBalanceController(rootGO);
+            AttachPlayerMovement(rootGO);
+            AttachCharacterState(rootGO);
+            AttachLegAnimator(rootGO);
+            AttachArmAnimator(rootGO);
+            AttachDebugPushForce(rootGO);
 
-            // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.
+            // STEP 4b: Add GroundSensor to both feet.
             AttachGroundSensor(goMap["Foot_L"]);
             AttachGroundSensor(goMap["Foot_R"]);
 
@@ -329,11 +329,11 @@ namespace PhysicsDrivenMovement.Editor
             AttachHandGrabZone(goMap["Hand_R"]);
 
             // STEP 4d (Phase 4): Add GrabController and PunchController to Hips.
-            rootGO.AddComponent<GrabController>();
-            rootGO.AddComponent<PunchController>();
+            AttachGrabController(rootGO);
+            AttachPunchController(rootGO);
 
             // STEP 4e (Phase 4): Add HitReceiver to Head.
-            goMap["Head"].AddComponent<HitReceiver>();
+            AttachHitReceiver(goMap["Head"]);
 
             // STEP 5: Save as a prefab asset.
             string directory = System.IO.Path.GetDirectoryName(prefabPath);
@@ -353,18 +353,137 @@ namespace PhysicsDrivenMovement.Editor
 
         // ─── Private Helpers ──────────────────────────────────────────────────
 
-        /// <summary>
-        /// Adds a <see cref="GroundSensor"/> component to <paramref name="footGO"/> and
-        /// sets its <c>_groundLayers</c> field to the Environment layer defined in
-        /// <see cref="GameSettings.LayerEnvironment"/> using the SerializedObject API
-        /// so that the value is correctly serialised into the prefab asset.
-        /// </summary>
+        // ─── Component Attach Helpers ───────────────────────────────────────
+        // Each method adds a component and uses SerializedObject to write private
+        // [SerializeField] values that match the tuned PlayerRagdoll prefab.
+
+        private static void AttachRagdollSetup(GameObject go)
+        {
+            var comp = go.AddComponent<RagdollSetup>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_debugSetup").boolValue = false;
+            so.FindProperty("_upperLegSpring").floatValue = 1200f;
+            so.FindProperty("_upperLegDamper").floatValue = 120f;
+            so.FindProperty("_upperLegMaxForce").floatValue = 5000f;
+            so.FindProperty("_lowerLegSpring").floatValue = 1200f;
+            so.FindProperty("_lowerLegDamper").floatValue = 120f;
+            so.FindProperty("_lowerLegMaxForce").floatValue = 5000f;
+            so.FindProperty("_lowerLegLowAngularX").floatValue = -90f;
+            so.FindProperty("_lowerLegHighAngularX").floatValue = 90f;
+            so.FindProperty("_disableLowerLegGroundCollision").boolValue = true;
+            so.FindProperty("_upperArmSpring").floatValue = 800f;
+            so.FindProperty("_upperArmDamper").floatValue = 80f;
+            so.FindProperty("_upperArmMaxForce").floatValue = 3000f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachBalanceController(GameObject go)
+        {
+            var comp = go.AddComponent<BalanceController>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_kP").floatValue = 2000f;
+            so.FindProperty("_kD").floatValue = 200f;
+            so.FindProperty("_kPYaw").floatValue = 80f;
+            so.FindProperty("_kDYaw").floatValue = 60f;
+            so.FindProperty("_yawDeadZoneDeg").floatValue = 2f;
+            so.FindProperty("_airborneMultiplier").floatValue = 0.2f;
+            so.FindProperty("_fallenEnterAngleThreshold").floatValue = 65f;
+            so.FindProperty("_fallenExitAngleThreshold").floatValue = 55f;
+            so.FindProperty("_enableStartupStandAssist").boolValue = false;
+            so.FindProperty("_startupStandAssistDuration").floatValue = 4f;
+            so.FindProperty("_enablePersistentSeatedRecovery").boolValue = false;
+            so.FindProperty("_persistentSeatedRecoveryAssistScale").floatValue = 0.35f;
+            so.FindProperty("_persistentSeatedRecoveryMinAssistScale").floatValue = 0.55f;
+            so.FindProperty("_startupAssistTargetHeight").floatValue = 0.9f;
+            so.FindProperty("_startupStandAssistForce").floatValue = 1200f;
+            so.FindProperty("_startupAssistHeightRange").floatValue = 0.35f;
+            so.FindProperty("_startupAssistUseBodyUp").floatValue = 0.4f;
+            so.FindProperty("_startupAssistMaxRiseSpeed").floatValue = 2f;
+            so.FindProperty("_startupLegSpringMultiplier").floatValue = 2.25f;
+            so.FindProperty("_startupLegDamperMultiplier").floatValue = 1.75f;
+            so.FindProperty("_startupAssistLegForceFraction").floatValue = 0.8f;
+            so.FindProperty("_deferLegJointsToAnimator").boolValue = true;
+            so.FindProperty("_debugStateTransitions").boolValue = false;
+            so.FindProperty("_debugRecoveryTelemetry").boolValue = false;
+            so.FindProperty("_debugRecoveryTelemetryInterval").floatValue = 0.25f;
+            so.FindProperty("_debugSeatedHeightThreshold").floatValue = 0.75f;
+            so.FindProperty("_enableComStabilization").boolValue = true;
+            so.FindProperty("_comStabilizationStrength").floatValue = 400f;
+            so.FindProperty("_comStabilizationDamping").floatValue = 60f;
+            so.FindProperty("_enableHeightMaintenance").boolValue = true;
+            so.FindProperty("_standingHipsHeight").floatValue = 0.95f;
+            so.FindProperty("_heightMaintenanceStrength").floatValue = 1500f;
+            so.FindProperty("_heightMaintenanceDamping").floatValue = 120f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachPlayerMovement(GameObject go)
+        {
+            var comp = go.AddComponent<PlayerMovement>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_moveForce").floatValue = 300f;
+            so.FindProperty("_maxSpeed").floatValue = 5f;
+            so.FindProperty("_jumpForce").floatValue = 100f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachCharacterState(GameObject go)
+        {
+            var comp = go.AddComponent<CharacterState>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_moveEnterThreshold").floatValue = 0.1f;
+            so.FindProperty("_moveExitThreshold").floatValue = 0.05f;
+            so.FindProperty("_getUpDelay").floatValue = 0.5f;
+            so.FindProperty("_knockoutDuration").floatValue = 1.5f;
+            so.FindProperty("_getUpForce").floatValue = 250f;
+            so.FindProperty("_getUpTimeout").floatValue = 3f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachLegAnimator(GameObject go)
+        {
+            var comp = go.AddComponent<LegAnimator>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_stepAngle").floatValue = 50.3f;
+            so.FindProperty("_stepFrequencyScale").floatValue = 0.1f;
+            so.FindProperty("_stepFrequency").floatValue = 1f;
+            so.FindProperty("_kneeAngle").floatValue = 60f;
+            so.FindProperty("_upperLegLiftBoost").floatValue = 31.9f;
+            so.FindProperty("_idleBlendSpeed").floatValue = 5f;
+            so.FindProperty("_yawAlignThresholdDeg").floatValue = 90f;
+            so.FindProperty("_swingAxis").vector3Value = new Vector3(0f, 0f, 1f);
+            so.FindProperty("_kneeAxis").vector3Value = new Vector3(0f, 0f, 1f);
+            so.FindProperty("_useWorldSpaceSwing").boolValue = true;
+            so.FindProperty("_debugLog").boolValue = false;
+            so.FindProperty("_airborneSpringMultiplier").floatValue = 0.15f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachArmAnimator(GameObject go)
+        {
+            var comp = go.AddComponent<ArmAnimator>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_armSwingAngle").floatValue = 20f;
+            so.FindProperty("_elbowBendAngle").floatValue = 15f;
+            so.FindProperty("_armSwingScale").floatValue = 1f;
+            so.FindProperty("_armSwingAxis").vector3Value = new Vector3(0f, 0f, 1f);
+            so.FindProperty("_elbowAxis").vector3Value = new Vector3(0f, 0f, 1f);
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachDebugPushForce(GameObject go)
+        {
+            var comp = go.AddComponent<DebugPushForce>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_enableDebugKeys").boolValue = false;
+            so.FindProperty("_smallPushForce").floatValue = 200f;
+            so.FindProperty("_largePushForce").floatValue = 800f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         private static void AttachGroundSensor(GameObject footGO)
         {
-            GroundSensor sensor = footGO.AddComponent<GroundSensor>();
-
-            // Use SerializedObject to write the private [SerializeField] so Unity
-            // serialises it correctly into the prefab.
+            var sensor = footGO.AddComponent<GroundSensor>();
             using var so = new SerializedObject(sensor);
             so.FindProperty("_groundLayers").intValue = 1 << GameSettings.LayerEnvironment;
             so.FindProperty("_castRadius").floatValue = 0.08f;
@@ -372,26 +491,50 @@ namespace PhysicsDrivenMovement.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        /// <summary>
-        /// Adds a <see cref="HandGrabZone"/> component to <paramref name="handGO"/> along
-        /// with a trigger <see cref="SphereCollider"/> for detection. The trigger sphere
-        /// is slightly larger than the hand's physics collider so it can detect nearby
-        /// grabbable objects.
-        /// </summary>
         private static void AttachHandGrabZone(GameObject handGO)
         {
-            // Add trigger sphere for grab detection.
             SphereCollider trigger = handGO.AddComponent<SphereCollider>();
             trigger.isTrigger = true;
             trigger.radius = 0.15f;
 
-            // Add HandGrabZone component.
-            HandGrabZone zone = handGO.AddComponent<HandGrabZone>();
-
-            // Use SerializedObject to write the private [SerializeField] so Unity
-            // serialises it correctly into the prefab.
+            var zone = handGO.AddComponent<HandGrabZone>();
             using var so = new SerializedObject(zone);
             so.FindProperty("_detectionRadius").floatValue = 0.15f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachGrabController(GameObject go)
+        {
+            var comp = go.AddComponent<GrabController>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_grabBreakForce").floatValue = 2000f;
+            so.FindProperty("_grabBreakTorque").floatValue = 2000f;
+            so.FindProperty("_grabArmSpringMultiplier").floatValue = 3f;
+            so.FindProperty("_grabArmDamperMultiplier").floatValue = 2f;
+            so.FindProperty("_throwForceMultiplier").floatValue = 10f;
+            so.FindProperty("_throwMinSpeed").floatValue = 1f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachPunchController(GameObject go)
+        {
+            var comp = go.AddComponent<PunchController>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_punchImpulse").floatValue = 80f;
+            so.FindProperty("_punchDuration").floatValue = 0.3f;
+            so.FindProperty("_punchCooldown").floatValue = 0.5f;
+            so.FindProperty("_punchArmSpringMultiplier").floatValue = 4f;
+            so.FindProperty("_punchArmDamperMultiplier").floatValue = 2f;
+            so.FindProperty("_punchTargetAngle").floatValue = 60f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AttachHitReceiver(GameObject go)
+        {
+            var comp = go.AddComponent<HitReceiver>();
+            using var so = new SerializedObject(comp);
+            so.FindProperty("_knockoutVelocityThreshold").floatValue = 8f;
+            so.FindProperty("_knockoutDuration").floatValue = 3f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
