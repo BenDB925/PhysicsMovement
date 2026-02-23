@@ -379,6 +379,26 @@ namespace PhysicsDrivenMovement.Character
 
             bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.05f;
 
+            // STEP 3b-yaw: Suppress leg swing while the torso is still turning to face
+            //              the movement direction. If input direction is more than
+            //              _yawAlignThresholdDeg away from the hips' current forward,
+            //              treat this frame as idle so BC can finish yaw correction first.
+            //              This prevents legs from taking a full stride mid-180° turn and
+            //              getting tangled.
+            if (isMoving && inputMagnitude > 0.01f)
+            {
+                Vector3 inputWorld = new Vector3(
+                    _playerMovement.CurrentMoveInput.x, 0f,
+                    _playerMovement.CurrentMoveInput.y).normalized;
+                Vector3 hipsForward = new Vector3(transform.forward.x, 0f, transform.forward.z).normalized;
+                float yawDot = Vector3.Dot(hipsForward, inputWorld);
+                // dot < cos(45°) ≈ 0.707 means >45° misalignment — suppress stride.
+                if (yawDot < 0.707f)
+                {
+                    isMoving = false;
+                }
+            }
+
             // STEP 3b: Phase reset on movement restart or sharp direction change.
             //          If we were stopped (smoothedInputMag near 0) and now have input,
             //          snap phase to 0 so legs restart from neutral — avoids launching
