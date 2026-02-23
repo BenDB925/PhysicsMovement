@@ -1,3 +1,4 @@
+using PhysicsDrivenMovement.Input;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -67,6 +68,7 @@ namespace PhysicsDrivenMovement.Character
         private float _cooldownTimer;
 
         // Input
+        private PlayerInputActions _inputActions;
         private bool _punchInputPressed;
         private bool _overridePunchInput;
 
@@ -111,6 +113,10 @@ namespace PhysicsDrivenMovement.Character
             {
                 _handRbR = _handJointR.GetComponent<Rigidbody>();
             }
+
+            // Create and enable PlayerInputActions for punch input.
+            _inputActions = new PlayerInputActions();
+            _inputActions.Enable();
         }
 
         private void Start()
@@ -123,8 +129,8 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1: Read punch input (unless overridden).
             if (!_overridePunchInput)
             {
-                // TODO: Wire to PlayerInputActions.Player.Punch when input is connected.
-                _punchInputPressed = false;
+                _punchInputPressed = _inputActions != null &&
+                                     _inputActions.Player.Punch.WasPressedThisFrame();
             }
 
             // STEP 2: Tick cooldown.
@@ -155,6 +161,15 @@ namespace PhysicsDrivenMovement.Character
             {
                 _punchInputPressed = false;
                 _overridePunchInput = false;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_inputActions != null)
+            {
+                _inputActions.Dispose();
+                _inputActions = null;
             }
         }
 

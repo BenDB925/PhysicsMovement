@@ -1,3 +1,4 @@
+using PhysicsDrivenMovement.Input;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -90,7 +91,8 @@ namespace PhysicsDrivenMovement.Character
 
         private bool _baselinesCaptured;
 
-        // Input state
+        // Input
+        private PlayerInputActions _inputActions;
         private bool _grabInputHeld;
         private bool _overrideGrabInput;
 
@@ -170,6 +172,10 @@ namespace PhysicsDrivenMovement.Character
                     case "Hand_R":     _handJointR = joint; break;
                 }
             }
+
+            // STEP 4: Create and enable PlayerInputActions for grab input.
+            _inputActions = new PlayerInputActions();
+            _inputActions.Enable();
         }
 
         private void Start()
@@ -183,9 +189,8 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1: Read grab input (unless overridden by test seam).
             if (!_overrideGrabInput)
             {
-                // TODO: Wire to PlayerInputActions.Player.Grab when input is connected.
-                // For now, grab input is only available via test seam.
-                _grabInputHeld = false;
+                _grabInputHeld = _inputActions != null &&
+                                 _inputActions.Player.Grab.IsPressed();
             }
 
             // STEP 2: Track pre-update grab state for throw detection.
@@ -204,6 +209,15 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 4: Apply arm stiffening based on current grab state.
             ApplyArmStiffening();
+        }
+
+        private void OnDestroy()
+        {
+            if (_inputActions != null)
+            {
+                _inputActions.Dispose();
+                _inputActions = null;
+            }
         }
 
         /// <summary>
