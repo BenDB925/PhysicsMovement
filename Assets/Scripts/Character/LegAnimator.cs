@@ -353,14 +353,24 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 3: Read move input magnitude (0–1) to gate gait on/off.
-            //         Input magnitude is used only as a binary gate (> 0.01 = moving);
-            //         phase advancement speed is now driven by actual Rigidbody speed
-            //         so cadence is always proportional to real movement, eliminating
-            //         body-outruns-legs and tap-dancing-with-no-momentum problems.
+            // STEP 3: Gate gait on move input OR actual horizontal velocity.
+            //         We use input as a binary gate but also check real velocity so that
+            //         legs continue to animate while the body coasts after key release.
+            //         Without the velocity check, inputMagnitude drops to zero the frame
+            //         the key is released, SetAllLegTargetsToIdentity() fires, and the
+            //         legs snap to rest even though the body is still sliding forward.
             float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
 
-            if (inputMagnitude > 0.01f)
+            float horizontalSpeedGate = 0f;
+            if (_hipsRigidbody != null)
+            {
+                Vector3 hVelGate = _hipsRigidbody.linearVelocity;
+                horizontalSpeedGate = new Vector3(hVelGate.x, 0f, hVelGate.z).magnitude;
+            }
+
+            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.05f;
+
+            if (isMoving)
             {
                 // STEP 4a: MOVING — advance phase accumulator based on actual speed.
                 //          effectiveCycles = max(_stepFrequency, horizontalSpeed × _stepFrequencyScale)
@@ -369,14 +379,8 @@ namespace PhysicsDrivenMovement.Character
                 //              (default 0 = stationary legs until the body actually moves).
                 //            • At 2 m/s with scale 1.5 → 3 cycles/sec.
                 //            • Legs never outrun or lag the body.
-                float horizontalSpeed = 0f;
-                if (_hipsRigidbody != null)
-                {
-                    Vector3 hVel = _hipsRigidbody.linearVelocity;
-                    horizontalSpeed = new Vector3(hVel.x, 0f, hVel.z).magnitude;
-                }
-
-                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeed * _stepFrequencyScale);
+                //          Re-use horizontalSpeedGate computed above (same value, already cached).
+                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
                 _phase += effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
                 // Wrap phase to [0, 2π) to prevent float overflow over time.
@@ -391,7 +395,12 @@ namespace PhysicsDrivenMovement.Character
                 //          up smoothly. We use inputMagnitude (not speed) as the target here
                 //          so the ramp works even at zero actual velocity (starting to push).
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
-                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, inputMagnitude, t);
+                // Use whichever is higher — input magnitude or normalised velocity — as the
+                // amplitude target. This ensures legs animate at full amplitude when coasting
+                // with no key held, matching the visual expectation that moving = legs move.
+                float velocityMag01 = Mathf.Clamp01(horizontalSpeedGate / 2f); // normalise ~0–1 at 2 m/s max
+                float amplitudeTarget = Mathf.Max(inputMagnitude, velocityMag01);
+                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, amplitudeTarget, t);
 
                 // STEP 5: Compute sinusoidal upper-leg swing angles with optional lift boost.
                 //         Left leg uses phase directly; right leg is offset by π (half-cycle)
@@ -481,29 +490,25 @@ namespace PhysicsDrivenMovement.Character
             //         (e.g. just starting to move).
             Vector3 gaitForward = GetWorldGaitForward();
 
-            if (gaitForward.sqrMagnitude < 0.0001f)
-            {
-                // No direction available — use local-space fallback to avoid zero-vector issues.
-                _worldSwingAxis = Vector3.zero;
-                ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
-                return;
-            }
-
             // STEP B: Build the world-space swing axis.
-            //         worldSwingAxis = Cross(gaitForward, worldUp) gives the horizontal axis
-            //         that is perpendicular to the movement direction and lies in the ground
-            //         plane. Rotating around this axis lifts a leg forward or backward in
-            //         the sagittal plane of movement, independent of torso pitch.
-            //         DESIGN: We use Vector3.up (world up) not the Hips local up so the
-            //         knee always folds toward world-space "forward/upward", even when the
-            //         torso is significantly pitched forward.
-            Vector3 worldSwingAxis = Vector3.Cross(gaitForward, Vector3.up).normalized;
-
-            if (worldSwingAxis.sqrMagnitude < 0.0001f)
+            //         Cross(up, forward) gives the correct right-hand axis so that a positive
+            //         swing angle lifts the leg *forward* in the direction of travel.
+            //         If gaitForward is zero (velocity below threshold, no input), reuse the
+            //         last known good axis so legs keep striding rather than snapping to the
+            //         broken local-space fallback path (which causes "cat pulsing").
+            Vector3 worldSwingAxis;
+            if (gaitForward.sqrMagnitude > 0.0001f)
             {
-                // gaitForward is parallel to world up (degenerate — character facing straight
-                // up or down). Fall back to local-space behaviour.
-                _worldSwingAxis = Vector3.zero;
+                worldSwingAxis = Vector3.Cross(Vector3.up, gaitForward).normalized;
+            }
+            else if (_worldSwingAxis.sqrMagnitude > 0.0001f)
+            {
+                // Reuse last known good axis — legs continue striding in the last direction.
+                worldSwingAxis = _worldSwingAxis;
+            }
+            else
+            {
+                // No axis at all (very first frames) — local-space fallback.
                 ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
                 return;
             }
