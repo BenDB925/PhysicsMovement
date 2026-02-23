@@ -194,7 +194,7 @@ namespace PhysicsDrivenMovement.Editor
                 localPos: new Vector3(-0.10f, -0.22f, 0f),
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
-                lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
+                lowAngX: -60f, highAngX: 60f, angY: 12f, angZ: 12f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
@@ -222,7 +222,7 @@ namespace PhysicsDrivenMovement.Editor
                 localPos: new Vector3(0.10f, -0.22f, 0f),
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
-                lowAngX: -60f, highAngX: 60f, angY: 30f, angZ: 30f,
+                lowAngX: -60f, highAngX: 60f, angY: 12f, angZ: 12f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
@@ -250,14 +250,18 @@ namespace PhysicsDrivenMovement.Editor
         [MenuItem("Tools/PhysicsDrivenMovement/Build Player Ragdoll")]
         public static void BuildRagdollPrefab()
         {
-            const string prefabPath   = "Assets/Prefabs/PlayerRagdoll.prefab";
-            const string materialPath = "Assets/PhysicsMaterials/Ragdoll.asset";
-            const string bodyMatPath  = "Assets/Materials/RagdollBody.mat";
+            const string prefabPath    = "Assets/Prefabs/PlayerRagdoll.prefab";
+            const string materialPath  = "Assets/PhysicsMaterials/Ragdoll.asset";
+            const string footMatPath   = "Assets/PhysicsMaterials/RagdollFoot.physicsMaterial";
+            const string bodyMatPath   = "Assets/Materials/RagdollBody.mat";
 
             // STEP 1: Create (or refresh) the physics material asset.
             PhysicsMaterial physicsMat = CreateOrLoadPhysicsMaterial(materialPath);
 
-            // STEP 1b: Create (or refresh) the visual body material.
+            // STEP 1b: Create (or refresh) the low-friction foot physics material.
+            PhysicsMaterial footPhysicsMat = CreateOrLoadFootPhysicsMaterial(footMatPath);
+
+            // STEP 1c: Create (or refresh) the visual body material.
             Material bodyMat = CreateOrLoadBodyMaterial(bodyMatPath);
 
             // STEP 2: Build the GameObject hierarchy in memory.
@@ -277,7 +281,11 @@ namespace PhysicsDrivenMovement.Editor
                 rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
                 // STEP 2b: Add collider shaped to the body part.
-                AddCollider(go, seg, physicsMat);
+                // Feet use a low-friction material to prevent stuck hyperextended poses.
+                PhysicsMaterial colMat = (seg.Name == "Foot_L" || seg.Name == "Foot_R")
+                    ? footPhysicsMat
+                    : physicsMat;
+                AddCollider(go, seg, colMat);
 
                 // STEP 2c: Add a child Visual mesh so there is something to see.
                 AddMeshRenderer(go, seg, bodyMat);
@@ -485,6 +493,40 @@ namespace PhysicsDrivenMovement.Editor
                 bounciness        = 0f,
                 frictionCombine   = PhysicsMaterialCombine.Average,
                 bounceCombine     = PhysicsMaterialCombine.Average
+            };
+
+            AssetDatabase.CreateAsset(mat, assetPath);
+            return mat;
+        }
+
+        /// <summary>
+        /// Creates or loads a low-friction physics material for foot colliders.
+        /// Low friction prevents feet from locking into stuck hyperextended positions.
+        /// dynamicFriction=0.1, staticFriction=0.1, frictionCombine=Minimum.
+        /// </summary>
+        private static PhysicsMaterial CreateOrLoadFootPhysicsMaterial(string assetPath)
+        {
+            PhysicsMaterial mat = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(assetPath);
+            if (mat != null)
+            {
+                return mat;
+            }
+
+            string directory = System.IO.Path.GetDirectoryName(assetPath);
+            if (!AssetDatabase.IsValidFolder(directory))
+            {
+                AssetDatabase.CreateFolder(
+                    System.IO.Path.GetDirectoryName(directory),
+                    System.IO.Path.GetFileName(directory));
+            }
+
+            mat = new PhysicsMaterial("RagdollFoot")
+            {
+                staticFriction  = 0.1f,
+                dynamicFriction = 0.1f,
+                bounciness      = 0f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounceCombine   = PhysicsMaterialCombine.Minimum
             };
 
             AssetDatabase.CreateAsset(mat, assetPath);

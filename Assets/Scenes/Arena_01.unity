@@ -383,7 +383,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f58db81eab8f9264bb24138ff74eb17a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _target: {fileID: 1301647471}
+  _target: {fileID: 0}
   _distance: 6
   _pivotHeightOffset: 1.2
   _minPitch: -20
@@ -477,11 +477,6 @@ Material:
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
---- !u!4 &1301647471 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 2036620642779884686, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-  m_PrefabInstance: {fileID: 1977400338}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1666715398
 GameObject:
   m_ObjectHideFlags: 0
