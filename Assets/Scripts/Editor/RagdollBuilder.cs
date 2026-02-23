@@ -520,16 +520,24 @@ namespace PhysicsDrivenMovement.Editor
                     System.IO.Path.GetFileName(directory));
             }
 
-            mat = new PhysicsMaterial("RagdollFoot")
-            {
-                staticFriction  = 0.1f,
-                dynamicFriction = 0.1f,
-                bounciness      = 0f,
-                frictionCombine = PhysicsMaterialCombine.Minimum,
-                bounceCombine   = PhysicsMaterialCombine.Minimum
-            };
+            // PhysicsMaterial cannot be created via AssetDatabase.CreateAsset() —
+            // must be written as YAML to disk then imported.
+            string yaml =
+                "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n" +
+                "--- !u!134 &13400000\nPhysicMaterial:\n" +
+                "  serializedVersion: 2\n" +
+                "  m_Name: RagdollFoot\n" +
+                "  dynamicFriction: 0.1\n" +
+                "  staticFriction: 0.1\n" +
+                "  bounciness: 0\n" +
+                "  frictionCombine: 3\n" +
+                "  bounceCombine: 3\n";
 
-            AssetDatabase.CreateAsset(mat, assetPath);
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), assetPath),
+                yaml);
+            AssetDatabase.ImportAsset(assetPath);
+            mat = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(assetPath);
             return mat;
         }
 
