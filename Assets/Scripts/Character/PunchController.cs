@@ -4,13 +4,14 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Controls the punch mechanic for both hands: reads per-hand input (click),
-    /// stiffens the corresponding arm, drives the UpperArm toward an extended-forward
+    /// Controls the punch mechanic for both hands: fires on button RELEASE (so a
+    /// quick click-release = punch, while holding = grab via <see cref="GrabController"/>).
+    /// Stiffens the corresponding arm, drives the UpperArm toward an extended-forward
     /// target rotation, and applies an impulse to the Hand Rigidbody for impact force.
     ///
     /// Each hand punches independently with its own duration timer and cooldown.
-    /// Punch is gated on the character being in Standing or Moving state and the
-    /// punch arm not currently grabbing (via <see cref="GrabController"/>).
+    /// Punch is gated on the character being in Standing or Moving state, the
+    /// punch arm not currently grabbing, and the release not being a grab-release.
     ///
     /// Attach to the Hips (root) GameObject alongside other character controllers.
     /// Lifecycle: Awake (cache joints + dependencies), Start (capture baseline drives),
@@ -156,12 +157,20 @@ namespace PhysicsDrivenMovement.Character
         private void FixedUpdate()
         {
             // STEP 1: Read per-hand punch input (unless overridden).
+            // Punch fires on button RELEASE. If the hand was grabbing, the release
+            // is a grab-release (handled by GrabController), not a punch.
             if (!_overridePunchInput)
             {
-                _leftPunchPressed = _inputActions != null &&
-                                    _inputActions.Player.LeftHand.WasPressedThisFrame();
-                _rightPunchPressed = _inputActions != null &&
-                                     _inputActions.Player.RightHand.WasPressedThisFrame();
+                bool leftReleased = _inputActions != null &&
+                                    _inputActions.Player.LeftHand.WasReleasedThisFrame();
+                bool rightReleased = _inputActions != null &&
+                                     _inputActions.Player.RightHand.WasReleasedThisFrame();
+
+                // Only punch if the hand was NOT grabbing (grab release ≠ punch).
+                _leftPunchPressed = leftReleased &&
+                                    !(_grabController != null && _grabController.WasGrabbingLeft);
+                _rightPunchPressed = rightReleased &&
+                                     !(_grabController != null && _grabController.WasGrabbingRight);
             }
 
             // STEP 2: Tick cooldowns.

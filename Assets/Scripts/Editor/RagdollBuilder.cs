@@ -138,7 +138,7 @@ namespace PhysicsDrivenMovement.Editor
                 localPos: new Vector3(-0.23f, 0.08f, 0f),
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
-                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                lowAngX: -180f, highAngX: 80f, angY: 60f, angZ: 180f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
@@ -166,7 +166,7 @@ namespace PhysicsDrivenMovement.Editor
                 localPos: new Vector3(0.23f, 0.08f, 0f),
                 shape: ColliderShape.Capsule,
                 capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
-                lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
+                lowAngX: -180f, highAngX: 80f, angY: 60f, angZ: 180f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
@@ -520,12 +520,12 @@ namespace PhysicsDrivenMovement.Editor
         {
             var comp = go.AddComponent<PunchController>();
             using var so = new SerializedObject(comp);
-            so.FindProperty("_punchImpulse").floatValue = 80f;
-            so.FindProperty("_punchDuration").floatValue = 0.3f;
-            so.FindProperty("_punchCooldown").floatValue = 0.5f;
-            so.FindProperty("_punchArmSpringMultiplier").floatValue = 4f;
-            so.FindProperty("_punchArmDamperMultiplier").floatValue = 2f;
-            so.FindProperty("_punchTargetAngle").floatValue = 60f;
+            so.FindProperty("_punchImpulse").floatValue = 125f;
+            so.FindProperty("_punchDuration").floatValue = 0.5f;
+            so.FindProperty("_punchCooldown").floatValue = 0.06f;
+            so.FindProperty("_punchArmSpringMultiplier").floatValue = 3.02f;
+            so.FindProperty("_punchArmDamperMultiplier").floatValue = 4f;
+            so.FindProperty("_punchTargetAngle").floatValue = 23f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

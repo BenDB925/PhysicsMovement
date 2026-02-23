@@ -1,3 +1,4 @@
+using PhysicsDrivenMovement.Input;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -73,6 +74,22 @@ namespace PhysicsDrivenMovement.Character
                  "Adjust if the joint axis configuration changes.")]
         private Vector3 _elbowAxis = new Vector3(0f, 0f, 1f);
 
+        [Header("Raise Hands")]
+        [SerializeField, Range(0f, 180f)]
+        [Tooltip("Target angle (degrees) to raise the upper arms when RaiseHands is held. " +
+                 "179 avoids the 180° SLERP ambiguity (two equal-length paths) that causes " +
+                 "arms to randomly raise via front or back. Default 179.")]
+        private float _raiseAngle = 179f;
+
+        [SerializeField, Range(0f, 90f)]
+        [Tooltip("Elbow bend angle while hands are raised. 0 = arms fully straight. Default 0.")]
+        private float _raiseElbowAngle = 0f;
+
+        [SerializeField, Range(0.05f, 2f)]
+        [Tooltip("Time in seconds to sweep arms from rest to fully raised (and back). " +
+                 "Gradual sweep forces the SLERP drive through the front path every time. Default 0.3s.")]
+        private float _raiseTransitionTime = 0.3f;
+
         // ── Private Fields ───────────────────────────────────────────────────
 
         /// <summary>Left upper arm ConfigurableJoint, found by name in Awake.</summary>
@@ -99,6 +116,16 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private GrabController _grabController;
 
+        /// <summary>Sibling PunchController, used to skip arm override on punching arms.</summary>
+        private PunchController _punchController;
+
+        // Input for raise-hands action.
+        private PlayerInputActions _inputActions;
+        private bool _raiseInputHeld;
+
+        /// <summary>0 = arms at rest, 1 = fully raised. Ramped gradually to force front-path.</summary>
+        private float _raiseT;
+
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
@@ -110,8 +137,13 @@ namespace PhysicsDrivenMovement.Character
                                  "Arm swing will remain at identity.", this);
             }
 
-            // STEP 1b: Cache optional GrabController for grab cooperation.
+            // STEP 1b: Cache optional GrabController and PunchController.
             TryGetComponent(out _grabController);
+            TryGetComponent(out _punchController);
+
+            // STEP 1c: Create input for raise-hands action.
+            _inputActions = new PlayerInputActions();
+            _inputActions.Enable();
 
             // STEP 2: Locate the four arm ConfigurableJoints by searching children by name.
             //         Pattern mirrors LegAnimator's Awake exactly — hierarchy-agnostic name lookup.
@@ -159,6 +191,23 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
+            // Read raise-hands input.
+            _raiseInputHeld = _inputActions != null &&
+                              _inputActions.Player.RaiseHands.IsPressed();
+
+            // STEP 0: Ramp raise progress. Gradual sweep ensures the SLERP drive
+            //         always takes the front path (each incremental step is small).
+            float raiseGoal = _raiseInputHeld ? 1f : 0f;
+            float step = Time.fixedDeltaTime / Mathf.Max(_raiseTransitionTime, 0.01f);
+            _raiseT = Mathf.MoveTowards(_raiseT, raiseGoal, step);
+
+            // While raising or lowering, override arm targets.
+            if (_raiseT > 0.001f)
+            {
+                ApplyRaisedPose();
+                return;
+            }
+
             // STEP 1: Gate on missing LegAnimator — reset to identity and bail out.
             if (_legAnimator == null)
             {
@@ -182,30 +231,55 @@ namespace PhysicsDrivenMovement.Character
             float effectiveScale = smoothedInputMag * _armSwingScale;
 
             // STEP 4: Read the gait phase from LegAnimator and compute arm phases.
-            //         Arms use the OPPOSITE phase from legs:
-            //           Left arm uses  (phase + π) → opposite of left leg (phase)
-            //           Right arm uses (phase)       → opposite of right leg (phase + π)
-            //         This means left arm forward = right leg forward (natural human gait).
-            //
-            //         DESIGN: The phase relationship is:
-            //           LegAnimator left leg  uses  phase       (sin positive = forward swing)
-            //           LegAnimator right leg uses  phase + π   (sin positive = forward swing)
-            //           ArmAnimator left arm  uses  phase + π   (counter to left leg)
-            //           ArmAnimator right arm uses  phase       (counter to right leg)
             float legPhase = _legAnimator.Phase;
 
-            float sinLeft  = Mathf.Sin(legPhase + Mathf.PI);   // opposite to left leg
-            float sinRight = Mathf.Sin(legPhase);              // opposite to right leg
+            float sinLeft  = Mathf.Sin(legPhase + Mathf.PI);
+            float sinRight = Mathf.Sin(legPhase);
 
             float leftSwingDeg  = sinLeft  * _armSwingAngle * effectiveScale;
             float rightSwingDeg = sinRight * _armSwingAngle * effectiveScale;
 
-            // STEP 5: Apply upper arm swing rotations using local-space targetRotation.
-            //         Pattern is identical to LegAnimator.ApplyLocalSpaceSwing.
+            // STEP 5: Apply upper arm swing rotations.
             ApplyArmSwing(leftSwingDeg, rightSwingDeg, effectiveScale);
         }
 
+        private void OnDestroy()
+        {
+            if (_inputActions != null)
+            {
+                _inputActions.Dispose();
+                _inputActions = null;
+            }
+        }
+
         // ── Private Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Drives both arms into a raised pose (hands up). Skips arms that are
+        /// currently grabbing or punching so those systems retain control.
+        /// Negative angle on the swing axis lifts the arm backward/upward.
+        /// </summary>
+        private void ApplyRaisedPose()
+        {
+            bool leftGrabbing = _grabController != null && _grabController.IsGrabbingLeft;
+            bool rightGrabbing = _grabController != null && _grabController.IsGrabbingRight;
+            bool leftPunching = _punchController != null && _punchController.IsPunchingLeft;
+            bool rightPunching = _punchController != null && _punchController.IsPunchingRight;
+
+            float currentAngle = _raiseT * _raiseAngle;
+            Quaternion upperTarget = Quaternion.AngleAxis(-currentAngle, _armSwingAxis);
+            float currentElbow = _raiseT * _raiseElbowAngle;
+            Quaternion elbowTarget = Quaternion.AngleAxis(-currentElbow, _elbowAxis);
+
+            if (_upperArmL != null && !leftGrabbing && !leftPunching)
+                _upperArmL.targetRotation = upperTarget;
+            if (_upperArmR != null && !rightGrabbing && !rightPunching)
+                _upperArmR.targetRotation = upperTarget;
+            if (_lowerArmL != null && !leftGrabbing && !leftPunching)
+                _lowerArmL.targetRotation = elbowTarget;
+            if (_lowerArmR != null && !rightGrabbing && !rightPunching)
+                _lowerArmR.targetRotation = elbowTarget;
+        }
 
         /// <summary>
         /// Applies the computed arm swing angles to the four arm ConfigurableJoints.

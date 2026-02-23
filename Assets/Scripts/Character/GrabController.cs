@@ -91,8 +91,6 @@ namespace PhysicsDrivenMovement.Character
 
         private bool _baselinesCaptured;
 
-        private PunchController _punchController;
-
         // Input
         private PlayerInputActions _inputActions;
         private bool _grabLeftHeld;
@@ -116,6 +114,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>True when the right hand has an active grab FixedJoint.</summary>
         public bool IsGrabbingRight => _zoneR != null && _zoneR.IsGrabbing;
+
+        /// <summary>True if the left hand was grabbing at the start of the current FixedUpdate (before release).</summary>
+        public bool WasGrabbingLeft => _wasGrabbingLeft;
+
+        /// <summary>True if the right hand was grabbing at the start of the current FixedUpdate (before release).</summary>
+        public bool WasGrabbingRight => _wasGrabbingRight;
 
         /// <summary>The Rigidbody currently grabbed by the left hand, or null.</summary>
         public Rigidbody GrabbedTargetLeft => _zoneL != null ? _zoneL.GrabbedTarget : null;
@@ -155,9 +159,8 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Cache Hips Rigidbody and PunchController.
+            // STEP 1: Cache Hips Rigidbody.
             TryGetComponent(out _hipsRb);
-            TryGetComponent(out _punchController);
 
             // STEP 2: Find HandGrabZone components on Hand_L and Hand_R.
             HandGrabZone[] zones = GetComponentsInChildren<HandGrabZone>(includeInactive: true);
@@ -214,19 +217,13 @@ namespace PhysicsDrivenMovement.Character
         private void FixedUpdate()
         {
             // STEP 1: Read per-hand grab input (unless overridden by test seam).
-            // Grab uses IsPressed (hold) on the same LeftHand/RightHand actions that
-            // PunchController reads with WasPressedThisFrame (click).
-            // Skip grab on a hand that's currently punching so click = punch, hold = grab.
+            // Grab uses IsPressed (hold). Punch fires on release (in PunchController).
             if (!_overrideGrabInput)
             {
-                bool leftHeld = _inputActions != null &&
+                _grabLeftHeld = _inputActions != null &&
                                 _inputActions.Player.LeftHand.IsPressed();
-                bool rightHeld = _inputActions != null &&
+                _grabRightHeld = _inputActions != null &&
                                  _inputActions.Player.RightHand.IsPressed();
-
-                // Suppress grab while the hand is mid-punch.
-                _grabLeftHeld = leftHeld && !(_punchController != null && _punchController.IsPunchingLeft);
-                _grabRightHeld = rightHeld && !(_punchController != null && _punchController.IsPunchingRight);
             }
 
             // STEP 2: Track pre-update grab state for throw detection.

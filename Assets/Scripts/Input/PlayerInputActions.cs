@@ -18,6 +18,7 @@ namespace PhysicsDrivenMovement.Input
         private readonly InputAction _playerJump;
         private readonly InputAction _playerLeftHand;
         private readonly InputAction _playerRightHand;
+        private readonly InputAction _playerRaiseHands;
 
         public PlayerInputActions()
         {
@@ -38,6 +39,9 @@ namespace PhysicsDrivenMovement.Input
 
             _playerRightHand = _player.AddAction("RightHand", InputActionType.Button);
             _playerRightHand.expectedControlType = "Button";
+
+            _playerRaiseHands = _player.AddAction("RaiseHands", InputActionType.Button);
+            _playerRaiseHands.expectedControlType = "Button";
 
             AddMoveBindings();
             AddLookBindings();
@@ -90,6 +94,9 @@ namespace PhysicsDrivenMovement.Input
 
             _playerRightHand.AddBinding("<Mouse>/rightButton");
             _playerRightHand.AddBinding("<Gamepad>/rightTrigger");
+
+            _playerRaiseHands.AddBinding("<Keyboard>/leftShift");
+            _playerRaiseHands.AddBinding("<Gamepad>/buttonNorth");
         }
 
         public readonly struct PlayerActions
@@ -110,6 +117,8 @@ namespace PhysicsDrivenMovement.Input
             public InputAction LeftHand => _wrapper._playerLeftHand;
 
             public InputAction RightHand => _wrapper._playerRightHand;
+
+            public InputAction RaiseHands => _wrapper._playerRaiseHands;
 
             public InputActionMap Get() => _wrapper._player;
 
