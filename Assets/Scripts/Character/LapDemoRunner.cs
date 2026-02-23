@@ -26,6 +26,11 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Assign the PlayerRagdoll prefab here.")]
         [SerializeField] private GameObject _playerRagdollPrefab;
 
+        [Header("Spawn")]
+        [Tooltip("Where to spawn the character. Defaults to the first waypoint. " +
+                 "Adjust Y if Arena_01 floor is not at Y=0.")]
+        [SerializeField] private Vector3 _spawnOffset = new Vector3(0f, 1.1f, 0f);
+
         [Header("Timing")]
         [Tooltip("Seconds to let the character settle before the lap starts.")]
         [SerializeField, Range(1f, 5f)] private float _settleSeconds = 2f;
@@ -122,7 +127,16 @@ namespace PhysicsDrivenMovement.Character
         {
             if (!_lapRunning || _movement == null) return;
 
-            // Ghost driver: point toward current waypoint on XZ plane.
+            // Ghost driver: pause input when fallen — let the character get up first.
+            if (_characterState != null &&
+                (_characterState.CurrentState == CharacterStateType.Fallen ||
+                 _characterState.CurrentState == CharacterStateType.GettingUp))
+            {
+                _movement.SetMoveInputForTest(Vector2.zero);
+                return;
+            }
+
+            // Point toward current waypoint on XZ plane.
             Vector3 hipsPos   = _hipsTransform.position;
             Vector3 target    = CourseWaypoints[_currentWaypoint];
             Vector3 toTarget  = new Vector3(target.x - hipsPos.x, 0f, target.z - hipsPos.z);
@@ -148,14 +162,6 @@ namespace PhysicsDrivenMovement.Character
                     _movement.SetMoveInputForTest(Vector2.zero);
                 }
             }
-
-            // Track falls.
-            if (_characterState != null &&
-                _characterState.CurrentState == CharacterStateType.Fallen)
-            {
-                // Count each new fall entry (edge detect via a flag would be cleaner,
-                // but for display purposes we just log while fallen).
-            }
         }
 
         // ── Lap coroutine ─────────────────────────────────────────────────────────
@@ -163,7 +169,7 @@ namespace PhysicsDrivenMovement.Character
         private IEnumerator RunLap()
         {
             // STEP 1: Spawn the real prefab at the start gate.
-            Vector3 spawnPos = CourseWaypoints[0] + Vector3.up * 1.1f;
+            Vector3 spawnPos = CourseWaypoints[0] + _spawnOffset;
             _instance        = Instantiate(_playerRagdollPrefab, spawnPos, Quaternion.identity);
 
             _hipsTransform  = _instance.transform;
@@ -219,13 +225,17 @@ namespace PhysicsDrivenMovement.Character
                         prevState != CharacterStateType.Fallen)
                     {
                         _fallCount++;
+                        Debug.Log($"[LapDemoRunner] Fall #{_fallCount} at gate {_currentWaypoint}, " +
+                                  $"elapsed {Time.time - _lapStartTime:F1}s");
                     }
                     prevState = state;
                 }
 
-                _statusLine = $"Gate {_currentWaypoint}/{CourseWaypoints.Length - 1} | " +
-                              $"Falls: {_fallCount} | " +
-                              $"Elapsed: {Time.time - _lapStartTime:F1}s";
+                _statusLine = $"Gate {_currentWaypoint}/{CourseWaypoints.Length - 1}  ·  " +
+                              $"Falls: {_fallCount}  ·  " +
+                              $"{Time.time - _lapStartTime:F1}s" +
+                              (_characterState?.CurrentState == CharacterStateType.Fallen
+                                  ? "  ·  [FALLEN — waiting to get up]" : "");
 
                 yield return new WaitForFixedUpdate();
             }
