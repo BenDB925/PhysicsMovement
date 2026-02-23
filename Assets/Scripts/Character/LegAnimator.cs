@@ -217,6 +217,15 @@ namespace PhysicsDrivenMovement.Character
         private int _debugFrameCounter;
 
         /// <summary>
+        /// Input direction from the previous FixedUpdate frame, used to detect direction changes
+        /// that warrant a phase reset so legs restart from neutral rather than mid-arc.
+        /// </summary>
+        private Vector2 _prevInputDir;
+
+        /// <summary>Whether the character was moving last frame — used to detect movement restarts.</summary>
+        private bool _wasMoving;
+
+        /// <summary>
         /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/> this frame.
         /// Refreshed unconditionally at the top of every <see cref="FixedUpdate"/> call so it is
         /// never stale. Zero when world-space swing was not applied this frame (e.g. idle,
@@ -369,6 +378,29 @@ namespace PhysicsDrivenMovement.Character
             }
 
             bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.05f;
+
+            // STEP 3b: Phase reset on movement restart or sharp direction change.
+            //          If we were stopped (smoothedInputMag near 0) and now have input,
+            //          snap phase to 0 so legs restart from neutral — avoids launching
+            //          into a large arc mid-stride and clipping the ground.
+            //          Also reset on sharp direction change (dot < 0.5 = >60° turn).
+            Vector2 currentInputDir = inputMagnitude > 0.01f
+                ? _playerMovement.CurrentMoveInput.normalized
+                : Vector2.zero;
+
+            bool restarting = !_wasMoving && isMoving;
+            bool sharpTurn  = _prevInputDir.sqrMagnitude > 0.01f
+                && currentInputDir.sqrMagnitude > 0.01f
+                && Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
+
+            if (restarting || sharpTurn)
+            {
+                _phase = 0f;
+                _smoothedInputMag = 0f;
+            }
+
+            _prevInputDir = currentInputDir;
+            _wasMoving    = isMoving;
 
             if (isMoving)
             {
