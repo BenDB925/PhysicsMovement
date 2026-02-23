@@ -227,13 +227,59 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             var result = new LapResult();
             yield return RunGhostDriver(result);
 
-            float lapSeconds = result.LapFrames / 100f;
-            string headline = $"[LAP TIME] {lapSeconds:F2}s | Falls: {result.FallCount} | " +
-                              $"Gates: {result.GatesHit}/{result.TotalGates}";
+            float  lapSeconds = result.LapFrames / 100f;
+            string headline   = $"[LAP TIME] {lapSeconds:F2}s | Falls: {result.FallCount} | " +
+                                $"Gates: {result.GatesHit}/{result.TotalGates}";
             Debug.Log(headline);
             Debug.Log($"[LapCourse] Full summary: {BuildSummary(result)}");
 
+            // ── Personal best tracking ────────────────────────────────────────────
+            SavePBIfFaster(lapSeconds, result.FallCount, result.GatesHit, result.TotalGates);
+
             Assert.Pass(headline);
+        }
+
+        // ── PB persistence ────────────────────────────────────────────────────────
+
+        private static string PBFilePath =>
+            Path.Combine(Application.dataPath, "..", "Logs", "lap-pb.txt");
+
+        private static void SavePBIfFaster(float lapTime, int falls, int gates, int total)
+        {
+            // Only record a PB on a clean lap (no falls, all gates hit).
+            if (falls > 0 || gates < total) return;
+
+            string pbPath = PBFilePath;
+            float  existingPB = float.MaxValue;
+
+            if (File.Exists(pbPath))
+            {
+                string[] lines = File.ReadAllLines(pbPath);
+                if (lines.Length > 0)
+                {
+                    // Format: "PB: 23.65s | ..."
+                    string[] parts = lines[0].Split('|');
+                    if (parts.Length > 0)
+                    {
+                        string t = parts[0].Replace("PB:", "").Replace("s", "").Trim();
+                        float.TryParse(t, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out existingPB);
+                    }
+                }
+            }
+
+            if (lapTime >= existingPB) return;  // not faster
+
+            string date    = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            string newPB   = $"PB: {lapTime:F2}s | Falls: {falls} | Gates: {gates}/{total} | Date: {date}";
+            string prevLine = File.Exists(pbPath)
+                ? File.ReadAllLines(pbPath)[0]
+                : "Previous: --";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(pbPath)!);
+            File.WriteAllText(pbPath, $"{newPB}\n{prevLine}\n");
+
+            Debug.Log($"[LapCourse] 🏆 NEW PB! {newPB}");
         }
 
         // ── Ghost driver coroutine ────────────────────────────────────────────────
