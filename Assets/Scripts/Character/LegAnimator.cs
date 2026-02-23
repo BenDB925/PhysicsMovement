@@ -301,6 +301,9 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Counts FixedUpdate frames remaining in the current recovery window.</summary>
         private int _recoveryFrameCounter;
 
+        /// <summary>Cooldown frames after recovery before stuck detector can fire again.</summary>
+        private int _recoveryCooldownCounter;
+
         // ── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -613,7 +616,8 @@ namespace PhysicsDrivenMovement.Character
                 // Stuck = trying to move but making no forward progress in the input direction.
                 bool stuckCondition = _smoothedInputMag > 0.5f
                     && forwardProgress < _stuckSpeedThreshold
-                    && stateAllowsRecovery;
+                    && stateAllowsRecovery
+                    && _recoveryCooldownCounter <= 0;  // don't re-fire immediately after recovery
 
                 if (stuckCondition)
                 {
@@ -623,6 +627,9 @@ namespace PhysicsDrivenMovement.Character
                 {
                     _stuckFrameCounter = 0;
                 }
+
+                // Tick down the post-recovery cooldown each frame regardless.
+                if (_recoveryCooldownCounter > 0) _recoveryCooldownCounter--;
 
                 // Trigger recovery when stuck long enough.
                 if (_stuckFrameCounter >= _stuckFrameThreshold && stateAllowsRecovery)
@@ -644,9 +651,10 @@ namespace PhysicsDrivenMovement.Character
                 _recoveryFrameCounter--;
                 if (_recoveryFrameCounter <= 0)
                 {
-                    // Recovery complete: restore spring and resume normal gait.
+                    // Recovery complete: restore spring, start cooldown, resume normal gait.
                     _isRecovering = false;
                     _stuckFrameCounter = 0;
+                    _recoveryCooldownCounter = _recoveryFrames * 2; // cooldown = 2× recovery duration
                     SetLegSpringMultiplier(1f);
                 }
 
