@@ -4,17 +4,17 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Controls the punch mechanic: reads punch input, stiffens the right arm, drives
-    /// the UpperArm toward an extended-forward target rotation, and applies an impulse
-    /// to the Hand Rigidbody for impact force.
+    /// Controls the punch mechanic for both hands: reads per-hand input (click),
+    /// stiffens the corresponding arm, drives the UpperArm toward an extended-forward
+    /// target rotation, and applies an impulse to the Hand Rigidbody for impact force.
     ///
-    /// The punch is duration-based (default 0.3s) with a cooldown timer. It is gated on
-    /// the character being in Standing or Moving state and the punch arm not currently
-    /// grabbing (via <see cref="GrabController"/>).
+    /// Each hand punches independently with its own duration timer and cooldown.
+    /// Punch is gated on the character being in Standing or Moving state and the
+    /// punch arm not currently grabbing (via <see cref="GrabController"/>).
     ///
     /// Attach to the Hips (root) GameObject alongside other character controllers.
     /// Lifecycle: Awake (cache joints + dependencies), Start (capture baseline drives),
-    /// FixedUpdate (process punch state machine).
+    /// FixedUpdate (process punch state machine per hand).
     /// Collaborators: <see cref="GrabController"/>, <see cref="BalanceController"/>,
     /// <see cref="CharacterState"/>.
     /// </summary>
@@ -36,59 +36,85 @@ namespace PhysicsDrivenMovement.Character
         private float _punchCooldown = 0.5f;
 
         [SerializeField, Range(1f, 10f)]
-        [Tooltip("Multiplier applied to right arm joint springs during a punch. Default 4.")]
+        [Tooltip("Multiplier applied to arm joint springs during a punch. Default 4.")]
         private float _punchArmSpringMultiplier = 4f;
 
         [SerializeField, Range(1f, 10f)]
-        [Tooltip("Multiplier applied to right arm joint dampers during a punch. Default 2.")]
+        [Tooltip("Multiplier applied to arm joint dampers during a punch. Default 2.")]
         private float _punchArmDamperMultiplier = 2f;
 
         [SerializeField, Range(0f, 90f)]
-        [Tooltip("Target angle (degrees) for the UpperArm_R joint during punch — drives arm forward. Default 60.")]
+        [Tooltip("Target angle (degrees) for the UpperArm joint during punch — drives arm forward. Default 60.")]
         private float _punchTargetAngle = 60f;
 
-        // ── Private Fields ───────────────────────────────────────────────────
+        // ── Per-Hand Arm Data ───────────────────────────────────────────────
+
+        private struct ArmData
+        {
+            public ConfigurableJoint UpperArm;
+            public ConfigurableJoint LowerArm;
+            public ConfigurableJoint HandJoint;
+            public Rigidbody HandRb;
+
+            public JointDrive BaseUpperArmDrive;
+            public JointDrive BaseLowerArmDrive;
+            public JointDrive BaseHandDrive;
+
+            public bool IsPunching;
+            public float PunchTimer;
+            public float CooldownTimer;
+        }
+
+        // ── Private Fields ──────────────────────────────────────────────────
 
         private BalanceController _balance;
         private CharacterState _characterState;
         private GrabController _grabController;
 
-        private ConfigurableJoint _upperArmR;
-        private ConfigurableJoint _lowerArmR;
-        private ConfigurableJoint _handJointR;
-        private Rigidbody _handRbR;
-
-        private JointDrive _baseUpperArmRDrive;
-        private JointDrive _baseLowerArmRDrive;
-        private JointDrive _baseHandRDrive;
+        private ArmData _left;
+        private ArmData _right;
         private bool _baselinesCaptured;
-
-        private bool _isPunching;
-        private float _punchTimer;
-        private float _cooldownTimer;
 
         // Input
         private PlayerInputActions _inputActions;
-        private bool _punchInputPressed;
+        private bool _leftPunchPressed;
+        private bool _rightPunchPressed;
         private bool _overridePunchInput;
 
-        // ── Public Properties ────────────────────────────────────────────────
+        // ── Public Properties ───────────────────────────────────────────────
 
-        /// <summary>True while the punch is active (arm stiffened, impulse applied).</summary>
-        public bool IsPunching => _isPunching;
+        /// <summary>True while the left arm is actively punching.</summary>
+        public bool IsPunchingLeft => _left.IsPunching;
 
-        // ── Test Seams ───────────────────────────────────────────────────────
+        /// <summary>True while the right arm is actively punching.</summary>
+        public bool IsPunchingRight => _right.IsPunching;
+
+        /// <summary>True while either arm is actively punching.</summary>
+        public bool IsPunching => _left.IsPunching || _right.IsPunching;
+
+        // ── Test Seams ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Test seam: directly inject punch input, bypassing the Input System.
+        /// Test seam: directly inject punch input for both hands, bypassing the Input System.
         /// </summary>
         public void SetPunchInputForTest(bool pressed)
         {
-            _punchInputPressed = pressed;
+            _leftPunchPressed = pressed;
+            _rightPunchPressed = pressed;
             _overridePunchInput = true;
         }
 
-        // ── Unity Lifecycle ──────────────────────────────────────────────────
+        /// <summary>
+        /// Test seam: directly inject per-hand punch input, bypassing the Input System.
+        /// </summary>
+        public void SetPunchInputForTest(bool leftPressed, bool rightPressed)
+        {
+            _leftPunchPressed = leftPressed;
+            _rightPunchPressed = rightPressed;
+            _overridePunchInput = true;
+        }
+
+        // ── Unity Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()
         {
@@ -96,25 +122,28 @@ namespace PhysicsDrivenMovement.Character
             TryGetComponent(out _characterState);
             TryGetComponent(out _grabController);
 
-            // Find right arm joints by name.
+            // Find arm joints by name.
             ConfigurableJoint[] allJoints = GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
             foreach (ConfigurableJoint joint in allJoints)
             {
                 switch (joint.gameObject.name)
                 {
-                    case "UpperArm_R": _upperArmR = joint; break;
-                    case "LowerArm_R": _lowerArmR = joint; break;
-                    case "Hand_R":     _handJointR = joint; break;
+                    case "UpperArm_L": _left.UpperArm = joint; break;
+                    case "LowerArm_L": _left.LowerArm = joint; break;
+                    case "Hand_L":     _left.HandJoint = joint; break;
+                    case "UpperArm_R": _right.UpperArm = joint; break;
+                    case "LowerArm_R": _right.LowerArm = joint; break;
+                    case "Hand_R":     _right.HandJoint = joint; break;
                 }
             }
 
-            // Cache Hand_R Rigidbody for impulse.
-            if (_handJointR != null)
-            {
-                _handRbR = _handJointR.GetComponent<Rigidbody>();
-            }
+            // Cache Hand Rigidbodies for impulse.
+            if (_left.HandJoint != null)
+                _left.HandRb = _left.HandJoint.GetComponent<Rigidbody>();
+            if (_right.HandJoint != null)
+                _right.HandRb = _right.HandJoint.GetComponent<Rigidbody>();
 
-            // Create and enable PlayerInputActions for punch input.
+            // Create and enable PlayerInputActions.
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
         }
@@ -126,40 +155,30 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // STEP 1: Read punch input (unless overridden).
+            // STEP 1: Read per-hand punch input (unless overridden).
             if (!_overridePunchInput)
             {
-                _punchInputPressed = _inputActions != null &&
-                                     _inputActions.Player.Punch.WasPressedThisFrame();
+                _leftPunchPressed = _inputActions != null &&
+                                    _inputActions.Player.LeftHand.WasPressedThisFrame();
+                _rightPunchPressed = _inputActions != null &&
+                                     _inputActions.Player.RightHand.WasPressedThisFrame();
             }
 
-            // STEP 2: Tick cooldown.
-            if (_cooldownTimer > 0f)
-            {
-                _cooldownTimer -= Time.fixedDeltaTime;
-            }
+            // STEP 2: Tick cooldowns.
+            if (_left.CooldownTimer > 0f)
+                _left.CooldownTimer -= Time.fixedDeltaTime;
+            if (_right.CooldownTimer > 0f)
+                _right.CooldownTimer -= Time.fixedDeltaTime;
 
-            // STEP 3: If currently punching, tick the punch timer.
-            if (_isPunching)
-            {
-                _punchTimer -= Time.fixedDeltaTime;
-                if (_punchTimer <= 0f)
-                {
-                    EndPunch();
-                }
-                return;
-            }
-
-            // STEP 4: Try to start a new punch.
-            if (_punchInputPressed && CanPunch())
-            {
-                StartPunch();
-            }
+            // STEP 3: Process each hand's punch state.
+            ProcessHand(ref _left, _leftPunchPressed, isLeftHand: true);
+            ProcessHand(ref _right, _rightPunchPressed, isLeftHand: false);
 
             // Consume the input.
             if (_overridePunchInput)
             {
-                _punchInputPressed = false;
+                _leftPunchPressed = false;
+                _rightPunchPressed = false;
                 _overridePunchInput = false;
             }
         }
@@ -173,19 +192,36 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
-        // ── Private Methods ──────────────────────────────────────────────────
+        // ── Private Methods ─────────────────────────────────────────────────
 
-        private bool CanPunch()
+        private void ProcessHand(ref ArmData arm, bool inputPressed, bool isLeftHand)
         {
-            // Gate: cooldown must have expired.
-            if (_cooldownTimer > 0f)
+            // If currently punching, tick the punch timer.
+            if (arm.IsPunching)
+            {
+                arm.PunchTimer -= Time.fixedDeltaTime;
+                if (arm.PunchTimer <= 0f)
+                {
+                    EndPunch(ref arm);
+                }
+                return;
+            }
+
+            // Try to start a new punch.
+            if (inputPressed && CanPunch(ref arm, isLeftHand))
+            {
+                StartPunch(ref arm);
+            }
+        }
+
+        private bool CanPunch(ref ArmData arm, bool isLeftHand)
+        {
+            if (arm.CooldownTimer > 0f)
                 return false;
 
-            // Gate: must not be fallen.
             if (_balance != null && _balance.IsFallen)
                 return false;
 
-            // Gate: character must be Standing or Moving.
             if (_characterState != null)
             {
                 CharacterStateType state = _characterState.CurrentState;
@@ -193,66 +229,72 @@ namespace PhysicsDrivenMovement.Character
                     return false;
             }
 
-            // Gate: right arm must not be grabbing.
-            if (_grabController != null && _grabController.IsGrabbingRight)
-                return false;
+            // Gate: this arm must not be grabbing.
+            if (_grabController != null)
+            {
+                if (isLeftHand && _grabController.IsGrabbingLeft)
+                    return false;
+                if (!isLeftHand && _grabController.IsGrabbingRight)
+                    return false;
+            }
 
             return true;
         }
 
-        private void StartPunch()
+        private void StartPunch(ref ArmData arm)
         {
-            _isPunching = true;
-            _punchTimer = _punchDuration;
+            arm.IsPunching = true;
+            arm.PunchTimer = _punchDuration;
 
-            // Stiffen right arm joints.
-            StiffenRightArm(true);
+            StiffenArm(ref arm, true);
 
-            // Drive UpperArm_R toward the extended-forward target angle.
-            if (_upperArmR != null)
+            if (arm.UpperArm != null)
             {
-                _upperArmR.targetRotation = Quaternion.AngleAxis(_punchTargetAngle, Vector3.forward);
+                arm.UpperArm.targetRotation = Quaternion.AngleAxis(_punchTargetAngle, Vector3.forward);
             }
 
-            // Apply forward impulse to the hand.
-            if (_handRbR != null)
+            if (arm.HandRb != null)
             {
                 Vector3 punchDir = transform.forward;
-                _handRbR.AddForce(punchDir * _punchImpulse, ForceMode.Impulse);
+                arm.HandRb.AddForce(punchDir * _punchImpulse, ForceMode.Impulse);
             }
         }
 
-        private void EndPunch()
+        private void EndPunch(ref ArmData arm)
         {
-            _isPunching = false;
-            _cooldownTimer = _punchCooldown;
+            arm.IsPunching = false;
+            arm.CooldownTimer = _punchCooldown;
 
-            // Restore right arm drives to baseline.
-            StiffenRightArm(false);
+            StiffenArm(ref arm, false);
 
-            // Reset target rotation to identity.
-            if (_upperArmR != null)
+            if (arm.UpperArm != null)
             {
-                _upperArmR.targetRotation = Quaternion.identity;
+                arm.UpperArm.targetRotation = Quaternion.identity;
             }
         }
 
         private void CaptureBaselineDrives()
         {
-            if (_upperArmR != null) _baseUpperArmRDrive = _upperArmR.slerpDrive;
-            if (_lowerArmR != null) _baseLowerArmRDrive = _lowerArmR.slerpDrive;
-            if (_handJointR != null) _baseHandRDrive = _handJointR.slerpDrive;
+            CaptureArmBaseline(ref _left);
+            CaptureArmBaseline(ref _right);
             _baselinesCaptured = true;
         }
 
-        private void StiffenRightArm(bool stiffen)
+        private static void CaptureArmBaseline(ref ArmData arm)
+        {
+            if (arm.UpperArm != null) arm.BaseUpperArmDrive = arm.UpperArm.slerpDrive;
+            if (arm.LowerArm != null) arm.BaseLowerArmDrive = arm.LowerArm.slerpDrive;
+            if (arm.HandJoint != null) arm.BaseHandDrive = arm.HandJoint.slerpDrive;
+        }
+
+        private void StiffenArm(ref ArmData arm, bool stiffen)
         {
             if (!_baselinesCaptured)
                 return;
 
-            ApplyDrive(_upperArmR, _baseUpperArmRDrive, stiffen);
-            ApplyDrive(_lowerArmR, _baseLowerArmRDrive, stiffen);
-            ApplyDrive(_handJointR, _baseHandRDrive, stiffen);
+            ApplyDrive(arm.UpperArm, arm.BaseUpperArmDrive, stiffen);
+            ApplyDrive(arm.LowerArm, arm.BaseLowerArmDrive, stiffen);
+            ApplyDrive(arm.HandJoint, arm.BaseHandDrive, stiffen);
         }
 
         private void ApplyDrive(ConfigurableJoint joint, JointDrive baseDrive, bool stiffen)

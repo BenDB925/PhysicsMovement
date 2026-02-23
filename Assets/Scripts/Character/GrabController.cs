@@ -91,14 +91,23 @@ namespace PhysicsDrivenMovement.Character
 
         private bool _baselinesCaptured;
 
+        private PunchController _punchController;
+
         // Input
         private PlayerInputActions _inputActions;
-        private bool _grabInputHeld;
+        private bool _grabLeftHeld;
+        private bool _grabRightHeld;
         private bool _overrideGrabInput;
 
         // Track previous grab state for throw detection.
         private bool _wasGrabbingLeft;
         private bool _wasGrabbingRight;
+
+        // Debug: hand renderers for grab color feedback.
+        private Renderer _handRendererL;
+        private Renderer _handRendererR;
+        private Color _baseHandColor;
+        private static readonly Color GrabColor = Color.red;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -123,11 +132,22 @@ namespace PhysicsDrivenMovement.Character
         // ── Test Seams ───────────────────────────────────────────────────────
 
         /// <summary>
-        /// Test seam: directly inject grab input state, bypassing the Input System.
+        /// Test seam: directly inject grab input state for both hands, bypassing the Input System.
         /// </summary>
         public void SetGrabInputForTest(bool held)
         {
-            _grabInputHeld = held;
+            _grabLeftHeld = held;
+            _grabRightHeld = held;
+            _overrideGrabInput = true;
+        }
+
+        /// <summary>
+        /// Test seam: directly inject per-hand grab input state, bypassing the Input System.
+        /// </summary>
+        public void SetGrabInputForTest(bool leftHeld, bool rightHeld)
+        {
+            _grabLeftHeld = leftHeld;
+            _grabRightHeld = rightHeld;
             _overrideGrabInput = true;
         }
 
@@ -135,8 +155,9 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Cache Hips Rigidbody.
+            // STEP 1: Cache Hips Rigidbody and PunchController.
             TryGetComponent(out _hipsRb);
+            TryGetComponent(out _punchController);
 
             // STEP 2: Find HandGrabZone components on Hand_L and Hand_R.
             HandGrabZone[] zones = GetComponentsInChildren<HandGrabZone>(includeInactive: true);
@@ -173,7 +194,13 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            // STEP 4: Create and enable PlayerInputActions for grab input.
+            // STEP 4: Cache hand renderers for debug grab coloring.
+            _handRendererL = FindChildRenderer(_zoneL);
+            _handRendererR = FindChildRenderer(_zoneR);
+            if (_handRendererL != null)
+                _baseHandColor = _handRendererL.material.color;
+
+            // STEP 5: Create and enable PlayerInputActions for grab input.
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
         }
@@ -186,29 +213,35 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // STEP 1: Read grab input (unless overridden by test seam).
+            // STEP 1: Read per-hand grab input (unless overridden by test seam).
+            // Grab uses IsPressed (hold) on the same LeftHand/RightHand actions that
+            // PunchController reads with WasPressedThisFrame (click).
+            // Skip grab on a hand that's currently punching so click = punch, hold = grab.
             if (!_overrideGrabInput)
             {
-                _grabInputHeld = _inputActions != null &&
-                                 _inputActions.Player.Grab.IsPressed();
+                bool leftHeld = _inputActions != null &&
+                                _inputActions.Player.LeftHand.IsPressed();
+                bool rightHeld = _inputActions != null &&
+                                 _inputActions.Player.RightHand.IsPressed();
+
+                // Suppress grab while the hand is mid-punch.
+                _grabLeftHeld = leftHeld && !(_punchController != null && _punchController.IsPunchingLeft);
+                _grabRightHeld = rightHeld && !(_punchController != null && _punchController.IsPunchingRight);
             }
 
             // STEP 2: Track pre-update grab state for throw detection.
             _wasGrabbingLeft = IsGrabbingLeft;
             _wasGrabbingRight = IsGrabbingRight;
 
-            // STEP 3: Process grab/release.
-            if (_grabInputHeld)
-            {
-                TryGrab();
-            }
-            else
-            {
-                TryRelease();
-            }
+            // STEP 3: Process grab/release per hand.
+            TryGrabOrRelease(_zoneL, _grabLeftHeld, _wasGrabbingLeft);
+            TryGrabOrRelease(_zoneR, _grabRightHeld, _wasGrabbingRight);
 
             // STEP 4: Apply arm stiffening based on current grab state.
             ApplyArmStiffening();
+
+            // STEP 5: Debug — color hands red while grabbing.
+            UpdateGrabDebugColors();
         }
 
         private void OnDestroy()
@@ -244,44 +277,28 @@ namespace PhysicsDrivenMovement.Character
 
         // ── Private Methods ──────────────────────────────────────────────────
 
-        private void TryGrab()
+        private void TryGrabOrRelease(HandGrabZone zone, bool inputHeld, bool wasGrabbing)
         {
-            // Attempt grab on left hand if not already grabbing.
-            if (_zoneL != null && !_zoneL.IsGrabbing)
+            if (zone == null)
+                return;
+
+            if (inputHeld)
             {
-                Rigidbody target = _zoneL.NearestTarget;
-                if (target != null)
+                // Attempt grab if not already grabbing.
+                if (!zone.IsGrabbing)
                 {
-                    _zoneL.CreateGrabJoint(target, _grabBreakForce, _grabBreakTorque);
+                    Rigidbody target = zone.NearestTarget;
+                    if (target != null)
+                    {
+                        zone.CreateGrabJoint(target, _grabBreakForce, _grabBreakTorque);
+                    }
                 }
             }
-
-            // Attempt grab on right hand if not already grabbing.
-            if (_zoneR != null && !_zoneR.IsGrabbing)
+            else if (wasGrabbing)
             {
-                Rigidbody target = _zoneR.NearestTarget;
-                if (target != null)
-                {
-                    _zoneR.CreateGrabJoint(target, _grabBreakForce, _grabBreakTorque);
-                }
-            }
-        }
-
-        private void TryRelease()
-        {
-            // Release left hand.
-            if (_zoneL != null && _wasGrabbingLeft)
-            {
-                Rigidbody releasedTarget = _zoneL.GrabbedTarget;
-                _zoneL.DestroyGrabJoint();
-                TryApplyThrowImpulse(releasedTarget);
-            }
-
-            // Release right hand.
-            if (_zoneR != null && _wasGrabbingRight)
-            {
-                Rigidbody releasedTarget = _zoneR.GrabbedTarget;
-                _zoneR.DestroyGrabJoint();
+                // Release and optionally throw.
+                Rigidbody releasedTarget = zone.GrabbedTarget;
+                zone.DestroyGrabJoint();
                 TryApplyThrowImpulse(releasedTarget);
             }
         }
@@ -343,6 +360,28 @@ namespace PhysicsDrivenMovement.Character
             }
 
             joint.slerpDrive = drive;
+        }
+
+        private static Renderer FindChildRenderer(HandGrabZone zone)
+        {
+            if (zone == null)
+                return null;
+
+            // The hand's visual mesh is on a child "Visual" GameObject.
+            Transform visual = zone.transform.Find("Visual");
+            if (visual != null)
+                return visual.GetComponent<Renderer>();
+
+            // Fallback: renderer directly on the hand.
+            return zone.GetComponent<Renderer>();
+        }
+
+        private void UpdateGrabDebugColors()
+        {
+            if (_handRendererL != null)
+                _handRendererL.material.color = IsGrabbingLeft ? GrabColor : _baseHandColor;
+            if (_handRendererR != null)
+                _handRendererR.material.color = IsGrabbingRight ? GrabColor : _baseHandColor;
         }
     }
 }

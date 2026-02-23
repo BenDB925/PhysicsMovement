@@ -51,7 +51,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             handL.transform.localPosition = new Vector3(-0.3f, 0f, 0f);
             Rigidbody handRb = handL.AddComponent<Rigidbody>();
             handRb.isKinematic = true;
-            handL.AddComponent<BoxCollider>();
 
             ConfigurableJoint handJoint = handL.AddComponent<ConfigurableJoint>();
             handJoint.connectedBody = hipsRb;
@@ -75,7 +74,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             handR.transform.localPosition = new Vector3(0.3f, 0f, 0f);
             Rigidbody handRbR = handR.AddComponent<Rigidbody>();
             handRbR.isKinematic = true;
-            handR.AddComponent<BoxCollider>();
             ConfigurableJoint handJointR = handR.AddComponent<ConfigurableJoint>();
             handJointR.connectedBody = hipsRb;
             SphereCollider triggerR = handR.AddComponent<SphereCollider>();

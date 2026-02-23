@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="2" result="Failed(Child)" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.1345261">
+  <test-suite type="TestSuite" id="1203" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.134526" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <failure>
+      <message><![CDATA[One or more child tests had errors]]></message>
+    </failure>
+    <test-suite type="Assembly" id="1196" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="D:/Coding/Git/PhysicsMovement/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.129788" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="30976" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <failure>
+        <message><![CDATA[One or more child tests had errors]]></message>
+      </failure>
+      <test-suite type="TestSuite" id="1197" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.128257" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <failure>
+          <message><![CDATA[One or more child tests had errors]]></message>
+        </failure>
+        <test-suite type="TestSuite" id="1198" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.126824" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <failure>
+            <message><![CDATA[One or more child tests had errors]]></message>
+          </failure>
+          <test-suite type="TestSuite" id="1199" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.124955" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <failure>
+              <message><![CDATA[One or more child tests had errors]]></message>
+            </failure>
+            <test-suite type="TestFixture" id="1193" name="ThrowMechanicTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" testcasecount="2" result="Failed" site="Child" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.122344" total="2" passed="1" failed="1" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <failure>
+                <message><![CDATA[One or more child tests had errors]]></message>
+              </failure>
+              <test-case id="1195" name="NoImpulse_WhenStationary" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests.NoImpulse_WhenStationary" methodname="NoImpulse_WhenStationary" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" seed="576329116" result="Passed" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.060387" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1194" name="ThrowImpulse_Applied_WhenMoving" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests.ThrowImpulse_Applied_WhenMoving" methodname="ThrowImpulse_Applied_WhenMoving" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" seed="316539159" result="Failed" start-time="2026-02-23 21:20:30Z" end-time="2026-02-23 21:20:30Z" duration="0.055396" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  Released target should have velocity from throw impulse when character is moving.
+  Expected: greater than 0.100000001f
+  But was:  0.0f
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests+<ThrowImpulse_Applied_WhenMoving>d__5.MoveNext () [0x001d2] in D:\Coding\Git\PhysicsMovement\Assets\Tests\PlayMode\Character\ThrowMechanicTests.cs:137
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+                <output><![CDATA[Saving results to: C:/Users/jamie/AppData/LocalLow/DefaultCompany/PhysicsDrivenMovementDemo\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

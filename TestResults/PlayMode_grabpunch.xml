@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="25" result="Failed(Child)" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.5111967">
+  <test-suite type="TestSuite" id="1203" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.511197" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <failure>
+      <message><![CDATA[One or more child tests had errors]]></message>
+    </failure>
+    <test-suite type="Assembly" id="1196" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="D:/Coding/Git/PhysicsMovement/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.507697" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="33664" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <failure>
+        <message><![CDATA[One or more child tests had errors]]></message>
+      </failure>
+      <test-suite type="TestSuite" id="1197" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.507097" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <failure>
+          <message><![CDATA[One or more child tests had errors]]></message>
+        </failure>
+        <test-suite type="TestSuite" id="1198" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.506627" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <failure>
+            <message><![CDATA[One or more child tests had errors]]></message>
+          </failure>
+          <test-suite type="TestSuite" id="1199" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="172" result="Failed" site="Child" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:48Z" duration="4.506096" total="25" passed="23" failed="2" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <failure>
+              <message><![CDATA[One or more child tests had errors]]></message>
+            </failure>
+            <test-suite type="TestFixture" id="1008" name="ArmStiffeningTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests" classname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:43Z" duration="0.172989" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1009" name="Springs_Increase_OnGrab" fullname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests.Springs_Increase_OnGrab" methodname="Springs_Increase_OnGrab" classname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests" runstate="Runnable" seed="1410652569" result="Passed" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:43Z" duration="0.083665" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1010" name="Springs_Restore_OnRelease" fullname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests.Springs_Restore_OnRelease" methodname="Springs_Restore_OnRelease" classname="PhysicsDrivenMovement.Tests.PlayMode.ArmStiffeningTests" runstate="Runnable" seed="772370040" result="Passed" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:43Z" duration="0.082670" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1077" name="GrabCombatIntegrationTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:47Z" duration="3.166832" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1078" name="GrabAndHold_MaintainsGrabState" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests.GrabAndHold_MaintainsGrabState" methodname="GrabAndHold_MaintainsGrabState" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests" runstate="Runnable" seed="533803773" result="Passed" start-time="2026-02-23 21:11:43Z" end-time="2026-02-23 21:11:44Z" duration="0.136186" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1079" name="KnockoutRecoveryCycle" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests.KnockoutRecoveryCycle" methodname="KnockoutRecoveryCycle" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests" runstate="Runnable" seed="1403249885" result="Passed" start-time="2026-02-23 21:11:44Z" end-time="2026-02-23 21:11:47Z" duration="3.019894" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1080" name="PunchController_Exists_AfterFullSetup" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests.PunchController_Exists_AfterFullSetup" methodname="PunchController_Exists_AfterFullSetup" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabCombatIntegrationTests" runstate="Runnable" seed="1114258903" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009412" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1081" name="GrabControllerTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.119997" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1082" name="FindsZones_InAwake" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests.FindsZones_InAwake" methodname="FindsZones_InAwake" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" runstate="Runnable" seed="1229936794" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009434" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1083" name="GrabInput_TriggersGrabState_WhenTargetPresent" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests.GrabInput_TriggersGrabState_WhenTargetPresent" methodname="GrabInput_TriggersGrabState_WhenTargetPresent" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" runstate="Runnable" seed="1345854656" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.039216" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1084" name="NoTarget_NoGrab" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests.NoTarget_NoGrab" methodname="NoTarget_NoGrab" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" runstate="Runnable" seed="134613599" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.019893" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1085" name="Release_ClearsGrabState" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests.Release_ClearsGrabState" methodname="Release_ClearsGrabState" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabControllerTests" runstate="Runnable" seed="2125641950" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.050047" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1086" name="GrabMechanicTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.059798" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1087" name="CreateGrabJoint_CreatesFixedJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests.CreateGrabJoint_CreatesFixedJoint" methodname="CreateGrabJoint_CreatesFixedJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" seed="2104217538" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.008827" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1088" name="CreateGrabJoint_SetsCorrectBreakForce" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests.CreateGrabJoint_SetsCorrectBreakForce" methodname="CreateGrabJoint_SetsCorrectBreakForce" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" seed="2121308165" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009878" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1089" name="DestroyGrabJoint_DestroysFixedJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests.DestroyGrabJoint_DestroysFixedJoint" methodname="DestroyGrabJoint_DestroysFixedJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" seed="1098586386" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.019833" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1090" name="DuplicateGrab_ReturnsFalse" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests.DuplicateGrab_ReturnsFalse" methodname="DuplicateGrab_ReturnsFalse" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" seed="455873168" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009752" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1091" name="GrabbedTarget_ReturnsConnectedBody" fullname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests.GrabbedTarget_ReturnsConnectedBody" methodname="GrabbedTarget_ReturnsConnectedBody" classname="PhysicsDrivenMovement.Tests.PlayMode.GrabMechanicTests" runstate="Runnable" seed="757171995" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009987" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1092" name="HandGrabZoneTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.149934" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1096" name="ExitCleanup_RemovesFromList" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests.ExitCleanup_RemovesFromList" methodname="ExitCleanup_RemovesFromList" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" seed="1083126514" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.059111" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1094" name="ExternalOverlap_Detected" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests.ExternalOverlap_Detected" methodname="ExternalOverlap_Detected" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" seed="1445806540" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.029680" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1097" name="NearestOfMultiple_ReturnsClosest" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests.NearestOfMultiple_ReturnsClosest" methodname="NearestOfMultiple_ReturnsClosest" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" seed="1648972414" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.029889" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1095" name="SelfBody_Excluded" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests.SelfBody_Excluded" methodname="SelfBody_Excluded" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" seed="1268231379" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.019842" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1093" name="TriggerSphere_IsCreated_OnAwake" fullname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests.TriggerSphere_IsCreated_OnAwake" methodname="TriggerSphere_IsCreated_OnAwake" classname="PhysicsDrivenMovement.Tests.PlayMode.HandGrabZoneTests" runstate="Runnable" seed="1499004179" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.009985" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1181" name="PunchControllerTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" classname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:48Z" duration="0.749936" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1185" name="Punch_Cooldown_Enforced" fullname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests.Punch_Cooldown_Enforced" methodname="Punch_Cooldown_Enforced" classname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" runstate="Runnable" seed="1769923632" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:47Z" duration="0.349314" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1184" name="Punch_Duration_RestoresDrives" fullname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests.Punch_Duration_RestoresDrives" methodname="Punch_Duration_RestoresDrives" classname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" runstate="Runnable" seed="393035280" result="Passed" start-time="2026-02-23 21:11:47Z" end-time="2026-02-23 21:11:48Z" duration="0.339622" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1183" name="Punch_GatedWhenFallen" fullname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests.Punch_GatedWhenFallen" methodname="Punch_GatedWhenFallen" classname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" runstate="Runnable" seed="2052626215" result="Passed" start-time="2026-02-23 21:11:48Z" end-time="2026-02-23 21:11:48Z" duration="0.029875" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1182" name="PunchInput_StartsPunch_WhenStanding" fullname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests.PunchInput_StartsPunch_WhenStanding" methodname="PunchInput_StartsPunch_WhenStanding" classname="PhysicsDrivenMovement.Tests.PlayMode.PunchControllerTests" runstate="Runnable" seed="496371337" result="Passed" start-time="2026-02-23 21:11:48Z" end-time="2026-02-23 21:11:48Z" duration="0.029847" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1193" name="ThrowMechanicTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" testcasecount="2" result="Failed" site="Child" start-time="2026-02-23 21:11:48Z" end-time="2026-02-23 21:11:48Z" duration="0.080090" total="2" passed="0" failed="2" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <failure>
+                <message><![CDATA[One or more child tests had errors]]></message>
+              </failure>
+              <test-case id="1195" name="NoImpulse_WhenStationary" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests.NoImpulse_WhenStationary" methodname="NoImpulse_WhenStationary" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" seed="1127859963" result="Failed" start-time="2026-02-23 21:11:48Z" end-time="2026-02-23 21:11:48Z" duration="0.042187" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  Should be grabbing.
+  Expected: True
+  But was:  False
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests+<NoImpulse_WhenStationary>d__6.MoveNext () [0x00125] in D:\Coding\Git\PhysicsMovement\Assets\Tests\PlayMode\Character\ThrowMechanicTests.cs:156
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+              </test-case>
+              <test-case id="1194" name="ThrowImpulse_Applied_WhenMoving" fullname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests.ThrowImpulse_Applied_WhenMoving" methodname="ThrowImpulse_Applied_WhenMoving" classname="PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests" runstate="Runnable" seed="1302580479" result="Failed" start-time="2026-02-23 21:11:48Z" end-time="2026-02-23 21:11:48Z" duration="0.036949" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <failure>
+                  <message><![CDATA[  Should be grabbing.
+  Expected: True
+  But was:  False
+]]></message>
+                  <stack-trace><![CDATA[at PhysicsDrivenMovement.Tests.PlayMode.ThrowMechanicTests+<ThrowImpulse_Applied_WhenMoving>d__5.MoveNext () [0x00125] in D:\Coding\Git\PhysicsMovement\Assets\Tests\PlayMode\Character\ThrowMechanicTests.cs:125
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0004e] in .\Library\PackageCache\com.unity.test-framework\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+                </failure>
+                <output><![CDATA[Saving results to: C:/Users/jamie/AppData/LocalLow/DefaultCompany/PhysicsDrivenMovementDemo\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

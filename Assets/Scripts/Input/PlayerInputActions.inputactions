@@ -33,7 +33,7 @@
                     "initialStateCheck": true
                 },
                 {
-                    "name": "Grab",
+                    "name": "LeftHand",
                     "type": "Button",
                     "id": "2ba99152-95f0-46e1-979d-5f8343f28a5e",
                     "expectedControlType": "Button",
@@ -42,9 +42,9 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "Punch",
+                    "name": "RightHand",
                     "type": "Button",
-                    "id": "6458fe0a-b933-4234-b885-5dc5955c65c4",
+                    "id": "3cb00263-a6f1-57f2-a8ae-6f9454f39b6f",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -143,11 +143,11 @@
                 {
                     "name": "",
                     "id": "b52f9557-54e9-4c6c-a7e2-5a0ca4439ec6",
-                    "path": "<Keyboard>/leftShift",
+                    "path": "<Mouse>/leftButton",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Grab",
+                    "action": "LeftHand",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -158,18 +158,18 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Grab",
+                    "action": "LeftHand",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "",
                     "id": "ac978b37-7c30-433f-b6a2-cfd6c8f27fac",
-                    "path": "<Mouse>/leftButton",
+                    "path": "<Mouse>/rightButton",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Punch",
+                    "action": "RightHand",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -180,7 +180,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Punch",
+                    "action": "RightHand",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

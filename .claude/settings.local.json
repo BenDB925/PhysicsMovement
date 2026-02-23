@@ -5,7 +5,10 @@
       "mcp__ide__getDiagnostics",
       "Bash(cd /d/Coding/Git/PhysicsMovement && powershell -File Tools/Run-UnityTests.ps1 2>&1)",
       "Bash(taskkill:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(git stash:*)",
+      "Bash(\"/c/Program Files/Unity/Hub/Editor/6000.0.33f1/Editor/Unity.exe\":*)",
+      "Bash(tasklist:*)"
     ]
   }
 }

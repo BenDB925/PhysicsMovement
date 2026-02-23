@@ -6,7 +6,8 @@ namespace PhysicsDrivenMovement.Input
 {
     /// <summary>
     /// Wrapper for project player input actions.
-    /// Defines the Player action map with Move, Look, Jump, Grab, and Punch actions.
+    /// Defines the Player action map with Move, Look, Jump, LeftHand, and RightHand actions.
+    /// LeftHand/RightHand are used by both grab (IsPressed) and punch (WasPressedThisFrame).
     /// </summary>
     public sealed class PlayerInputActions : IDisposable
     {
@@ -15,8 +16,8 @@ namespace PhysicsDrivenMovement.Input
         private readonly InputAction _playerMove;
         private readonly InputAction _playerLook;
         private readonly InputAction _playerJump;
-        private readonly InputAction _playerGrab;
-        private readonly InputAction _playerPunch;
+        private readonly InputAction _playerLeftHand;
+        private readonly InputAction _playerRightHand;
 
         public PlayerInputActions()
         {
@@ -32,11 +33,11 @@ namespace PhysicsDrivenMovement.Input
             _playerJump = _player.AddAction("Jump", InputActionType.Button);
             _playerJump.expectedControlType = "Button";
 
-            _playerGrab = _player.AddAction("Grab", InputActionType.Button);
-            _playerGrab.expectedControlType = "Button";
+            _playerLeftHand = _player.AddAction("LeftHand", InputActionType.Button);
+            _playerLeftHand.expectedControlType = "Button";
 
-            _playerPunch = _player.AddAction("Punch", InputActionType.Button);
-            _playerPunch.expectedControlType = "Button";
+            _playerRightHand = _player.AddAction("RightHand", InputActionType.Button);
+            _playerRightHand.expectedControlType = "Button";
 
             AddMoveBindings();
             AddLookBindings();
@@ -84,11 +85,11 @@ namespace PhysicsDrivenMovement.Input
             _playerJump.AddBinding("<Keyboard>/space");
             _playerJump.AddBinding("<Gamepad>/buttonSouth");
 
-            _playerGrab.AddBinding("<Keyboard>/leftShift");
-            _playerGrab.AddBinding("<Gamepad>/leftTrigger");
+            _playerLeftHand.AddBinding("<Mouse>/leftButton");
+            _playerLeftHand.AddBinding("<Gamepad>/leftTrigger");
 
-            _playerPunch.AddBinding("<Mouse>/leftButton");
-            _playerPunch.AddBinding("<Gamepad>/rightTrigger");
+            _playerRightHand.AddBinding("<Mouse>/rightButton");
+            _playerRightHand.AddBinding("<Gamepad>/rightTrigger");
         }
 
         public readonly struct PlayerActions
@@ -106,9 +107,9 @@ namespace PhysicsDrivenMovement.Input
 
             public InputAction Jump => _wrapper._playerJump;
 
-            public InputAction Grab => _wrapper._playerGrab;
+            public InputAction LeftHand => _wrapper._playerLeftHand;
 
-            public InputAction Punch => _wrapper._playerPunch;
+            public InputAction RightHand => _wrapper._playerRightHand;
 
             public InputActionMap Get() => _wrapper._player;
 

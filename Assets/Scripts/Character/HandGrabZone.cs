@@ -109,12 +109,14 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>
         /// Destroys the active grab FixedJoint if one exists.
+        /// Uses DestroyImmediate so the joint is removed before the current physics
+        /// step, allowing throw impulses applied in the same FixedUpdate to take effect.
         /// </summary>
         public void DestroyGrabJoint()
         {
             if (_grabJoint != null)
             {
-                Destroy(_grabJoint);
+                DestroyImmediate(_grabJoint);
                 _grabJoint = null;
             }
         }
