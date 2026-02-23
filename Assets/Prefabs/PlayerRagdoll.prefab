@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 6044111111111111111}
   - component: {fileID: 9097617084092325405}
   - component: {fileID: 3994733745678395079}
+  - component: {fileID: 8048645500669517749}
   m_Layer: 8
   m_Name: PlayerRagdoll
   m_TagString: Untagged
@@ -113,6 +114,9 @@ MonoBehaviour:
   _lowerLegLowAngularX: -90
   _lowerLegHighAngularX: 90
   _disableLowerLegGroundCollision: 1
+  _upperArmSpring: 800
+  _upperArmDamper: 80
+  _upperArmMaxForce: 3000
 --- !u!114 &5370770312200200579
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -224,10 +228,28 @@ MonoBehaviour:
   _kneeAngle: 39.2
   _upperLegLiftBoost: 44
   _idleBlendSpeed: 5
+  _yawAlignThresholdDeg: 45
   _swingAxis: {x: 1, y: 0, z: 0}
   _kneeAxis: {x: 1, y: 0, z: 0}
   _useWorldSpaceSwing: 0
   _debugLog: 1
+--- !u!114 &8048645500669517749
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 207966327324143052}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba42e26d7d9e6374e9ed0c0e7029e8c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _armSwingAngle: 39.8
+  _elbowBendAngle: 21.2
+  _armSwingScale: 0.785
+  _armSwingAxis: {x: 0, y: 0, z: 1}
+  _elbowAxis: {x: 1, y: 0, z: 0}
 --- !u!1 &265282583001848857
 GameObject:
   m_ObjectHideFlags: 0
