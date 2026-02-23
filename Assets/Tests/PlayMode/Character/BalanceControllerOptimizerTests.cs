@@ -72,6 +72,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(600000)] // 10 minutes
+        [Ignore("On-demand optimizer — excluded from standard CI run. Run manually when tuning BC parameters.")]
         public IEnumerator BCOptimizer_SweepUprightGains_WritesRankedReport()
         {
             var results = new List<TrialResult>();
@@ -188,6 +189,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(300000)]
+        [Ignore("On-demand optimizer — excluded from standard CI run.")]
         public IEnumerator BCOptimizer_KPSensitivity_LogsScorePerValue()
         {
             float[] values = { 500f, 800f, 1200f, 1600f, 2000f, 2500f, 3000f, 4000f };
@@ -196,6 +198,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(300000)]
+        [Ignore("On-demand optimizer — excluded from standard CI run.")]
         public IEnumerator BCOptimizer_KDSensitivity_LogsScorePerValue()
         {
             float[] values = { 50f, 100f, 150f, 200f, 300f, 400f };
@@ -204,6 +207,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(300000)]
+        [Ignore("On-demand optimizer — excluded from standard CI run.")]
         public IEnumerator BCOptimizer_ComStrengthSensitivity_LogsScorePerValue()
         {
             float[] values = { 100f, 200f, 400f, 600f, 800f };

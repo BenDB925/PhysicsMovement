@@ -95,8 +95,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // BalanceController.IsGrounded returns true from frame 0 onward.
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
 
-            // Disable PlayerMovement physics loop (not needed for spring tests).
+            // Disable BalanceController, PlayerMovement, and CharacterState so their
+            // FixedUpdate loops do not override injected state. LegAnimator stays enabled.
+            _balance.enabled = false;
             _movement.enabled = false;
+            _characterState.enabled = false;
         }
 
         [TearDown]
@@ -142,9 +145,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // ── Act ──────────────────────────────────────────────────────────
             // Trigger the Airborne transition: make CharacterState see !grounded && !fallen.
             _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
 
-            // Wait one FixedUpdate for CharacterState.FixedUpdate to fire the transition,
-            // which raises OnStateChanged, which calls our handler synchronously.
+            // Wait one FixedUpdate so LegAnimator.FixedUpdate processes the new state.
             yield return new WaitForFixedUpdate();
 
             // ── Assert ───────────────────────────────────────────────────────
@@ -191,6 +194,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Enter Airborne.
             _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
             yield return new WaitForFixedUpdate();
 
             // Verify springs are reduced (confirms the feature activated).
@@ -201,6 +205,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // ── Act — land (go back to grounded) ─────────────────────────────
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
             yield return new WaitForFixedUpdate();
 
             // ── Assert — all four joint springs are restored to baseline ──────
@@ -262,6 +267,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // ── Act — enter Airborne ──────────────────────────────────────────
             _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
             yield return new WaitForFixedUpdate();  // CharacterState transitions to Airborne
 
             // Capture phase immediately after entering Airborne.
@@ -358,6 +364,66 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     $"Missing expected private field '{fieldName}' on {instance.GetType().Name}.");
             }
             field.SetValue(instance, value);
+        }
+
+        // ── GAP-3: Multi-cycle spring restoration ────────────────────────────
+
+        /// <summary>
+        /// GAP-3: Verifies that leg springs are restored to the TRUE original baseline
+        /// after EACH of three consecutive jump-land cycles. Guards against a subtle
+        /// state-mutation bug where SetLegSpringMultiplier stores the current (already-
+        /// multiplied) spring value as the new baseline, causing each successive landing
+        /// to restore to only 15% of the original — compounding toward zero over cycles.
+        ///
+        /// Method:
+        ///   1. Capture baseline spring after RagdollSetup.Awake (in Start).
+        ///   2. For each of 3 cycles:
+        ///      a. Enter Airborne → assert spring reduced.
+        ///      b. Land → assert spring == baseline ±1 % (not the reduced value).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator MultiCycleJump_SpringRestoredToTrueBaselineAfterEachLanding()
+        {
+            // Wait for Start() to run so CaptureBaselineDrives has executed.
+            yield return null;
+            yield return new WaitForFixedUpdate();
+
+            // Capture baseline spring value.
+            float baseline = _upperLegLJoint.slerpDrive.positionSpring;
+            Assert.That(baseline, Is.GreaterThan(0f),
+                "Baseline spring must be positive after RagdollSetup.Awake. " +
+                "Check that RagdollSetup is added before LegAnimator in SetUp.");
+
+            const float toleranceFraction = 0.01f; // 1 % tolerance
+
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                // ── Airborne entry ──────────────────────────────────────────
+                _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+                _characterState.SetStateForTest(CharacterStateType.Airborne);
+                yield return new WaitForFixedUpdate(); // CharacterState → Airborne
+                yield return new WaitForFixedUpdate(); // OnStateChanged handler fires
+
+                float airborneSpring = _upperLegLJoint.slerpDrive.positionSpring;
+                Assert.That(airborneSpring, Is.LessThan(baseline),
+                    $"Cycle {cycle}: spring must be reduced while Airborne. " +
+                    $"Got {airborneSpring:F2}, baseline={baseline:F2}.");
+
+                // ── Landing ─────────────────────────────────────────────────
+                _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+                _characterState.SetStateForTest(CharacterStateType.Standing);
+                yield return new WaitForFixedUpdate(); // CharacterState → Standing/Moving
+                yield return new WaitForFixedUpdate(); // spring restore handler fires
+
+                float landedSpring = _upperLegLJoint.slerpDrive.positionSpring;
+                float toleranceAbs = baseline * toleranceFraction;
+
+                Assert.That(landedSpring, Is.EqualTo(baseline).Within(toleranceAbs),
+                    $"Cycle {cycle}: spring must be restored to ORIGINAL baseline ({baseline:F2}) " +
+                    $"after landing. Got {landedSpring:F2} (tolerance ±{toleranceAbs:F2}). " +
+                    "Likely cause: SetLegSpringMultiplier overwrote the baseline instead of " +
+                    "preserving CaptureBaselineDrives values.");
+            }
         }
     }
 }

@@ -229,6 +229,113 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "Left and right arm swings should be in opposite directions.");
         }
 
+        // ── GAP-7: Required fields exist with sensible defaults ──────────────
+
+        /// <summary>
+        /// GAP-7: ArmAnimator must expose sensible serialised default values for its
+        /// two core swing parameters so the component is usable out-of-the-box without
+        /// Inspector configuration.
+        ///
+        /// Expected defaults (matching production prefab values):
+        ///   _armSwingAngle  ∈ (0°, 90°]  — non-zero swing amplitude.
+        ///   _armSwingAxis   is not the zero vector — a valid rotation axis.
+        ///
+        /// If either default is zero, the arm swing produces no visible motion
+        /// (quaternion of 0° rotation = identity, or Quaternion.AngleAxis with zero axis
+        /// returns identity regardless of angle).
+        /// </summary>
+        [Test]
+        [Description("ArmAnimator._armSwingAngle must be > 0 and ≤ 90, " +
+                     "and _armSwingAxis must not be the zero vector, out of the box.")]
+        public void RequiredFields_ExistWithSensibleDefaults()
+        {
+            // Arrange: ArmAnimator was added to _root in SetUp; Awake ran automatically.
+            // Read the serialised field values directly via reflection.
+            FieldInfo fieldSwingAngle = typeof(ArmAnimator)
+                .GetField("_armSwingAngle", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo fieldSwingAxis  = typeof(ArmAnimator)
+                .GetField("_armSwingAxis",  BindingFlags.NonPublic | BindingFlags.Instance);
+
+            Assert.That(fieldSwingAngle, Is.Not.Null,
+                "ArmAnimator must have a private serialized field '_armSwingAngle'. " +
+                "Rename check: ensure the field name matches between production code and test.");
+            Assert.That(fieldSwingAxis, Is.Not.Null,
+                "ArmAnimator must have a private serialized field '_armSwingAxis'.");
+
+            float armSwingAngle = (float)fieldSwingAngle.GetValue(_armAnimator);
+            Vector3 swingAxis   = (Vector3)fieldSwingAxis.GetValue(_armAnimator);
+
+            // Assert: swing angle is a sensible non-zero value.
+            Assert.That(armSwingAngle, Is.GreaterThan(0f),
+                $"_armSwingAngle default must be > 0° so arms visibly swing. Got {armSwingAngle:F2}°.");
+            Assert.That(armSwingAngle, Is.LessThanOrEqualTo(90f),
+                $"_armSwingAngle default must be ≤ 90° (not physically implausible). Got {armSwingAngle:F2}°.");
+
+            // Assert: swing axis is not the zero vector.
+            Assert.That(swingAxis.sqrMagnitude, Is.GreaterThan(0.01f),
+                $"_armSwingAxis default must not be zero — Quaternion.AngleAxis with zero axis returns identity. " +
+                $"Got {swingAxis}.");
+        }
+
+        // ── GAP-13: DoesNotThrowWhenCharacterStateIsAbsent ───────────────────
+
+        /// <summary>
+        /// GAP-13: ArmAnimator must not throw a NullReferenceException or log an
+        /// error when CharacterState is absent from the GameObject.
+        ///
+        /// In the current architecture, ArmAnimator only reads LegAnimator.Phase and
+        /// LegAnimator.SmoothedInputMag — it does NOT directly reference CharacterState.
+        /// However, a future refactor might add a direct CharacterState dependency.
+        /// This test guards against that regression.
+        ///
+        /// Design: creates a minimal hierarchy WITHOUT CharacterState, invokes Awake
+        /// and FixedUpdate, asserts no exceptions are thrown and no error-level log
+        /// messages are generated.
+        /// </summary>
+        [Test]
+        [Description("ArmAnimator.FixedUpdate must not throw when CharacterState is absent from the GameObject.")]
+        public void DoesNotThrowWhenCharacterStateIsAbsent()
+        {
+            // Arrange: create a separate minimal root without CharacterState.
+            GameObject minimalRoot = new GameObject("MinimalRoot_NoCharacterState");
+            minimalRoot.AddComponent<Rigidbody>();
+
+            // Add LegAnimator and ArmAnimator but intentionally NO CharacterState.
+            var legAnim = minimalRoot.AddComponent<LegAnimator>();
+            var armAnim = minimalRoot.AddComponent<ArmAnimator>();
+
+            // Add arm joint children so Awake doesn't generate "joints not found" warnings
+            // (we're testing that CharacterState absence doesn't throw, not joint warnings).
+            var armLGO = new GameObject("UpperArm_L");
+            armLGO.transform.SetParent(minimalRoot.transform);
+            armLGO.AddComponent<Rigidbody>();
+            armLGO.AddComponent<ConfigurableJoint>().targetRotation = Quaternion.identity;
+
+            var armRGO = new GameObject("UpperArm_R");
+            armRGO.transform.SetParent(minimalRoot.transform);
+            armRGO.AddComponent<Rigidbody>();
+            armRGO.AddComponent<ConfigurableJoint>().targetRotation = Quaternion.identity;
+
+            try
+            {
+                // Act: invoke Awake then FixedUpdate.
+                // Should NOT throw even without CharacterState.
+                MethodInfo awake = typeof(ArmAnimator)
+                    .GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo fixedUpdate = typeof(ArmAnimator)
+                    .GetMethod("FixedUpdate", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                Assert.DoesNotThrow(() => awake?.Invoke(armAnim, null),
+                    "ArmAnimator.Awake must not throw when CharacterState is absent.");
+                Assert.DoesNotThrow(() => fixedUpdate?.Invoke(armAnim, null),
+                    "ArmAnimator.FixedUpdate must not throw when CharacterState is absent.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(minimalRoot);
+            }
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────────
 
         /// <summary>Creates a named child GameObject with a Rigidbody and ConfigurableJoint.</summary>

@@ -12,7 +12,7 @@ using UnityEngine.TestTools;
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// Gait parameter optimizer — runs a parameter sweep across BalanceController
+    /// Gait parameter optimizer - runs a parameter sweep across BalanceController
     /// and LegAnimator settings, scores each combination by 5-second walk displacement,
     /// and writes a ranked report to Logs/gait-optimizer-results.txt.
     ///
@@ -28,16 +28,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     ///   Penalties: -1m per full-spin detected (gaitFwd reversal), -2m if fallen at end
     ///
     /// Parameters swept:
-    ///   BC:  _kPYaw (40–200), _kDYaw (20–120)
-    ///   LA:  _stepAngle (35–65), _stepFrequencyScale (0.05–0.2), _kneeAngle (30–70),
-    ///        _upperLegLiftBoost (15–50)
+    ///   BC:  _kPYaw (40-200), _kDYaw (20-120)
+    ///   LA:  _stepAngle (35-65), _stepFrequencyScale (0.05-0.2), _kneeAngle (30-70),
+    ///        _upperLegLiftBoost (15-50)
     /// </summary>
     public class GaitOptimizerTests
     {
         private const string ArenaSceneName  = "Arena_01";
         private const string ReportPath      = "Logs/gait-optimizer-results.txt";
         private const int    SettleFrames    = 50;    // 0.5s settle before input
-        private const int    WalkFrames      = 200;   // 2s walk trial — enough to measure gait quality
+        private const int    WalkFrames      = 200;   // 2s walk trial - enough to measure gait quality
         private const int    SpinPenaltyM    = 1;     // metres deducted per spin detected
         private const int    FallenPenaltyM  = 2;     // metres deducted if fallen at end
 
@@ -74,7 +74,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // ── Test entry point ─────────────────────────────────────────────────
 
         [UnityTest]
-        [Timeout(900000)] // 15 minutes — 216 trials × ~3s each
+        [Timeout(900000)] // 15 minutes – 216 trials × ~3s each
+        [Ignore("On-demand optimizer — excluded from standard CI run. Run manually when tuning gait parameters.")]
         public IEnumerator GaitOptimizer_SweepParameters_WritesRankedReport()
         {
             var results = new List<TrialResult>();
@@ -184,7 +185,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Debug.Log($"[GaitOptimizer] Done. Report written to {ReportPath}");
             Debug.Log($"[GaitOptimizer] Best: {results[0].ToReportLine(1)}");
 
-            // Always passes — value is in the report
+            // Always passes - value is in the report
             Assert.Pass($"Optimizer complete. Best score: {results[0].Score:F2}m. See {ReportPath}");
         }
 
@@ -192,11 +193,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // These run faster and are useful for isolating one parameter at a time.
 
         /// <summary>
-        /// Full grid sweep — 1,296 trials × ~3s each ≈ 2+ hours.
+        /// Full grid sweep - 1,296 trials × ~3s each ≈ 2+ hours.
         /// Run this overnight. Results written to Logs/gait-optimizer-results-full.txt.
         /// </summary>
         [UnityTest]
         [Timeout(10800000)] // 3 hours
+        [Ignore("On-demand optimizer — excluded from standard CI run. Overnight sweep only.")]
         public IEnumerator GaitOptimizer_SweepParameters_Overnight_FullGrid()
         {
             float[] kpFull    = { 40f, 80f, 140f, 200f };
@@ -281,6 +283,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(300000)]
+        [Ignore("On-demand optimizer — excluded from standard CI run.")]
         public IEnumerator GaitOptimizer_KPYawSensitivity_LogsDisplacementPerValue()
         {
             var sb = new StringBuilder();
@@ -321,6 +324,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         [UnityTest]
         [Timeout(300000)]
+        [Ignore("On-demand optimizer — excluded from standard CI run.")]
         public IEnumerator GaitOptimizer_StepAngleSensitivity_LogsDisplacementPerValue()
         {
             var sb = new StringBuilder();

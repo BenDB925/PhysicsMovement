@@ -35,11 +35,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             _movement.SetMoveInputForTest(Vector2.zero);
 
-            // Disable BalanceController and PlayerMovement so they do not apply
-            // forces or update their own state during the test.  CharacterState is
-            // kept enabled so it can drive the FSM transitions we want to test.
+            // Disable all three components so their FixedUpdate loops do not
+            // override the state we inject via ForceState / SetGroundStateForTest.
+            // Individual tests re-enable only the components they need.
             _balance.enabled = false;
             _movement.enabled = false;
+            _characterState.enabled = false;
         }
 
         [TearDown]
@@ -202,6 +203,106 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(velocityAfterFrame2, Is.LessThan(0.5f),
                 $"Jump must not fire again on the second frame while held. " +
                 $"velocityAfterFrame2={velocityAfterFrame2:F4}. One-frame consume is broken.");
+        }
+
+        // ─── GAP-6: Jump guard — GettingUp state ────────────────────────────
+
+        /// <summary>
+        /// GAP-6a: A jump input received while the character is in GettingUp state
+        /// must be fully discarded and must NOT produce any upward velocity.
+        ///
+        /// Risk: if the one-frame consume only guards against Fallen but not GettingUp,
+        /// a held jump button could fire as soon as the character stands up, which
+        /// creates an unexpected bounce immediately after recovery.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Jump_WhileGettingUp_IsNotApplied()
+        {
+            // Arrange
+            yield return null;
+
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            // Put the FSM in GettingUp state.
+            ForceState(CharacterStateType.GettingUp);
+
+            _rb.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true);
+
+            // Act — one FixedUpdate with movement enabled.
+            _movement.enabled = true;
+            yield return new WaitForFixedUpdate();
+            _movement.enabled = false;
+
+            // Assert — no upward velocity should be applied while GettingUp.
+            float velocityY = _rb.linearVelocity.y;
+            Assert.That(velocityY, Is.LessThan(0.5f),
+                $"Jump must be blocked when state is GettingUp. Got velocityY={velocityY:F4}. " +
+                "PlayerMovement.ApplyJump must guard against GettingUp state in addition to Fallen.");
+        }
+
+        /// <summary>
+        /// GAP-6b: A jump button held through a Fallen→GettingUp→Standing transition
+        /// must not fire on the frame the character finally stands up.
+        ///
+        /// Risk: the one-frame consume resets _jumpConsumed when the character lands/stands
+        /// but does NOT re-consume the held input — allowing a jump to fire immediately
+        /// after recovery without the player intentionally pressing jump.
+        ///
+        /// Method:
+        ///   1. Start in Fallen state with jump held.
+        ///   2. Tick several frames (all while still Fallen).
+        ///   3. Transition to GettingUp, tick several frames.
+        ///   4. Transition to Standing.
+        ///   5. Assert: no upward velocity fired on the Standing-entry frame.
+        ///
+        /// The implementation should require the button to be released and re-pressed
+        /// after recovery, or maintain a "button was held at fall-time" latch that
+        /// persists through the GettingUp recovery.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Jump_HeldDuringFallen_DoesNotFireOnGetUp()
+        {
+            // Arrange
+            yield return null;
+
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            // Phase 1: Fallen with jump held — tick 5 frames.
+            SetBalanceSignals(isGrounded: true, isFallen: true);
+            ForceState(CharacterStateType.Fallen);
+            _rb.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true); // hold jump throughout
+
+            _movement.enabled = true;
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Phase 2: GettingUp with jump still held — tick 5 frames.
+            ForceState(CharacterStateType.GettingUp);
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Phase 3: Transition to Standing — zero velocity, then tick 1 frame.
+            SetBalanceSignals(isGrounded: true, isFallen: false);
+            ForceState(CharacterStateType.Standing);
+            _rb.linearVelocity = Vector3.zero;
+
+            yield return new WaitForFixedUpdate();
+            _movement.enabled = false;
+
+            // Assert: held jump must NOT have fired on the Standing-entry frame.
+            float velocityY = _rb.linearVelocity.y;
+            Assert.That(velocityY, Is.LessThan(0.5f),
+                $"Jump must NOT fire when transitioning from GettingUp→Standing with button held. " +
+                $"Got velocityY={velocityY:F4}. " +
+                "PlayerMovement must track that jump was 'live' during a non-jump state and " +
+                "require a fresh press after recovery (button-held latch).");
         }
 
         // ─── Helpers ─────────────────────────────────────────────────────────

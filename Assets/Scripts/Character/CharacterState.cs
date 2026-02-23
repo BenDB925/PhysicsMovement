@@ -189,6 +189,18 @@ namespace PhysicsDrivenMovement.Character
             ChangeState(nextState);
         }
 
+        /// <summary>
+        /// Test seam: directly force a state transition, bypassing FixedUpdate evaluation.
+        /// Fires OnStateChanged so subscribers (e.g. LegAnimator spring scaling) react
+        /// exactly as they would during a real transition.
+        /// <br/>
+        /// <b>Test use only.</b> Do not call from production code.
+        /// </summary>
+        public void SetStateForTest(CharacterStateType state)
+        {
+            ChangeState(state);
+        }
+
         private void ChangeState(CharacterStateType newState)
         {
             // STEP 1: Exit early when state is unchanged.

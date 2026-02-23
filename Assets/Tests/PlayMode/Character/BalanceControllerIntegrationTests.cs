@@ -632,5 +632,75 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(tilt, Is.LessThan(35f),
                 $"Changing facing direction + push should not prevent recovery (tilt={tilt:F1}°).");
         }
+
+        // =====================================================================
+        // GAP-9: Lateral impulse 250 N — upright restored within 150 frames
+        // =====================================================================
+
+        /// <summary>
+        /// GAP-9: After a 250 N instantaneous lateral impulse (ForceMode.Impulse)
+        /// to the hips Rigidbody, the character must be upright (tilt ≤ 15°) within
+        /// 150 physics frames (1.5 s at 100 Hz).
+        ///
+        /// This is a more demanding test than the 200 N continuous force used in
+        /// SetFacingDirection_ThenPush_StillRecovers — an impulse delivers all energy
+        /// in one frame, producing a brief but extreme tilt before recovery begins.
+        ///
+        /// Threshold: tilt ≤ 15° (full upright) within 150 frames.
+        /// The existing BalanceController tests use 25° as "mostly upright"; 15° is
+        /// the stricter threshold from the audit to confirm genuine recovery rather
+        /// than marginal stability.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AfterLateralImpulse250N_UprightRestoredWithin150Frames()
+        {
+            // Arrange — create ground and ragdoll, let settle.
+            CreateGroundPlane();
+            CreateMinimalStandingRagdoll();
+            yield return WaitPhysicsFrames(SettleFrameCount);
+
+            // Pre-condition: character must be standing before impulse.
+            float tiltBefore = GetHipsTiltAngle();
+            Assert.That(tiltBefore, Is.LessThan(20f),
+                $"Pre-condition failed: character must be standing (tilt ≤ 20°) before impulse. " +
+                $"Got {tiltBefore:F1}°. Settle frames ({SettleFrameCount}) may be insufficient.");
+
+            // Act — apply 250 N lateral impulse.
+            _hipsRb.AddForce(Vector3.right * 250f, ForceMode.Impulse);
+
+            // Wait up to 150 frames, checking tilt each frame.
+            bool    recoveredWithin150 = false;
+            float   tiltAtMax         = 0f;
+            const int Budget          = 150;
+            const float RecoveryTilt  = 15f;
+
+            for (int frame = 0; frame < Budget; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float tilt = GetHipsTiltAngle();
+                if (tilt > tiltAtMax) tiltAtMax = tilt;
+
+                if (tilt <= RecoveryTilt)
+                {
+                    recoveredWithin150 = true;
+                    break;
+                }
+            }
+
+            float finalTilt = GetHipsTiltAngle();
+
+            // Assert 1: Recovered within budget.
+            Assert.That(recoveredWithin150, Is.True,
+                $"BalanceController must restore upright (tilt ≤ {RecoveryTilt}°) within {Budget} frames " +
+                $"after a 250 N lateral impulse. " +
+                $"Max tilt observed: {tiltAtMax:F1}°, tilt at frame {Budget}: {finalTilt:F1}°. " +
+                "Consider increasing BalanceController._uprightTorque or reducing _angularDamping.");
+
+            // Assert 2: Character is not Fallen.
+            Assert.That(_balance.IsFallen, Is.False,
+                $"Character must not be in Fallen state after recovering from lateral impulse. " +
+                $"IsFallen=true means the tilt exceeded the fallen threshold despite partial recovery.");
+        }
     }
 }

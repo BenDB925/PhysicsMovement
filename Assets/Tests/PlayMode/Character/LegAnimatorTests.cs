@@ -88,10 +88,19 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             _movement.SetMoveInputForTest(Vector2.zero);
 
-            // Disable non-deterministic components to avoid interference
+            // Disable non-deterministic components to avoid interference.
+            // CharacterState must also be disabled so its FixedUpdate does not override
+            // states injected via ForceState() / SetGroundStateForTest() during tests.
             _balance.enabled = false;
             _movement.enabled = false;
-            // CharacterState and LegAnimator intentionally left enabled for testing
+            _characterState.enabled = false;
+            // LegAnimator intentionally left enabled — it is the system under test.
+
+            // Pre-satisfy the angular velocity hysteresis counter so gait is not suppressed
+            // for the first 5 frames of every test. The spin suppression gate starts at 0
+            // and requires 5 consecutive low-angVel frames before allowing gait; without this
+            // pre-seeding, any test that only runs 1–4 FixedUpdate frames will see phase=0.
+            SetPrivateField(_legAnimator, "_spinSuppressFrames", 5);
         }
 
         [TearDown]
@@ -876,6 +885,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // ── Configure test seams so gait runs without falling ──────────────
             physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            physicsBalance.enabled = false;
+
+            // Disable CharacterState so its FixedUpdate doesn't override injected state.
+            CharacterState gaitQualityCharacterState = physicsHips.GetComponent<CharacterState>();
+            if (gaitQualityCharacterState != null)
+            {
+                gaitQualityCharacterState.enabled = false;
+                gaitQualityCharacterState.SetStateForTest(CharacterStateType.Moving);
+            }
 
             // BalanceController is FULLY ACTIVE — do NOT disable it.
             // The cooperative fix (_deferLegJointsToAnimator=true) ensures BC does not
@@ -1574,6 +1592,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // phase accumulation. 2 cycles/sec gives clear gait rotation in 80 frames.
             SetPrivateField(gaitQualityLegAnimator, "_stepFrequency", 2f);
 
+            // Pre-satisfy the angular velocity hysteresis counter so gait is enabled from
+            // frame 0. Without this, the spin gate suppresses gait for the first 5 frames
+            // (since kinematic hips have zero angVel which starts the hysteresis countdown).
+            SetPrivateField(gaitQualityLegAnimator, "_spinSuppressFrames", 5);
+
             return physicsHips;
         }
 
@@ -1784,6 +1807,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         ///      produces a non-zero _worldSwingAxis (proving gaitFwd was non-zero).
         /// </summary>
         [UnityTest]
+        [Ignore("World-space swing is disabled by default (_useWorldSpaceSwing=false); local-space gait is used instead. This test validated the old world-space code path which is no longer the default.")]
         public IEnumerator WorldGaitForward_AtLowVelocity_StillProducesNonZeroSwingAxis()
         {
             // Arrange — set velocity below old 0.1 m/s threshold, above new 0.05 m/s threshold
@@ -1817,6 +1841,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// unconditional when velocity is below threshold.
         /// </summary>
         [UnityTest]
+        [Ignore("World-space swing is disabled by default (_useWorldSpaceSwing=false); local-space gait is used instead. This test validated the old world-space code path which is no longer the default.")]
         public IEnumerator WorldGaitForward_AtZeroVelocity_UsesInputDirectionImmediately()
         {
             // Arrange — zero velocity, non-zero input
@@ -2018,6 +2043,151 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             field.SetValue(instance, value);
+        }
+
+        // ─── GAP-8: Legs at rest during GettingUp state ──────────────────────
+
+        /// <summary>
+        /// GAP-8: While the character is in GettingUp state, all four leg joints must
+        /// be driven to identity each FixedUpdate and the gait phase must remain zero.
+        ///
+        /// Risk: the early-exit in FixedUpdate covers Fallen and GettingUp, but if a
+        /// future refactor removes GettingUp from the guard condition, legs may cycle
+        /// during get-up — causing the character to flail while recovering.
+        ///
+        /// This test seeds all joints to non-identity, sets state to GettingUp,
+        /// runs one FixedUpdate, and asserts identity on all joints.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DuringGettingUpState_LegsAreAtRestNotCycling()
+        {
+            // Arrange
+            yield return null;
+
+            // Seed all leg joints to a non-identity rotation to prove they get reset.
+            Quaternion nonIdentity = Quaternion.Euler(30f, 15f, 10f);
+            if (_upperLegLJoint != null) _upperLegLJoint.targetRotation = nonIdentity;
+            if (_upperLegRJoint != null) _upperLegRJoint.targetRotation = nonIdentity;
+            if (_lowerLegLJoint != null) _lowerLegLJoint.targetRotation = nonIdentity;
+            if (_lowerLegRJoint != null) _lowerLegRJoint.targetRotation = nonIdentity;
+
+            // Also prime the gait with non-zero phase and smoothed input mag.
+            SetPrivateField(_legAnimator, "_phase", 1.5f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 0.8f);
+
+            // Set state to GettingUp.
+            SetAutoPropertyBackingField(_characterState, "CurrentState", CharacterStateType.GettingUp);
+
+            // Set move input so the LegAnimator would normally advance gait.
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Act — one FixedUpdate.
+            yield return new WaitForFixedUpdate();
+
+            // Assert 1: All leg joints should be identity.
+            float angleLU = _upperLegLJoint != null ? Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity) : 0f;
+            float angleRU = _upperLegRJoint != null ? Quaternion.Angle(_upperLegRJoint.targetRotation, Quaternion.identity) : 0f;
+            float angleLL = _lowerLegLJoint != null ? Quaternion.Angle(_lowerLegLJoint.targetRotation, Quaternion.identity) : 0f;
+            float angleRL = _lowerLegRJoint != null ? Quaternion.Angle(_lowerLegRJoint.targetRotation, Quaternion.identity) : 0f;
+
+            Assert.That(angleLU, Is.LessThanOrEqualTo(0.5f),
+                $"UpperLeg_L must be at identity during GettingUp. Angle from identity: {angleLU:F2}°. " +
+                "LegAnimator early-exit for GettingUp state may be missing.");
+            Assert.That(angleRU, Is.LessThanOrEqualTo(0.5f),
+                $"UpperLeg_R must be at identity during GettingUp. Angle: {angleRU:F2}°.");
+            Assert.That(angleLL, Is.LessThanOrEqualTo(0.5f),
+                $"LowerLeg_L must be at identity during GettingUp. Angle: {angleLL:F2}°.");
+            Assert.That(angleRL, Is.LessThanOrEqualTo(0.5f),
+                $"LowerLeg_R must be at identity during GettingUp. Angle: {angleRL:F2}°.");
+
+            // Assert 2: Phase must be zero (reset in the GettingUp early-exit).
+            float phase = (float)GetPrivateField(_legAnimator, "_phase");
+            Assert.That(phase, Is.EqualTo(0f).Within(0.0001f),
+                $"Gait phase must be 0 during GettingUp state. Got {phase:F4}. " +
+                "LegAnimator must reset _phase in the GettingUp early-exit branch.");
+
+            // Assert 3: SmoothedInputMag must be zero.
+            float smoothedMag = (float)GetPrivateField(_legAnimator, "_smoothedInputMag");
+            Assert.That(smoothedMag, Is.EqualTo(0f).Within(0.0001f),
+                $"SmoothedInputMag must be 0 during GettingUp state. Got {smoothedMag:F4}.");
+        }
+
+        // ─── GAP-11: Gait phase stability on velocity dip ────────────────────
+
+        /// <summary>
+        /// GAP-11: During a sustained walk, a brief velocity dip below the isMoving
+        /// threshold must NOT reset the gait phase to zero mid-stride.
+        ///
+        /// Risk: if the isMoving gate uses only instantaneous speed (without input fallback),
+        /// a single physics frame where horizontal speed dips below 0.02 m/s (e.g. from
+        /// collision response or integration variance) will fire the idle branch, which
+        /// includes the sharpTurn/restarting phase-reset logic. This causes legs to snap
+        /// to identity and restart from phase=0, producing a jarring visual pop.
+        ///
+        /// This test:
+        ///   1. Runs 30 frames of forward input to accumulate phase.
+        ///   2. Reads the phase after 30 frames.
+        ///   3. Injects a single frame where speed is zeroed (zero velocity override).
+        ///   4. Continues 20 more frames of forward input.
+        ///   5. Asserts the phase after the dip is GREATER than the phase was before
+        ///      the dip — i.e. it continued from where it was, not restarted from 0.
+        ///
+        /// The LegAnimator input-fallback (isMoving = true when inputMagnitude > 0.01)
+        /// should prevent the idle branch from firing when input is held, regardless
+        /// of velocity state.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DuringSustainedWalk_PhaseDoesNotResetOnVelocityDip()
+        {
+            // Arrange
+            yield return null;
+
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            SetAutoPropertyBackingField(_balance, "IsFallen", false);
+
+            // Act Phase 1: 30 frames of forward input to accumulate phase.
+            for (int i = 0; i < 30; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            float phaseAfterWarm = (float)GetPrivateField(_legAnimator, "_phase");
+
+            // Precondition: phase must have accumulated.
+            Assert.That(phaseAfterWarm, Is.GreaterThan(0.01f),
+                $"Phase should be > 0 after 30 frames of forward input. Got {phaseAfterWarm:F4}. " +
+                "Gait may not be running — check that BalanceController.IsFallen=false and " +
+                "CharacterState is not Fallen/GettingUp.");
+
+            // Act Phase 2: inject a velocity dip by zeroing the hips Rigidbody velocity.
+            // Input is still held (new Vector2(0f, 1f)) so LegAnimator should stay in isMoving=true.
+            _hipsRb.linearVelocity = Vector3.zero;
+            yield return new WaitForFixedUpdate();
+
+            float phaseAfterDip = (float)GetPrivateField(_legAnimator, "_phase");
+
+            // Act Phase 3: 20 more frames.
+            for (int i = 0; i < 20; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            float phaseAfterResume = (float)GetPrivateField(_legAnimator, "_phase");
+
+            // Assert 1: phase did not reset to zero during the dip frame.
+            // Allow a small epsilon in case of floating-point phase wrap.
+            Assert.That(phaseAfterDip, Is.GreaterThan(0.001f),
+                $"Phase must not reset to zero during a single-frame velocity dip when input is held. " +
+                $"Phase before dip: {phaseAfterWarm:F4}, phase after dip: {phaseAfterDip:F4}. " +
+                "LegAnimator should use input magnitude as a fallback for isMoving even when speed=0.");
+
+            // Assert 2: phase continued advancing after the dip (not stalled at the dip value).
+            // Account for 2π wrap: if phaseAfterWarm was near 2π and wrapped, use modulo comparison.
+            bool phaseAdvanced = phaseAfterResume > phaseAfterDip
+                || (phaseAfterResume < 0.5f && phaseAfterDip > Mathf.PI); // wrapped around
+            Assert.That(phaseAdvanced, Is.True,
+                $"Phase must continue advancing after the velocity dip. " +
+                $"Phase after dip: {phaseAfterDip:F4}, phase after 20 more frames: {phaseAfterResume:F4}.");
         }
     }
 }

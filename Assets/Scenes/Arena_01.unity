@@ -158,6 +158,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -179,9 +181,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!65 &172516598
 BoxCollider:
@@ -237,6 +241,8 @@ GameObject:
   m_Component:
   - component: {fileID: 404821463}
   - component: {fileID: 404821462}
+  - component: {fileID: 404821464}
+  - component: {fileID: 404821465}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -310,6 +316,38 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!81 &404821464
+AudioListener:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 404821461}
+  m_Enabled: 1
+--- !u!114 &404821465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 404821461}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f58db81eab8f9264bb24138ff74eb17a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _target: {fileID: 1301647471}
+  _distance: 6
+  _pivotHeightOffset: 1.2
+  _minPitch: -20
+  _maxPitch: 60
+  _mouseSensitivity: 0.15
+  _stickSensitivity: 3
+  _positionSmoothTime: 0.08
+  _collisionRadius: 0.25
+  _collisionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!21 &994371768
 Material:
   serializedVersion: 8
@@ -392,6 +430,11 @@ Material:
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
+--- !u!4 &1301647471 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2036620642779884686, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+  m_PrefabInstance: {fileID: 1977400338}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1666715398
 GameObject:
   m_ObjectHideFlags: 0
@@ -417,14 +460,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1666715398}
   m_Enabled: 1
-  serializedVersion: 11
+  serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
-  m_CookieSize: 10
+  m_CookieSize2D: {x: 10, y: 10}
   m_Shadows:
     m_Type: 0
     m_Resolution: -1

@@ -185,6 +185,14 @@ namespace PhysicsDrivenMovement.Character
                  "0.15 = legs go loose/dangly mid-air; 1.0 = no change. Restored to 1.0 on landing.")]
         private float _airborneSpringMultiplier = 0.15f;
 
+        // ── Angular Velocity Gait Gate (Phase 3T — GAP-2 fix) ──────────────
+
+        [SerializeField, Range(0f, 20f)]
+        [Tooltip("Yaw angular velocity threshold (rad/s) above which gait is suppressed to " +
+                 "prevent leg tangle during rapid spinning. Default 4 rad/s. " +
+                 "Gait re-enables with hysteresis at threshold × 0.5 held for 5 consecutive frames.")]
+        private float _angularVelocityGaitThreshold = 8f;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -249,6 +257,16 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>True while CharacterState is Airborne; used to suppress gait phase advancement.</summary>
         private bool _isAirborne;
+
+        // ── Angular Velocity Gait Gate — Hysteresis (Phase 3T — GAP-2 fix) ─
+
+        /// <summary>
+        /// Counts consecutive FixedUpdate frames where
+        /// |hipsAngularVelocity.y| &lt; _angularVelocityGaitThreshold × 0.5.
+        /// Gait is re-enabled only after this counter reaches 5, preventing premature
+        /// re-engagement during the brief dip between oscillation peaks mid-spin.
+        /// </summary>
+        private int _spinSuppressFrames;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -458,6 +476,40 @@ namespace PhysicsDrivenMovement.Character
             if (_isAirborne)
             {
                 isMoving = false;
+            }
+
+            // STEP 3d (Phase 3T — GAP-2 angular velocity gate):
+            //          Suppress gait when the hips are spinning rapidly in yaw.
+            //          High angular velocity means leg joint targets fight the rotational
+            //          momentum and can cross over, tangling for 1–2 seconds post-spin.
+            //          We use hysteresis to avoid premature re-engagement:
+            //            • Suppress immediately when |angVel.y| > threshold.
+            //            • Re-enable only after |angVel.y| < threshold * 0.5 for 5 consecutive frames.
+            if (_hipsRigidbody != null)
+            {
+                float absAngVelY = Mathf.Abs(_hipsRigidbody.angularVelocity.y);
+                if (absAngVelY > _angularVelocityGaitThreshold)
+                {
+                    isMoving = false;
+                    _spinSuppressFrames = 0; // reset hysteresis counter while still spinning fast
+                }
+                else if (absAngVelY < _angularVelocityGaitThreshold * 0.5f)
+                {
+                    // Angular velocity is below the low hysteresis band — increment counter.
+                    // Only re-enable gait once the counter reaches 5 consecutive frames.
+                    if (_spinSuppressFrames < 5)
+                    {
+                        _spinSuppressFrames++;
+                        isMoving = false; // still suppressed until hysteresis satisfied
+                    }
+                    // When _spinSuppressFrames >= 5, isMoving is determined by input/velocity above.
+                }
+                else
+                {
+                    // In the intermediate band (between threshold*0.5 and threshold): keep suppressed.
+                    _spinSuppressFrames = 0;
+                    isMoving = false;
+                }
             }
 
             // STEP 3b-yaw: Yaw alignment gate removed (was comparing raw stick input against
