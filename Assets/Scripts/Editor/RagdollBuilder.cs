@@ -382,16 +382,16 @@ namespace PhysicsDrivenMovement.Editor
             var comp = go.AddComponent<BalanceController>();
             using var so = new SerializedObject(comp);
             so.FindProperty("_kP").floatValue = 2000f;
-            so.FindProperty("_kD").floatValue = 200f;
-            so.FindProperty("_kPYaw").floatValue = 80f;
-            so.FindProperty("_kDYaw").floatValue = 60f;
+            so.FindProperty("_kD").floatValue = 350f;
+            so.FindProperty("_kPYaw").floatValue = 160f;
+            so.FindProperty("_kDYaw").floatValue = 40f;
             so.FindProperty("_yawDeadZoneDeg").floatValue = 2f;
             so.FindProperty("_airborneMultiplier").floatValue = 0.2f;
             so.FindProperty("_fallenEnterAngleThreshold").floatValue = 65f;
             so.FindProperty("_fallenExitAngleThreshold").floatValue = 55f;
-            so.FindProperty("_enableStartupStandAssist").boolValue = false;
+            so.FindProperty("_enableStartupStandAssist").boolValue = true;
             so.FindProperty("_startupStandAssistDuration").floatValue = 4f;
-            so.FindProperty("_enablePersistentSeatedRecovery").boolValue = false;
+            so.FindProperty("_enablePersistentSeatedRecovery").boolValue = true;
             so.FindProperty("_persistentSeatedRecoveryAssistScale").floatValue = 0.35f;
             so.FindProperty("_persistentSeatedRecoveryMinAssistScale").floatValue = 0.55f;
             so.FindProperty("_startupAssistTargetHeight").floatValue = 0.9f;
@@ -408,12 +408,12 @@ namespace PhysicsDrivenMovement.Editor
             so.FindProperty("_debugRecoveryTelemetryInterval").floatValue = 0.25f;
             so.FindProperty("_debugSeatedHeightThreshold").floatValue = 0.75f;
             so.FindProperty("_enableComStabilization").boolValue = true;
-            so.FindProperty("_comStabilizationStrength").floatValue = 400f;
-            so.FindProperty("_comStabilizationDamping").floatValue = 60f;
+            so.FindProperty("_comStabilizationStrength").floatValue = 200f;
+            so.FindProperty("_comStabilizationDamping").floatValue = 40f;
             so.FindProperty("_enableHeightMaintenance").boolValue = true;
             so.FindProperty("_standingHipsHeight").floatValue = 0.95f;
             so.FindProperty("_heightMaintenanceStrength").floatValue = 1500f;
-            so.FindProperty("_heightMaintenanceDamping").floatValue = 120f;
+            so.FindProperty("_heightMaintenanceDamping").floatValue = 160f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -421,7 +421,7 @@ namespace PhysicsDrivenMovement.Editor
         {
             var comp = go.AddComponent<PlayerMovement>();
             using var so = new SerializedObject(comp);
-            so.FindProperty("_moveForce").floatValue = 300f;
+            so.FindProperty("_moveForce").floatValue = 150f;
             so.FindProperty("_maxSpeed").floatValue = 5f;
             so.FindProperty("_jumpForce").floatValue = 100f;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -444,16 +444,16 @@ namespace PhysicsDrivenMovement.Editor
         {
             var comp = go.AddComponent<LegAnimator>();
             using var so = new SerializedObject(comp);
-            so.FindProperty("_stepAngle").floatValue = 50.3f;
+            so.FindProperty("_stepAngle").floatValue = 60f;
             so.FindProperty("_stepFrequencyScale").floatValue = 0.1f;
-            so.FindProperty("_stepFrequency").floatValue = 1f;
-            so.FindProperty("_kneeAngle").floatValue = 60f;
-            so.FindProperty("_upperLegLiftBoost").floatValue = 31.9f;
+            so.FindProperty("_stepFrequency").floatValue = 1.25f;
+            so.FindProperty("_kneeAngle").floatValue = 65f;
+            so.FindProperty("_upperLegLiftBoost").floatValue = 45f;
             so.FindProperty("_idleBlendSpeed").floatValue = 5f;
             so.FindProperty("_yawAlignThresholdDeg").floatValue = 90f;
-            so.FindProperty("_swingAxis").vector3Value = new Vector3(0f, 0f, 1f);
-            so.FindProperty("_kneeAxis").vector3Value = new Vector3(0f, 0f, 1f);
-            so.FindProperty("_useWorldSpaceSwing").boolValue = true;
+            so.FindProperty("_swingAxis").vector3Value = Vector3.right;
+            so.FindProperty("_kneeAxis").vector3Value = Vector3.right;
+            so.FindProperty("_useWorldSpaceSwing").boolValue = false;
             so.FindProperty("_debugLog").boolValue = false;
             so.FindProperty("_airborneSpringMultiplier").floatValue = 0.15f;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -463,11 +463,11 @@ namespace PhysicsDrivenMovement.Editor
         {
             var comp = go.AddComponent<ArmAnimator>();
             using var so = new SerializedObject(comp);
-            so.FindProperty("_armSwingAngle").floatValue = 20f;
-            so.FindProperty("_elbowBendAngle").floatValue = 15f;
-            so.FindProperty("_armSwingScale").floatValue = 1f;
-            so.FindProperty("_armSwingAxis").vector3Value = new Vector3(0f, 0f, 1f);
-            so.FindProperty("_elbowAxis").vector3Value = new Vector3(0f, 0f, 1f);
+            so.FindProperty("_armSwingAngle").floatValue = 39.8f;
+            so.FindProperty("_elbowBendAngle").floatValue = 21.2f;
+            so.FindProperty("_armSwingScale").floatValue = 0.785f;
+            so.FindProperty("_armSwingAxis").vector3Value = Vector3.forward;
+            so.FindProperty("_elbowAxis").vector3Value = Vector3.right;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -475,7 +475,7 @@ namespace PhysicsDrivenMovement.Editor
         {
             var comp = go.AddComponent<DebugPushForce>();
             using var so = new SerializedObject(comp);
-            so.FindProperty("_enableDebugKeys").boolValue = false;
+            so.FindProperty("_enableDebugKeys").boolValue = true;
             so.FindProperty("_smallPushForce").floatValue = 200f;
             so.FindProperty("_largePushForce").floatValue = 800f;
             so.ApplyModifiedPropertiesWithoutUndo();
