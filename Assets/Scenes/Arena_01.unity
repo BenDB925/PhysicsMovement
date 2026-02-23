@@ -683,87 +683,25 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _kP
-      value: 2000
-      objectReference: {fileID: 0}
-    - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      propertyPath: _debugStateTransitions
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      propertyPath: _debugRecoveryTelemetry
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      propertyPath: _enableStartupStandAssist
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5370770312200200579, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      propertyPath: _enablePersistentSeatedRecovery
-      value: 1
+      value: 1400
       objectReference: {fileID: 0}
     - target: {fileID: 6044111111111111111, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: _camera
       value: 
       objectReference: {fileID: 404821462}
-    - target: {fileID: 6044111111111111111, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      propertyPath: _moveForce
-      value: 150
-      objectReference: {fileID: 0}
+    - target: {fileID: 7270983243044800237, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
+    - target: {fileID: 9072273182103034825, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1977400340}
-    - targetCorrespondingSourceObject: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1977400348}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
---- !u!1 &1977400339 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
-  m_PrefabInstance: {fileID: 1977400338}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &1977400340
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1977400339}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d6a96640ea324894c92bd91b15f56aed, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _moveEnterThreshold: 0.1
-  _moveExitThreshold: 0.05
-  _getUpDelay: 0.5
-  _knockoutDuration: 1.5
-  _getUpForce: 250
-  _getUpTimeout: 3
---- !u!114 &1977400348
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1977400339}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 282eae0f717f82a4bb8ead682de9086d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _stepAngle: 50.3
-  _stepFrequencyScale: 1.5
-  _stepFrequency: 2
-  _kneeAngle: -30
-  _upperLegLiftBoost: 15
-  _idleBlendSpeed: 5
-  _swingAxis: {x: 0, y: 1, z: 0}
-  _kneeAxis: {x: 0, y: 1, z: 0}
-  _useWorldSpaceSwing: 1
 --- !u!1 &2089396234
 GameObject:
   m_ObjectHideFlags: 0

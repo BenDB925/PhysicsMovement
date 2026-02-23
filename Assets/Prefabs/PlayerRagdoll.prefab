@@ -15,6 +15,8 @@ GameObject:
   - component: {fileID: 5370770312200200579}
   - component: {fileID: 3677754697026347341}
   - component: {fileID: 6044111111111111111}
+  - component: {fileID: 9097617084092325405}
+  - component: {fileID: 3994733745678395079}
   m_Layer: 8
   m_Name: PlayerRagdoll
   m_TagString: Untagged
@@ -102,6 +104,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _debugSetup: 0
+  _upperLegSpring: 1200
+  _upperLegDamper: 120
+  _upperLegMaxForce: 5000
+  _lowerLegSpring: 1200
+  _lowerLegDamper: 120
+  _lowerLegMaxForce: 5000
+  _lowerLegLowAngularX: -90
+  _lowerLegHighAngularX: 90
+  _disableLowerLegGroundCollision: 1
 --- !u!114 &5370770312200200579
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -114,14 +125,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6530a7c5c642fa74ba08456af3569673, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _kP: 800
+  _kP: 2000
   _kD: 80
+  _kPYaw: 400
+  _kDYaw: 40
+  _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
   _fallenEnterAngleThreshold: 65
   _fallenExitAngleThreshold: 55
-  _enableStartupStandAssist: 0
+  _enableStartupStandAssist: 1
   _startupStandAssistDuration: 4
-  _enablePersistentSeatedRecovery: 0
+  _enablePersistentSeatedRecovery: 1
   _persistentSeatedRecoveryAssistScale: 0.35
   _persistentSeatedRecoveryMinAssistScale: 0.55
   _startupAssistTargetHeight: 0.9
@@ -132,6 +146,7 @@ MonoBehaviour:
   _startupLegSpringMultiplier: 2.25
   _startupLegDamperMultiplier: 1.75
   _startupAssistLegForceFraction: 0.8
+  _deferLegJointsToAnimator: 1
   _debugStateTransitions: 0
   _debugRecoveryTelemetry: 0
   _debugRecoveryTelemetryInterval: 0.25
@@ -168,11 +183,51 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d8a48dadac0ad774cbf1658bd2cb2db0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
-  _moveForce: 300
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _moveForce: 150
   _maxSpeed: 5
   _camera: {fileID: 0}
+--- !u!114 &9097617084092325405
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 207966327324143052}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6a96640ea324894c92bd91b15f56aed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _moveEnterThreshold: 0.1
+  _moveExitThreshold: 0.05
+  _getUpDelay: 0.5
+  _knockoutDuration: 1.5
+  _getUpForce: 250
+  _getUpTimeout: 3
+--- !u!114 &3994733745678395079
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 207966327324143052}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 282eae0f717f82a4bb8ead682de9086d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _stepAngle: 53
+  _stepFrequencyScale: 0.1
+  _stepFrequency: 1.25
+  _kneeAngle: 39.2
+  _upperLegLiftBoost: 44
+  _idleBlendSpeed: 5
+  _swingAxis: {x: 1, y: 0, z: 0}
+  _kneeAxis: {x: 1, y: 0, z: 0}
+  _useWorldSpaceSwing: 0
+  _debugLog: 1
 --- !u!1 &265282583001848857
 GameObject:
   m_ObjectHideFlags: 0
