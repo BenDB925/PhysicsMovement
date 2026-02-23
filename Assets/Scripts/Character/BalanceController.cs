@@ -633,6 +633,13 @@ namespace PhysicsDrivenMovement.Character
                         targetForwardXZ.normalized,
                         Vector3.up);
 
+                    // Clamp to ±170° to prevent sign-flip oscillation at the ±180° boundary.
+                    // When the target is almost exactly behind the character, SignedAngle can
+                    // alternate between +180 and -180 on consecutive frames, causing the yaw
+                    // torque to oscillate direction and the character to freeze. Clamping to
+                    // ±170° commits to a rotation direction and prevents the flip.
+                    yawErrorDeg = Mathf.Clamp(yawErrorDeg, -170f, 170f);
+
                     // Phase 3D2: Dead zone — suppress yaw torque for small errors to
                     // prevent micro-oscillation when the character is already nearly facing
                     // the target direction.
