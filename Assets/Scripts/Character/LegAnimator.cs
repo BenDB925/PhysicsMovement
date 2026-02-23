@@ -576,6 +576,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
             }
 
             _prevInputDir = currentInputDir;
