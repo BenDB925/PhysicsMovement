@@ -73,6 +73,8 @@ Common penalties: spins detected, fallen at end, waypoints missed.
 
 **Report output:** Always write to `Logs/` (e.g. `Logs/system-optimizer-results.txt`) so results persist across sessions and can be read by Zé to update the prefab.
 
+**Applying results:** Update **prefab values only** — never change C# field defaults to match optimizer output. C# defaults are the safe starting point for a fresh component; prefab overrides are the tuned production values. Changing C# defaults will break tests that assert those defaults.
+
 ### Phase D: Implement to Pass Tests
 
 1. Write the minimum code required to make all tests from Phase C pass.
