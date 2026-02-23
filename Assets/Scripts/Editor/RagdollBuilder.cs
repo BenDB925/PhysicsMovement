@@ -337,8 +337,19 @@ namespace PhysicsDrivenMovement.Editor
                     System.IO.Path.GetFileName(directory));
             }
 
+            // STEP 5a: Snapshot tuned values from existing prefab so they survive a rebuild.
+            // The builder always recreates components from scratch (safe defaults), but
+            // production-tuned values live in the prefab as overrides. We preserve them here.
+            var snapshot = SnapshotTunedValues(prefabPath);
+
             PrefabUtility.SaveAsPrefabAsset(rootGO, prefabPath);
             Object.DestroyImmediate(rootGO);
+
+            // STEP 5b: Re-apply snapshotted values onto the freshly saved prefab.
+            if (snapshot != null)
+            {
+                RestoreTunedValues(prefabPath, snapshot);
+            }
 
             AssetDatabase.Refresh();
             Debug.Log($"[RagdollBuilder] PlayerRagdoll prefab saved to '{prefabPath}'.");
@@ -641,6 +652,104 @@ namespace PhysicsDrivenMovement.Editor
                 maximumForce = seg.DriveProfile.MaxForce,
             };
             joint.targetRotation = Quaternion.identity;
+        }
+
+        // ─── Tuned-Value Preservation ─────────────────────────────────────────
+
+        /// <summary>
+        /// Captures production-tuned SerializeField values from the existing prefab
+        /// so they can be re-applied after a full rebuild wipes components back to defaults.
+        /// Add any new tunable fields here when they are exposed in the Inspector.
+        /// </summary>
+        private static Dictionary<string, Dictionary<string, object>> SnapshotTunedValues(string prefabPath)
+        {
+            GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (existing == null) return null;
+
+            var snap = new Dictionary<string, Dictionary<string, object>>();
+
+            void Capture(Component comp, string key, string[] fields)
+            {
+                if (comp == null) return;
+                var so = new SerializedObject(comp);
+                var entry = new Dictionary<string, object>();
+                foreach (var f in fields)
+                {
+                    var prop = so.FindProperty(f);
+                    if (prop == null) continue;
+                    entry[f] = prop.propertyType switch
+                    {
+                        SerializedPropertyType.Float   => (object)prop.floatValue,
+                        SerializedPropertyType.Integer => prop.intValue,
+                        SerializedPropertyType.Boolean => prop.boolValue,
+                        _                              => null,
+                    };
+                }
+                if (entry.Count > 0) snap[key] = entry;
+            }
+
+            var bc = existing.GetComponentInChildren<BalanceController>();
+            Capture(bc, "BalanceController", new[]
+            {
+                "_uprightTorqueP", "_uprightTorqueD",
+                "_comStabilizationStrength", "_comStabilizationDamping",
+                "_hipHeightSpring", "_hipHeightDamper",
+                "_jumpForce",
+            });
+
+            var la = existing.GetComponentInChildren<LegAnimator>();
+            Capture(la, "LegAnimator", new[]
+            {
+                "_stepFrequency", "_stepFrequencyScale", "_stepAngle",
+                "_kneeAngle", "_upperLegLiftBoost",
+                "_kPYaw", "_kDYaw",
+                "_stuckFrameThreshold", "_stuckSpeedThreshold",
+                "_recoveryFrames", "_recoverySpringMultiplier",
+            });
+
+            var pm = existing.GetComponentInChildren<PlayerMovement>();
+            Capture(pm, "PlayerMovement", new[]
+            {
+                "_moveForce", "_maxSpeed",
+            });
+
+            return snap.Count > 0 ? snap : null;
+        }
+
+        /// <summary>
+        /// Re-applies snapshotted tuned values onto the freshly rebuilt prefab.
+        /// </summary>
+        private static void RestoreTunedValues(string prefabPath, Dictionary<string, Dictionary<string, object>> snap)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null) return;
+
+            void Apply(Component comp, string key)
+            {
+                if (comp == null || !snap.TryGetValue(key, out var entry)) return;
+                var so = new SerializedObject(comp);
+                bool changed = false;
+                foreach (var (field, value) in entry)
+                {
+                    if (value == null) continue;
+                    var prop = so.FindProperty(field);
+                    if (prop == null) continue;
+                    switch (value)
+                    {
+                        case float f:  prop.floatValue = f;  changed = true; break;
+                        case int   i:  prop.intValue   = i;  changed = true; break;
+                        case bool  b:  prop.boolValue  = b;  changed = true; break;
+                    }
+                }
+                if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            Apply(prefab.GetComponentInChildren<BalanceController>(), "BalanceController");
+            Apply(prefab.GetComponentInChildren<LegAnimator>(),       "LegAnimator");
+            Apply(prefab.GetComponentInChildren<PlayerMovement>(),    "PlayerMovement");
+
+            PrefabUtility.SavePrefabAsset(prefab);
+            Debug.Log("[RagdollBuilder] Tuned values restored to rebuilt prefab.");
         }
     }
 }

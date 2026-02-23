@@ -173,12 +173,12 @@ namespace PhysicsDrivenMovement.Character
             _instance        = Instantiate(_playerRagdollPrefab, spawnPos, Quaternion.identity);
 
             _hipsTransform  = _instance.transform;
-            _movement       = _instance.GetComponent<PlayerMovement>();
-            _characterState = _instance.GetComponent<CharacterState>();
+            _movement       = _instance.GetComponentInChildren<PlayerMovement>();
+            _characterState = _instance.GetComponentInChildren<CharacterState>();
 
             if (_movement == null)
             {
-                Debug.LogError("[LapDemoRunner] PlayerMovement not found on prefab root. " +
+                Debug.LogError("[LapDemoRunner] PlayerMovement not found on prefab or any child. " +
                                "Ensure PlayerRagdoll has PlayerMovement on the Hips GO.");
                 yield break;
             }
