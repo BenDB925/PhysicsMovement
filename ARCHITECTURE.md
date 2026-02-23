@@ -21,11 +21,13 @@
 │  GameSettings.Awake()   ─── configures Time, Physics, layers      │
 │                                                                    │
 │  RagdollSetup.Awake()   ─── disables neighbour collisions         │
-│  BalanceController      ─── PD torque → upright pose              │
+│  BalanceController      ─── PD torque → upright + yaw pose        │
 │  GroundSensor           ─── foot ground detection                 │
-│  PlayerMovement ★       ─── input → AddForce on Hips              │
-│  LegAnimator ★          ─── procedural walk cycle                 │
-│  CharacterState ★       ─── FSM (Standing/Moving/Airborne/...)    │
+│  PlayerMovement         ─── input → AddForce on Hips              │
+│  CharacterState         ─── FSM (Standing/Moving/Airborne/...)    │
+│  LegAnimator            ─── procedural walk cycle (sinusoidal)    │
+│  ArmAnimator            ─── counter-swing arm gait                │
+│  CameraFollow           ─── orbital third-person camera           │
 │  HandGrabber ★          ─── FixedJoint grab mechanic              │
 │  HitReceiver ★          ─── knockout on head collision            │
 │                          FixedUpdate @ 100 Hz                     │
@@ -104,6 +106,57 @@
 | **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `SetFacingDirection(Vector3)` — consumed by `PlayerMovement` and `CharacterState` (Phase 3). |
 | **Collaborators** | Reads `GroundSensor.IsGrounded`; forces applied to Hips `Rigidbody`. |
 | **Phase** | 2C |
+
+### `Character.PlayerMovement` — `Assets/Scripts/Character/PlayerMovement.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; reads player input and applies camera-relative horizontal forces and jump impulses. |
+| **Why** | Separates input-to-force translation from balance/animation concerns. |
+| **Public Surface** | `CurrentMoveInput: Vector2`, `SetMoveInputForTest(Vector2)`, `SetJumpInputForTest(bool)` — test seams. |
+| **Collaborators** | `BalanceController.SetFacingDirection`, `CharacterState` (jump gate), `CameraFollow` (movement direction). |
+| **Phase** | 3B |
+
+### `Character.CharacterState` — `Assets/Scripts/Character/CharacterState.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; FSM with states `Standing / Moving / Airborne / Fallen / GettingUp`. |
+| **Why** | Centralises state logic so LegAnimator, ArmAnimator, and BalanceController can all read a single authoritative state. |
+| **Public Surface** | `CurrentState: CharacterStateType`, `OnStateChanged` event, `SetStateForTest(CharacterStateType)` — test seam. |
+| **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
+| **Phase** | 3C |
+
+### `Character.LegAnimator` — `Assets/Scripts/Character/LegAnimator.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; drives UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values in a sinusoidal walk cycle based on move input. |
+| **Why** | Ragdoll characters need procedural leg animation — no keyframe rigs, just physics-driven joint targets. |
+| **Public Surface** | `Phase: float`, `SmoothedInputMag: float` — read by `ArmAnimator` for counter-swing. |
+| **Collaborators** | `PlayerMovement` (input), `CharacterState` (state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`). |
+| **Key design** | Local-space swing only (`_useWorldSpaceSwing = false`). Angular velocity spin gate at 8 rad/s. Phase resets on restart/sharp turn to prevent leg snap. |
+| **Phase** | 3E |
+
+### `Character.ArmAnimator` — `Assets/Scripts/Character/ArmAnimator.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; drives UpperArm ConfigurableJoint `targetRotation` for counter-swing arm gait. LowerArm/Hand joints remain floppy. |
+| **Why** | Separate from LegAnimator — arms will need independent behaviours (punch, grab, idle sway) in Phase 4. |
+| **Public Surface** | None currently — internally reads `LegAnimator.Phase` and `LegAnimator.SmoothedInputMag`. |
+| **Collaborators** | `LegAnimator` (phase/magnitude), `CharacterState` (state gate). |
+| **Phase** | 3E4 |
+
+### `Character.CameraFollow` — `Assets/Scripts/Character/CameraFollow.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on the scene Camera; orbital third-person follow with mouse/stick orbit, pitch clamp, SphereCast collision avoidance, and cursor lock. |
+| **Why** | Camera must follow the ragdoll Hips smoothly — SmoothDamp position + look, not hard-snapping. |
+| **Public Surface** | `_target: Transform` (serialized, auto-finds `PlayerMovement` if null). |
+| **Collaborators** | Reads Hips transform position. `PlayerMovement` reads camera yaw for camera-relative movement. |
+| **Phase** | 3G (delivered by Jermie) |
 
 ---
 
