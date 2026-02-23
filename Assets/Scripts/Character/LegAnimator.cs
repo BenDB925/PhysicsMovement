@@ -232,6 +232,22 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Whether the character was moving last frame — used to detect movement restarts.</summary>
         private bool _wasMoving;
 
+        // ── Public Properties ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Current gait phase in radians [0, 2π). Advanced each FixedUpdate while moving.
+        /// Exposed so collaborators (e.g. <see cref="ArmAnimator"/>) can synchronise their
+        /// own animation cycle to the same base phase.
+        /// </summary>
+        public float Phase => _phase;
+
+        /// <summary>
+        /// Smoothed input magnitude in the range [0, 1]. Ramps up when gait starts and
+        /// decays to 0 when idle. Exposed so collaborators (e.g. <see cref="ArmAnimator"/>)
+        /// can blend their effects in/out in sync with the leg gait amplitude.
+        /// </summary>
+        public float SmoothedInputMag => _smoothedInputMag;
+
         /// <summary>
         /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/> this frame.
         /// Refreshed unconditionally at the top of every <see cref="FixedUpdate"/> call so it is

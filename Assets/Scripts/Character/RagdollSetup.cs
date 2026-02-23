@@ -127,6 +127,30 @@ namespace PhysicsDrivenMovement.Character
                  "Default: true.")]
         private bool _disableLowerLegGroundCollision = true;
 
+        // DESIGN: UpperArm joint drives are configured here so ArmAnimator targetRotation
+        // commands are honoured by PhysX. LowerArm and Hand joints are intentionally left
+        // without drives (floppy/limp) — they flap naturally as a result of upper arm
+        // motion, which is the desired ragdoll feel for this phase of development.
+
+        [SerializeField]
+        [Range(100f, 5000f)]
+        [Tooltip("SLERP drive positionSpring for UpperArm_L and UpperArm_R joints. " +
+                 "Higher = stiffer response to ArmAnimator targetRotation commands. " +
+                 "Default 800 — lighter than leg springs as arm swing is cosmetic. ")]
+        private float _upperArmSpring = 800f;
+
+        [SerializeField]
+        [Range(10f, 500f)]
+        [Tooltip("SLERP drive positionDamper for UpperArm joints. " +
+                 "Roughly 10% of spring for a critically-damped response. Default 80.")]
+        private float _upperArmDamper = 80f;
+
+        [SerializeField]
+        [Range(100f, 10000f)]
+        [Tooltip("SLERP drive maximumForce for UpperArm joints. " +
+                 "Must be high enough that the spring/damper output is not capped. Default 3000.")]
+        private float _upperArmMaxForce = 3000f;
+
         // ─── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>All Rigidbodies contained in this ragdoll, including the root.</summary>
@@ -182,16 +206,19 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>
         /// Searches the hierarchy for the four leg ConfigurableJoints by GameObject name
         /// (UpperLeg_L, UpperLeg_R, LowerLeg_L, LowerLeg_R) and applies the serialized
-        /// SLERP drive parameters. Also enforces <see cref="RotationDriveMode.Slerp"/> on
-        /// each joint, which is required for <see cref="LegAnimator"/> targetRotation to
-        /// be honoured by PhysX.
+        /// SLERP drive parameters. Also applies UpperArm SLERP drives for
+        /// (UpperArm_L, UpperArm_R) so <see cref="ArmAnimator"/> targetRotation commands
+        /// are honoured by PhysX. LowerArm and Hand joints are intentionally left without
+        /// drives (floppy/limp). Also enforces <see cref="RotationDriveMode.Slerp"/> on
+        /// each driven joint, which is required for <see cref="LegAnimator"/> and
+        /// <see cref="ArmAnimator"/> targetRotation to be honoured by PhysX.
         /// LowerLeg joints additionally receive loosened angular X limits
         /// (<see cref="_lowerLegLowAngularX"/> / <see cref="_lowerLegHighAngularX"/>)
         /// to prevent hard-limit snapping when the foot contacts the ground.
         /// </summary>
         private void ApplyLegJointDrives()
         {
-            // STEP 3a: Build the upper-leg and lower-leg drive profiles from serialized fields.
+            // STEP 3a: Build drive profiles from serialized fields.
             JointDrive upperLegDrive = new JointDrive
             {
                 positionSpring = _upperLegSpring,
@@ -206,10 +233,17 @@ namespace PhysicsDrivenMovement.Character
                 maximumForce   = _lowerLegMaxForce,
             };
 
+            JointDrive upperArmDrive = new JointDrive
+            {
+                positionSpring = _upperArmSpring,
+                positionDamper = _upperArmDamper,
+                maximumForce   = _upperArmMaxForce,
+            };
+
             // STEP 3b: Walk all ConfigurableJoints in the hierarchy. Match by name and apply.
             //          Using name-based matching mirrors LegAnimator's lookup strategy and
             //          is hierarchy-position-agnostic — future skeleton changes won't break
-            //          this as long as the four segment names remain consistent.
+            //          this as long as the segment names remain consistent.
             ConfigurableJoint[] allJoints =
                 GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
 
@@ -240,6 +274,15 @@ namespace PhysicsDrivenMovement.Character
                         joint.lowAngularXLimit  = new SoftJointLimit { limit = _lowerLegLowAngularX };
                         joint.highAngularXLimit = new SoftJointLimit { limit = _lowerLegHighAngularX };
                         break;
+
+                    case "UpperArm_L":
+                    case "UpperArm_R":
+                        // STEP 3f: Apply upper-arm SLERP drive so ArmAnimator targetRotation is
+                        //          honoured. Spring is lighter than legs (arm swing is cosmetic).
+                        //          LowerArm and Hand joints are intentionally left floppy.
+                        joint.rotationDriveMode = RotationDriveMode.Slerp;
+                        joint.slerpDrive        = upperArmDrive;
+                        break;
                 }
             }
 
@@ -249,7 +292,8 @@ namespace PhysicsDrivenMovement.Character
                     $"[RagdollSetup] Leg drives applied — " +
                     $"UpperLeg spring={_upperLegSpring} damper={_upperLegDamper} maxForce={_upperLegMaxForce} | " +
                     $"LowerLeg spring={_lowerLegSpring} damper={_lowerLegDamper} maxForce={_lowerLegMaxForce} | " +
-                    $"LowerLeg angX={_lowerLegLowAngularX}°/{_lowerLegHighAngularX}°");
+                    $"LowerLeg angX={_lowerLegLowAngularX}°/{_lowerLegHighAngularX}° | " +
+                    $"UpperArm spring={_upperArmSpring} damper={_upperArmDamper} maxForce={_upperArmMaxForce}");
             }
         }
 
