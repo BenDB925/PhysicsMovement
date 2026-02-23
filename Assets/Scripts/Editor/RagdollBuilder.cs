@@ -341,11 +341,17 @@ namespace PhysicsDrivenMovement.Editor
             LegAnimator la = rootGO.AddComponent<LegAnimator>();
             {
                 using var so = new SerializedObject(la);
-                so.FindProperty("_kneeAngle").floatValue          = 65f;
-                so.FindProperty("_upperLegLiftBoost").floatValue  = 45f;
-                so.FindProperty("_stepAngle").floatValue          = 60f;
-                so.FindProperty("_stepFrequencyScale").floatValue = 0.1f;
-                so.FindProperty("_stepFrequency").floatValue      = 1f;
+                so.FindProperty("_kneeAngle").floatValue                = 65f;
+                so.FindProperty("_upperLegLiftBoost").floatValue        = 45f;
+                so.FindProperty("_stepAngle").floatValue                = 60f;
+                so.FindProperty("_stepFrequencyScale").floatValue       = 0.1f;
+                so.FindProperty("_stepFrequency").floatValue            = 1.25f;
+                // Swing/knee axis MUST be (1,0,0) — joint-local X is the hinge axis.
+                // (0,0,1) is wrong and breaks gait entirely.
+                var swingAxis = so.FindProperty("_swingAxis");
+                if (swingAxis != null) { swingAxis.vector3Value = Vector3.right; }
+                var kneeAxis = so.FindProperty("_kneeAxis");
+                if (kneeAxis != null) { kneeAxis.vector3Value = Vector3.right; }
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
@@ -357,7 +363,8 @@ namespace PhysicsDrivenMovement.Editor
             PlayerMovement pm = rootGO.AddComponent<PlayerMovement>();
             {
                 using var so = new SerializedObject(pm);
-                so.FindProperty("_jumpForce").floatValue = 120f;
+                so.FindProperty("_moveForce").floatValue = 150f;
+                so.FindProperty("_jumpForce").floatValue = 100f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 

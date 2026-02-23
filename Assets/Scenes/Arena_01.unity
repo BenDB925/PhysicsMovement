@@ -148,7 +148,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9d4d6c9be01e09a40aab81ba4b7da2bd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.LapDemoRunner
-  _playerRagdollPrefab: {fileID: 207966327324143052, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+  _playerRagdollPrefab: {fileID: 3651069376947674363, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+  _spawnOffset: {x: 0, y: 1.1, z: 0}
   _settleSeconds: 2
   _showOnScreenHUD: 1
 --- !u!4 &161024588
@@ -768,6 +769,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2036620642779884686, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3651069376947674363, guid: 0e2b1f2d6d70df74bbc765a731c27809, type: 3}
+      propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
