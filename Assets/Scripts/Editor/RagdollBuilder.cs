@@ -334,7 +334,6 @@ namespace PhysicsDrivenMovement.Editor
                 so.FindProperty("_comStabilizationDamping").floatValue   = 40f;
                 so.FindProperty("_heightMaintenanceStrength").floatValue  = 1500f;
                 so.FindProperty("_heightMaintenanceDamping").floatValue   = 160f;
-                so.FindProperty("_jumpForce").floatValue                 = 120f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
@@ -342,18 +341,25 @@ namespace PhysicsDrivenMovement.Editor
             LegAnimator la = rootGO.AddComponent<LegAnimator>();
             {
                 using var so = new SerializedObject(la);
-                so.FindProperty("_kneeAngle").floatValue           = 65f;
-                so.FindProperty("_upperLegLiftBoost").floatValue   = 45f;
-                so.FindProperty("_stepAngle").floatValue           = 60f;
-                so.FindProperty("_stepFrequencyScale").floatValue  = 0.1f;
-                so.FindProperty("_stepFrequency").floatValue       = 1f;
+                so.FindProperty("_kneeAngle").floatValue          = 65f;
+                so.FindProperty("_upperLegLiftBoost").floatValue  = 45f;
+                so.FindProperty("_stepAngle").floatValue          = 60f;
+                so.FindProperty("_stepFrequencyScale").floatValue = 0.1f;
+                so.FindProperty("_stepFrequency").floatValue      = 1f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
-            // STEP 4c: Add ArmAnimator, CharacterState, PlayerMovement.
+            // STEP 4c: Add ArmAnimator and CharacterState.
             rootGO.AddComponent<ArmAnimator>();
             rootGO.AddComponent<CharacterState>();
-            rootGO.AddComponent<PlayerMovement>();
+
+            // STEP 4d: Add and configure PlayerMovement with production-tuned values.
+            PlayerMovement pm = rootGO.AddComponent<PlayerMovement>();
+            {
+                using var so = new SerializedObject(pm);
+                so.FindProperty("_jumpForce").floatValue = 120f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             rootGO.AddComponent<DebugPushForce>();
 
