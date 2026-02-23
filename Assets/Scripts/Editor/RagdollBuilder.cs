@@ -349,9 +349,9 @@ namespace PhysicsDrivenMovement.Editor
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
-            // STEP 4c: Add ArmAnimator and CharacterState.
+            // STEP 4c: Add ArmAnimator, PlayerMovement, then CharacterState.
+            // Order matters: CharacterState.Awake caches PlayerMovement via GetComponent.
             rootGO.AddComponent<ArmAnimator>();
-            rootGO.AddComponent<CharacterState>();
 
             // STEP 4d: Add and configure PlayerMovement with production-tuned values.
             PlayerMovement pm = rootGO.AddComponent<PlayerMovement>();
@@ -361,9 +361,10 @@ namespace PhysicsDrivenMovement.Editor
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
+            rootGO.AddComponent<CharacterState>();
             rootGO.AddComponent<DebugPushForce>();
 
-            // STEP 4d: Add GroundSensor to both feet and assign the Environment LayerMask.
+            // STEP 4e: Add GroundSensor to both feet and assign the Environment LayerMask.
             AttachGroundSensor(goMap["Foot_L"]);
             AttachGroundSensor(goMap["Foot_R"]);
 

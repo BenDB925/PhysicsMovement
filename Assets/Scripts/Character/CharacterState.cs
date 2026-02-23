@@ -12,7 +12,6 @@ namespace PhysicsDrivenMovement.Character
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(BalanceController))]
-    [RequireComponent(typeof(PlayerMovement))]
     public class CharacterState : MonoBehaviour
     {
         [SerializeField, Range(0f, 1f)]
