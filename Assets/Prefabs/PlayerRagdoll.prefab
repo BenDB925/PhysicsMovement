@@ -130,7 +130,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _kP: 2000
-  _kD: 80
+  _kD: 350
   _kPYaw: 160
   _kDYaw: 40
   _yawDeadZoneDeg: 2
@@ -156,12 +156,12 @@ MonoBehaviour:
   _debugRecoveryTelemetryInterval: 0.25
   _debugSeatedHeightThreshold: 0.75
   _enableComStabilization: 1
-  _comStabilizationStrength: 400
-  _comStabilizationDamping: 60
+  _comStabilizationStrength: 200
+  _comStabilizationDamping: 40
   _enableHeightMaintenance: 1
   _standingHipsHeight: 0.95
   _heightMaintenanceStrength: 1500
-  _heightMaintenanceDamping: 120
+  _heightMaintenanceDamping: 160
 --- !u!114 &3677754697026347341
 MonoBehaviour:
   m_ObjectHideFlags: 0
