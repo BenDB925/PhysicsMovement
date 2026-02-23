@@ -597,9 +597,22 @@ namespace PhysicsDrivenMovement.Character
 
             if (!_isRecovering)
             {
-                // Update stuck counter.
+                // Measure how much velocity is actually in the intended direction of travel.
+                // Raw horizontal speed fails at corners — hips slide sideways so speed > threshold
+                // even though the character isn't making forward progress.
+                float forwardProgress = 0f;
+                if (_hipsRigidbody != null && currentInputDir.sqrMagnitude > 0.01f)
+                {
+                    // Convert 2D input direction to world-space forward vector (XZ plane).
+                    Vector3 worldInputDir = new Vector3(currentInputDir.x, 0f, currentInputDir.y).normalized;
+                    Vector3 hipsVel       = _hipsRigidbody.linearVelocity;
+                    Vector3 hipsVelFlat   = new Vector3(hipsVel.x, 0f, hipsVel.z);
+                    forwardProgress       = Vector3.Dot(hipsVelFlat, worldInputDir);
+                }
+
+                // Stuck = trying to move but making no forward progress in the input direction.
                 bool stuckCondition = _smoothedInputMag > 0.5f
-                    && horizontalSpeedGate < _stuckSpeedThreshold
+                    && forwardProgress < _stuckSpeedThreshold
                     && stateAllowsRecovery;
 
                 if (stuckCondition)
