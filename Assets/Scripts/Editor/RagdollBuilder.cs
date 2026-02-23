@@ -314,11 +314,26 @@ namespace PhysicsDrivenMovement.Editor
             Debug.Assert(rootGO != null, "Root GO (Hips) was not created.");
             rootGO.AddComponent<RagdollSetup>();
             rootGO.AddComponent<BalanceController>();
+            rootGO.AddComponent<PlayerMovement>();
+            rootGO.AddComponent<CharacterState>();
+            rootGO.AddComponent<LegAnimator>();
+            rootGO.AddComponent<ArmAnimator>();
             rootGO.AddComponent<DebugPushForce>();
 
             // STEP 4b: Add GroundSensor to both feet and assign the Environment LayerMask.
             AttachGroundSensor(goMap["Foot_L"]);
             AttachGroundSensor(goMap["Foot_R"]);
+
+            // STEP 4c (Phase 4): Add HandGrabZone trigger spheres to both hands.
+            AttachHandGrabZone(goMap["Hand_L"]);
+            AttachHandGrabZone(goMap["Hand_R"]);
+
+            // STEP 4d (Phase 4): Add GrabController and PunchController to Hips.
+            rootGO.AddComponent<GrabController>();
+            rootGO.AddComponent<PunchController>();
+
+            // STEP 4e (Phase 4): Add HitReceiver to Head.
+            goMap["Head"].AddComponent<HitReceiver>();
 
             // STEP 5: Save as a prefab asset.
             string directory = System.IO.Path.GetDirectoryName(prefabPath);
@@ -354,6 +369,29 @@ namespace PhysicsDrivenMovement.Editor
             so.FindProperty("_groundLayers").intValue = 1 << GameSettings.LayerEnvironment;
             so.FindProperty("_castRadius").floatValue = 0.08f;
             so.FindProperty("_castDistance").floatValue = 0.25f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Adds a <see cref="HandGrabZone"/> component to <paramref name="handGO"/> along
+        /// with a trigger <see cref="SphereCollider"/> for detection. The trigger sphere
+        /// is slightly larger than the hand's physics collider so it can detect nearby
+        /// grabbable objects.
+        /// </summary>
+        private static void AttachHandGrabZone(GameObject handGO)
+        {
+            // Add trigger sphere for grab detection.
+            SphereCollider trigger = handGO.AddComponent<SphereCollider>();
+            trigger.isTrigger = true;
+            trigger.radius = 0.15f;
+
+            // Add HandGrabZone component.
+            HandGrabZone zone = handGO.AddComponent<HandGrabZone>();
+
+            // Use SerializedObject to write the private [SerializeField] so Unity
+            // serialises it correctly into the prefab.
+            using var so = new SerializedObject(zone);
+            so.FindProperty("_detectionRadius").floatValue = 0.15f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

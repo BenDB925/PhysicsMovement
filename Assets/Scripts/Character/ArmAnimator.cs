@@ -93,6 +93,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private LegAnimator _legAnimator;
 
+        /// <summary>
+        /// Sibling GrabController, used to skip arm swing on grabbed arms.
+        /// Null when no GrabController is present (Phase 1–3 prefabs).
+        /// </summary>
+        private GrabController _grabController;
+
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
@@ -103,6 +109,9 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[ArmAnimator] No LegAnimator found on this GameObject. " +
                                  "Arm swing will remain at identity.", this);
             }
+
+            // STEP 1b: Cache optional GrabController for grab cooperation.
+            TryGetComponent(out _grabController);
 
             // STEP 2: Locate the four arm ConfigurableJoints by searching children by name.
             //         Pattern mirrors LegAnimator's Awake exactly — hierarchy-agnostic name lookup.
@@ -210,13 +219,17 @@ namespace PhysicsDrivenMovement.Character
         /// <param name="effectiveScale">Combined amplitude scale [0,1] (smoothedInputMag × _armSwingScale).</param>
         private void ApplyArmSwing(float leftSwingDeg, float rightSwingDeg, float effectiveScale)
         {
-            // Upper arms: sinusoidal counter-swing
-            if (_upperArmL != null)
+            // Check grab state — skip swing on arms that are currently grabbing.
+            bool leftGrabbing = _grabController != null && _grabController.IsGrabbingLeft;
+            bool rightGrabbing = _grabController != null && _grabController.IsGrabbingRight;
+
+            // Upper arms: sinusoidal counter-swing (skip grabbed side).
+            if (_upperArmL != null && !leftGrabbing)
             {
                 _upperArmL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _armSwingAxis);
             }
 
-            if (_upperArmR != null)
+            if (_upperArmR != null && !rightGrabbing)
             {
                 _upperArmR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _armSwingAxis);
             }
@@ -225,12 +238,12 @@ namespace PhysicsDrivenMovement.Character
             // relax to identity when idle. Positive angle = elbow forward flex.
             float elbowDeg = _elbowBendAngle * effectiveScale;
 
-            if (_lowerArmL != null)
+            if (_lowerArmL != null && !leftGrabbing)
             {
                 _lowerArmL.targetRotation = Quaternion.AngleAxis(elbowDeg, _elbowAxis);
             }
 
-            if (_lowerArmR != null)
+            if (_lowerArmR != null && !rightGrabbing)
             {
                 _lowerArmR.targetRotation = Quaternion.AngleAxis(elbowDeg, _elbowAxis);
             }
@@ -244,10 +257,13 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private void SetAllArmTargetsToIdentity()
         {
-            if (_upperArmL != null) { _upperArmL.targetRotation = Quaternion.identity; }
-            if (_upperArmR != null) { _upperArmR.targetRotation = Quaternion.identity; }
-            if (_lowerArmL != null) { _lowerArmL.targetRotation = Quaternion.identity; }
-            if (_lowerArmR != null) { _lowerArmR.targetRotation = Quaternion.identity; }
+            bool leftGrabbing = _grabController != null && _grabController.IsGrabbingLeft;
+            bool rightGrabbing = _grabController != null && _grabController.IsGrabbingRight;
+
+            if (_upperArmL != null && !leftGrabbing) { _upperArmL.targetRotation = Quaternion.identity; }
+            if (_upperArmR != null && !rightGrabbing) { _upperArmR.targetRotation = Quaternion.identity; }
+            if (_lowerArmL != null && !leftGrabbing) { _lowerArmL.targetRotation = Quaternion.identity; }
+            if (_lowerArmR != null && !rightGrabbing) { _lowerArmR.targetRotation = Quaternion.identity; }
         }
     }
 }

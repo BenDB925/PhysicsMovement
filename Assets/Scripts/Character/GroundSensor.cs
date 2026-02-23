@@ -11,6 +11,7 @@ namespace PhysicsDrivenMovement.Character
     /// Lifecycle: FixedUpdate — result is valid from the first physics step onward.
     /// Collaborators: <see cref="BalanceController"/> reads <see cref="IsGrounded"/>.
     /// </summary>
+    [DefaultExecutionOrder(-55)]
     public class GroundSensor : MonoBehaviour
     {
         // ─── Serialised Fields ──────────────────────────────────────────────
@@ -52,9 +53,10 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // Use the foot collider's world-space bounds to anchor the cast at the sole.
-            // This keeps the sensor stable even when the foot transform pivot is not
-            // exactly at the bottom of the collider.
+            // Use the foot collider's world-space bounds centre to anchor the cast.
+            // Starting from the centre (not the sole) prevents missed detections when
+            // the foot penetrates the floor — Physics.SphereCast ignores colliders
+            // that overlap the starting sphere.
             Vector3 origin = GetCastOrigin();
 
             _isGrounded = Physics.SphereCast(
@@ -90,8 +92,12 @@ namespace PhysicsDrivenMovement.Character
             if (_footCollider != null)
             {
                 Bounds bounds = _footCollider.bounds;
-                float soleY = bounds.min.y;
-                return new Vector3(bounds.center.x, soleY + _castRadius + 0.002f, bounds.center.z);
+                // Use bounds.center.y instead of bounds.min.y so the cast origin stays
+                // above the ground surface even when the foot penetrates the floor
+                // slightly. Physics.SphereCast ignores colliders that the starting
+                // sphere overlaps, so an origin too close to or below the surface
+                // causes missed detections.
+                return new Vector3(bounds.center.x, bounds.center.y + _castRadius, bounds.center.z);
             }
 
             return transform.position + Vector3.up * _castRadius;

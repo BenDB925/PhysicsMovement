@@ -35,6 +35,7 @@ namespace PhysicsDrivenMovement.Editor
             // STEP 3: Ground plane — a scaled cube acting as the floor.
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ground.name                     = "Ground";
+            ground.layer                    = GameSettings.LayerEnvironment;
             ground.transform.localScale     = new Vector3(20f, 1f, 20f);
             ground.transform.localPosition  = new Vector3(0f, -0.5f, 0f);
 

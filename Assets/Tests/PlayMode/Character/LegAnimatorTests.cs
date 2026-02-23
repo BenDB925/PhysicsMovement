@@ -1585,7 +1585,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// toggled off in the Inspector for side-by-side comparison.
         /// </summary>
         [UnityTest]
-        public IEnumerator UseWorldSpaceSwing_FieldExists_AndDefaultsToFalse()
+        public IEnumerator UseWorldSpaceSwing_FieldExists_AndDefaultsToTrue()
         {
             // Arrange
             yield return null;
@@ -1600,12 +1600,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(bool)),
                 "_useWorldSpaceSwing must be a bool.");
 
-            // Assert: default value is false — local-space swing is the active path.
-            // World-space swing proved unstable (hips rotation corrupts the frame conversion)
-            // and was disabled in f0496df. The field is retained for legacy/debug purposes.
+            // Assert: default value is true — world-space swing ensures legs step forward
+            // in world space regardless of torso pitch angle.
             bool defaultValue = (bool)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.False,
-                "_useWorldSpaceSwing must default to false — local-space swing is the active path.");
+            Assert.That(defaultValue, Is.True,
+                "_useWorldSpaceSwing must default to true — world-space swing is the active path.");
         }
 
         /// <summary>
@@ -1730,9 +1729,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         ///   3. Asserting _worldSwingAxis is zero on the very next FixedUpdate.
         /// </summary>
         [UnityTest]
-        [Ignore("World-space swing disabled by default (f0496df) — local-space is the active path. " +
-                "_worldSwingAxis is never set when _useWorldSpaceSwing=false, so pre-condition always fails. " +
-                "Re-enable this test only if world-space mode is restored as the default.")]
         public IEnumerator WorldSwingAxis_WhenTransitionsToIdle_ResetsToZeroImmediately()
         {
             // Arrange — walk long enough to get a non-zero _worldSwingAxis
@@ -1885,6 +1881,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             go.AddComponent<BoxCollider>();
 
             ConfigurableJoint joint = go.AddComponent<ConfigurableJoint>();
+
+            // Place the joint anchor at the TOP of the body (connection point with
+            // parent) rather than the default center. With the anchor at the center,
+            // the body rotates in place and transform.position never changes — which
+            // causes gait quality tests that measure world-space displacement to fail.
+            // With the anchor at the top, the body swings like a real limb segment and
+            // its center traces an arc, producing measurable position changes.
+            // IMPORTANT: Set the anchor BEFORE connectedBody so Unity's internal
+            // auto-configuration creates the PhysX joint with the correct pivot point.
+            float halfExtentY = Mathf.Abs(localPos.y) * 0.5f;
+            joint.anchor = new Vector3(0f, halfExtentY, 0f);
+
             joint.connectedBody = parentRb;
 
             // Lock linear axes so the body stays positionally anchored to the parent

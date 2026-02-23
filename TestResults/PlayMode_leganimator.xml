@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="48" result="Passed" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.7000655">
+  <test-suite type="TestSuite" id="1203" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="172" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.700066" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <test-suite type="Assembly" id="1196" name="PhysicsDrivenMovement.Tests.PlayMode.dll" fullname="D:/Coding/Git/PhysicsMovement/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.PlayMode.dll" runstate="Runnable" testcasecount="172" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.695528" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="39636" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <test-suite type="TestSuite" id="1197" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="172" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.694144" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1198" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="172" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.693010" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1199" name="PlayMode" fullname="PhysicsDrivenMovement.Tests.PlayMode" runstate="Runnable" testcasecount="172" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.691714" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1109" name="LegAnimatorTests" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" testcasecount="48" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:15Z" duration="12.688495" total="48" passed="48" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1115" name="Awake_CachesCharacterStateReference" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesCharacterStateReference" methodname="Awake_CachesCharacterStateReference" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1510872713" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.034353" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1112" name="Awake_CachesLowerLegLJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesLowerLegLJoint" methodname="Awake_CachesLowerLegLJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="253511483" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.003309" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1113" name="Awake_CachesLowerLegRJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesLowerLegRJoint" methodname="Awake_CachesLowerLegRJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="708682019" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.001581" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1114" name="Awake_CachesPlayerMovementReference" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesPlayerMovementReference" methodname="Awake_CachesPlayerMovementReference" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1198792845" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.001744" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1110" name="Awake_CachesUpperLegLJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesUpperLegLJoint" methodname="Awake_CachesUpperLegLJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1953241159" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.001664" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1111" name="Awake_CachesUpperLegRJoint" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.Awake_CachesUpperLegRJoint" methodname="Awake_CachesUpperLegRJoint" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1841760495" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:03Z" duration="0.001673" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1136" name="FixedUpdate_AfterLongIdle_LegJointsAreNearIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_AfterLongIdle_LegJointsAreNearIdentity" methodname="FixedUpdate_AfterLongIdle_LegJointsAreNearIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="496595731" result="Passed" start-time="2026-02-23 20:16:03Z" end-time="2026-02-23 20:16:05Z" duration="2.156047" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1132" name="FixedUpdate_AfterMoving_WhenInputStops_LowerLegLBlendsTowardIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_AfterMoving_WhenInputStops_LowerLegLBlendsTowardIdentity" methodname="FixedUpdate_AfterMoving_WhenInputStops_LowerLegLBlendsTowardIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="735250360" result="Passed" start-time="2026-02-23 20:16:05Z" end-time="2026-02-23 20:16:05Z" duration="0.652450" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1133" name="FixedUpdate_AfterMoving_WhenInputStops_LowerLegRBlendsTowardIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_AfterMoving_WhenInputStops_LowerLegRBlendsTowardIdentity" methodname="FixedUpdate_AfterMoving_WhenInputStops_LowerLegRBlendsTowardIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="624977167" result="Passed" start-time="2026-02-23 20:16:05Z" end-time="2026-02-23 20:16:06Z" duration="0.652336" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1130" name="FixedUpdate_AfterMoving_WhenInputStops_UpperLegLBlendsTowardIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_AfterMoving_WhenInputStops_UpperLegLBlendsTowardIdentity" methodname="FixedUpdate_AfterMoving_WhenInputStops_UpperLegLBlendsTowardIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="886247429" result="Passed" start-time="2026-02-23 20:16:06Z" end-time="2026-02-23 20:16:07Z" duration="0.652717" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1131" name="FixedUpdate_AfterMoving_WhenInputStops_UpperLegRBlendsTowardIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_AfterMoving_WhenInputStops_UpperLegRBlendsTowardIdentity" methodname="FixedUpdate_AfterMoving_WhenInputStops_UpperLegRBlendsTowardIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1983080540" result="Passed" start-time="2026-02-23 20:16:07Z" end-time="2026-02-23 20:16:07Z" duration="0.652364" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1135" name="FixedUpdate_QuickMoveStopMove_NoAbruptRotationJump" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_QuickMoveStopMove_NoAbruptRotationJump" methodname="FixedUpdate_QuickMoveStopMove_NoAbruptRotationJump" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1785067584" result="Passed" start-time="2026-02-23 20:16:07Z" end-time="2026-02-23 20:16:09Z" duration="1.157385" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1134" name="FixedUpdate_WhenInputStops_PhaseDecaysTowardZero" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenInputStops_PhaseDecaysTowardZero" methodname="FixedUpdate_WhenInputStops_PhaseDecaysTowardZero" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1336755369" result="Passed" start-time="2026-02-23 20:16:09Z" end-time="2026-02-23 20:16:09Z" duration="0.702271" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1117" name="FixedUpdate_WhenMoveInputIsNonZero_PhaseAccumulatorAdvances" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoveInputIsNonZero_PhaseAccumulatorAdvances" methodname="FixedUpdate_WhenMoveInputIsNonZero_PhaseAccumulatorAdvances" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="609749825" result="Passed" start-time="2026-02-23 20:16:09Z" end-time="2026-02-23 20:16:09Z" duration="0.016851" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1116" name="FixedUpdate_WhenMoveInputIsZero_PhaseAccumulatorDoesNotAdvance" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoveInputIsZero_PhaseAccumulatorDoesNotAdvance" methodname="FixedUpdate_WhenMoveInputIsZero_PhaseAccumulatorDoesNotAdvance" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="152984970" result="Passed" start-time="2026-02-23 20:16:09Z" end-time="2026-02-23 20:16:09Z" duration="0.019820" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1137" name="FixedUpdate_WhenMoving_ArmJointsAreNotModified" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_ArmJointsAreNotModified" methodname="FixedUpdate_WhenMoving_ArmJointsAreNotModified" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="2129934755" result="Passed" start-time="2026-02-23 20:16:09Z" end-time="2026-02-23 20:16:09Z" duration="0.202203" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1120" name="FixedUpdate_WhenMoving_LowerLegLTargetRotationChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_LowerLegLTargetRotationChanges" methodname="FixedUpdate_WhenMoving_LowerLegLTargetRotationChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="2012636106" result="Passed" start-time="2026-02-23 20:16:09Z" end-time="2026-02-23 20:16:10Z" duration="0.102488" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1121" name="FixedUpdate_WhenMoving_LowerLegRTargetRotationChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_LowerLegRTargetRotationChanges" methodname="FixedUpdate_WhenMoving_LowerLegRTargetRotationChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1516615636" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.102397" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1118" name="FixedUpdate_WhenMoving_UpperLegLTargetRotationChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_UpperLegLTargetRotationChanges" methodname="FixedUpdate_WhenMoving_UpperLegLTargetRotationChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="490274035" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.102421" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1119" name="FixedUpdate_WhenMoving_UpperLegRTargetRotationChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_UpperLegRTargetRotationChanges" methodname="FixedUpdate_WhenMoving_UpperLegRTargetRotationChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1811336841" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.102183" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1122" name="FixedUpdate_WhenMoving_UpperLegsAreAlternating" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenMoving_UpperLegsAreAlternating" methodname="FixedUpdate_WhenMoving_UpperLegsAreAlternating" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="712988429" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.302401" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1125" name="FixedUpdate_WhenStateFallen_LowerLegsReturnToIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenStateFallen_LowerLegsReturnToIdentity" methodname="FixedUpdate_WhenStateFallen_LowerLegsReturnToIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1654603103" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.114854" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1123" name="FixedUpdate_WhenStateFallen_UpperLegLReturnsToIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenStateFallen_UpperLegLReturnsToIdentity" methodname="FixedUpdate_WhenStateFallen_UpperLegLReturnsToIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1456597194" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:10Z" duration="0.119826" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1124" name="FixedUpdate_WhenStateFallen_UpperLegRReturnsToIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenStateFallen_UpperLegRReturnsToIdentity" methodname="FixedUpdate_WhenStateFallen_UpperLegRReturnsToIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="576200226" result="Passed" start-time="2026-02-23 20:16:10Z" end-time="2026-02-23 20:16:11Z" duration="0.119930" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1126" name="FixedUpdate_WhenStateGettingUp_AllLegJointsReturnToIdentity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.FixedUpdate_WhenStateGettingUp_AllLegJointsReturnToIdentity" methodname="FixedUpdate_WhenStateGettingUp_AllLegJointsReturnToIdentity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1450339467" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:11Z" duration="0.119818" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1127" name="IdleBlendSpeed_FieldExists_AndIsSerializable" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.IdleBlendSpeed_FieldExists_AndIsSerializable" methodname="IdleBlendSpeed_FieldExists_AndIsSerializable" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="226907984" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:11Z" duration="0.003222" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1148" name="KneeAngle_DefaultIs55Degrees" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.KneeAngle_DefaultIs55Degrees" methodname="KneeAngle_DefaultIs55Degrees" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="664269373" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:11Z" duration="0.002211" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1129" name="KneeAxis_FieldExists_AndDefaultsToForward" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.KneeAxis_FieldExists_AndDefaultsToForward" methodname="KneeAxis_FieldExists_AndDefaultsToForward" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1712471320" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:11Z" duration="0.002779" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1141" name="LowerLeg_WhenWalking_FeetAlternate" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate" methodname="LowerLeg_WhenWalking_FeetAlternate" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1504149888" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:11Z" duration="0.801605" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+[BalanceController] 'PhysicsHips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1140" name="LowerLeg_WhenWalking_FootClearsGround" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.LowerLeg_WhenWalking_FootClearsGround" methodname="LowerLeg_WhenWalking_FootClearsGround" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="676088496" result="Passed" start-time="2026-02-23 20:16:11Z" end-time="2026-02-23 20:16:12Z" duration="0.799926" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+[BalanceController] 'PhysicsHips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1139" name="LowerLeg_WhenWalking_KneeHigherThanFoot" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.LowerLeg_WhenWalking_KneeHigherThanFoot" methodname="LowerLeg_WhenWalking_KneeHigherThanFoot" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="837460946" result="Passed" start-time="2026-02-23 20:16:12Z" end-time="2026-02-23 20:16:13Z" duration="0.799686" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+[BalanceController] 'PhysicsHips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1138" name="LowerLeg_WhenWalking_LiftsBeyondMinimumThreshold" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.LowerLeg_WhenWalking_LiftsBeyondMinimumThreshold" methodname="LowerLeg_WhenWalking_LiftsBeyondMinimumThreshold" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1809199574" result="Passed" start-time="2026-02-23 20:16:13Z" end-time="2026-02-23 20:16:14Z" duration="0.499883" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+[BalanceController] 'PhysicsHips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1142" name="LowerLeg_WhenWalking_StepDirectionMatchesMovement" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.LowerLeg_WhenWalking_StepDirectionMatchesMovement" methodname="LowerLeg_WhenWalking_StepDirectionMatchesMovement" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="212559222" result="Passed" start-time="2026-02-23 20:16:14Z" end-time="2026-02-23 20:16:14Z" duration="0.799971" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+[BalanceController] 'PhysicsHips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1147" name="PhaseAccumulator_AdvancesAtMinFrequency_WhenVelocityZero" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.PhaseAccumulator_AdvancesAtMinFrequency_WhenVelocityZero" methodname="PhaseAccumulator_AdvancesAtMinFrequency_WhenVelocityZero" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1867788171" result="Passed" start-time="2026-02-23 20:16:14Z" end-time="2026-02-23 20:16:14Z" duration="0.099617" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1145" name="PhaseAccumulator_AdvancesFasterAtHigherVelocity" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.PhaseAccumulator_AdvancesFasterAtHigherVelocity" methodname="PhaseAccumulator_AdvancesFasterAtHigherVelocity" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1459245324" result="Passed" start-time="2026-02-23 20:16:14Z" end-time="2026-02-23 20:16:15Z" duration="0.099809" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1146" name="PhaseAccumulator_DoesNotAdvance_WhenVelocityZeroAndMinFreqZero" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.PhaseAccumulator_DoesNotAdvance_WhenVelocityZeroAndMinFreqZero" methodname="PhaseAccumulator_DoesNotAdvance_WhenVelocityZeroAndMinFreqZero" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1746176334" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.049887" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1144" name="StepFrequency_DefaultIsZero" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.StepFrequency_DefaultIsZero" methodname="StepFrequency_DefaultIsZero" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="324597324" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.001761" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1143" name="StepFrequencyScale_FieldExists_AndDefaultsTo1Point5" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.StepFrequencyScale_FieldExists_AndDefaultsTo1Point5" methodname="StepFrequencyScale_FieldExists_AndDefaultsTo1Point5" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1849684020" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.001425" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1128" name="SwingAxis_FieldExists_AndDefaultsToForward" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.SwingAxis_FieldExists_AndDefaultsToForward" methodname="SwingAxis_FieldExists_AndDefaultsToForward" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="616749380" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.001651" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1149" name="UpperLegLiftBoost_FieldExists_AndDefaultsTo15" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.UpperLegLiftBoost_FieldExists_AndDefaultsTo15" methodname="UpperLegLiftBoost_FieldExists_AndDefaultsTo15" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="1937869284" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.001345" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1151" name="UpperLegLiftBoost_OnlyAppliesOnForwardSwingPhase" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.UpperLegLiftBoost_OnlyAppliesOnForwardSwingPhase" methodname="UpperLegLiftBoost_OnlyAppliesOnForwardSwingPhase" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="13895815" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.003388" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1150" name="UpperLegLiftBoost_WhenNonZero_IncreasesForwardLegSwingAngle" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.UpperLegLiftBoost_WhenNonZero_IncreasesForwardLegSwingAngle" methodname="UpperLegLiftBoost_WhenNonZero_IncreasesForwardLegSwingAngle" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="552037029" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.019836" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1152" name="UseWorldSpaceSwing_FieldExists_AndDefaultsToTrue" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.UseWorldSpaceSwing_FieldExists_AndDefaultsToTrue" methodname="UseWorldSpaceSwing_FieldExists_AndDefaultsToTrue" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="55644125" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.001844" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1156" name="WorldGaitForward_AtLowVelocity_StillProducesNonZeroSwingAxis" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.WorldGaitForward_AtLowVelocity_StillProducesNonZeroSwingAxis" methodname="WorldGaitForward_AtLowVelocity_StillProducesNonZeroSwingAxis" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="775804169" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.007998" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1157" name="WorldGaitForward_AtZeroVelocity_UsesInputDirectionImmediately" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.WorldGaitForward_AtZeroVelocity_UsesInputDirectionImmediately" methodname="WorldGaitForward_AtZeroVelocity_UsesInputDirectionImmediately" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="624616905" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.009844" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1154" name="WorldSpaceSwing_SwingAxisIsWorldHorizontal_RegardlessOfHipsPitch" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.WorldSpaceSwing_SwingAxisIsWorldHorizontal_RegardlessOfHipsPitch" methodname="WorldSpaceSwing_SwingAxisIsWorldHorizontal_RegardlessOfHipsPitch" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="402526776" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.310256" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1153" name="WorldSpaceSwing_WhenHipsPitchedForward_UpperLegTargetRotationChanges" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.WorldSpaceSwing_WhenHipsPitchedForward_UpperLegTargetRotationChanges" methodname="WorldSpaceSwing_WhenHipsPitchedForward_UpperLegTargetRotationChanges" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="956840756" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.152031" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+]]></output>
+              </test-case>
+              <test-case id="1155" name="WorldSwingAxis_WhenTransitionsToIdle_ResetsToZeroImmediately" fullname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests.WorldSwingAxis_WhenTransitionsToIdle_ResetsToZeroImmediately" methodname="WorldSwingAxis_WhenTransitionsToIdle_ResetsToZeroImmediately" classname="PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests" runstate="Runnable" seed="225028685" result="Passed" start-time="2026-02-23 20:16:15Z" end-time="2026-02-23 20:16:15Z" duration="0.107404" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[BalanceController] 'Hips': no GroundSensor found in children. IsGrounded will always be false.
+Saving results to: C:/Users/jamie/AppData/LocalLow/DefaultCompany/PhysicsDrivenMovementDemo\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

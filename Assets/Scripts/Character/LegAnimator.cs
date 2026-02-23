@@ -171,7 +171,7 @@ namespace PhysicsDrivenMovement.Character
                  "movement direction so legs always step forward regardless of torso pitch angle. " +
                  "When false, the legacy local-frame swing is used (may cause feet to drag when " +
                  "the torso is pitched forward). Toggle for side-by-side comparison.")]
-        private bool _useWorldSpaceSwing = false;
+        private bool _useWorldSpaceSwing = true;
 
         [SerializeField]
         [Tooltip("When true, writes one debug line every 10 FixedUpdate frames to " +
