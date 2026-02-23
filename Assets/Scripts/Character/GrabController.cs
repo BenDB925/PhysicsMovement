@@ -284,16 +284,26 @@ namespace PhysicsDrivenMovement.Character
                 // Attempt grab if not already grabbing.
                 if (!zone.IsGrabbing)
                 {
+                    // Prefer dynamic Rigidbody targets; fall back to static geometry (walls).
                     Rigidbody target = zone.NearestTarget;
                     if (target != null)
                     {
                         zone.CreateGrabJoint(target, _grabBreakForce, _grabBreakTorque);
                     }
+                    else
+                    {
+                        Collider staticTarget = zone.NearestStaticCollider;
+                        if (staticTarget != null)
+                        {
+                            Vector3 anchor = staticTarget.ClosestPoint(zone.transform.position);
+                            zone.CreateWorldGrabJoint(anchor, _grabBreakForce, _grabBreakTorque);
+                        }
+                    }
                 }
             }
             else if (wasGrabbing)
             {
-                // Release and optionally throw.
+                // Release and optionally throw (no throw for world grabs).
                 Rigidbody releasedTarget = zone.GrabbedTarget;
                 zone.DestroyGrabJoint();
                 TryApplyThrowImpulse(releasedTarget);

@@ -36,11 +36,17 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Currently overlapping external Rigidbodies (not part of this ragdoll).</summary>
         private readonly List<Rigidbody> _overlapping = new List<Rigidbody>();
 
+        /// <summary>Currently overlapping static colliders (no Rigidbody — walls, floors, etc.).</summary>
+        private readonly List<Collider> _overlappingStatic = new List<Collider>();
+
         /// <summary>The trigger SphereCollider used for detection.</summary>
         private SphereCollider _triggerCollider;
 
         /// <summary>Active grab FixedJoint, if any.</summary>
         private FixedJoint _grabJoint;
+
+        /// <summary>True when the grab is a world-anchor grab (connectedBody intentionally null).</summary>
+        private bool _isWorldGrab;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -79,8 +85,43 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True when a grab FixedJoint is active on this hand.</summary>
         public bool IsGrabbing => _grabJoint != null;
 
+        /// <summary>True when the active grab is a world-anchor grab (wall/static geometry).</summary>
+        public bool IsWorldGrab => _isWorldGrab;
+
         /// <summary>The Rigidbody currently grabbed by this hand, or null.</summary>
         public Rigidbody GrabbedTarget => _grabJoint != null ? _grabJoint.connectedBody : null;
+
+        /// <summary>
+        /// The closest overlapping static collider (no Rigidbody), or null if none in range.
+        /// </summary>
+        public Collider NearestStaticCollider
+        {
+            get
+            {
+                PruneDestroyedStaticEntries();
+
+                if (_overlappingStatic.Count == 0)
+                    return null;
+
+                Collider nearest = null;
+                float nearestDistSq = float.MaxValue;
+                Vector3 handPos = transform.position;
+
+                for (int i = 0; i < _overlappingStatic.Count; i++)
+                {
+                    Collider col = _overlappingStatic[i];
+                    Vector3 closest = col.ClosestPoint(handPos);
+                    float distSq = (closest - handPos).sqrMagnitude;
+                    if (distSq < nearestDistSq)
+                    {
+                        nearestDistSq = distSq;
+                        nearest = col;
+                    }
+                }
+
+                return nearest;
+            }
+        }
 
         /// <summary>The trigger SphereCollider, exposed for tests.</summary>
         public SphereCollider TriggerCollider => _triggerCollider;
@@ -108,6 +149,29 @@ namespace PhysicsDrivenMovement.Character
         }
 
         /// <summary>
+        /// Creates a FixedJoint from this hand anchored to a world-space point (for static
+        /// geometry like walls). connectedBody is null so the joint locks to world space.
+        /// Returns false if a joint already exists.
+        /// </summary>
+        public bool CreateWorldGrabJoint(Vector3 worldAnchor, float breakForce, float breakTorque)
+        {
+            if (_grabJoint != null)
+                return false;
+
+            Rigidbody handRb = GetComponent<Rigidbody>();
+            if (handRb == null)
+                return false;
+
+            _grabJoint = gameObject.AddComponent<FixedJoint>();
+            _grabJoint.connectedBody = null;
+            _grabJoint.connectedAnchor = worldAnchor;
+            _grabJoint.breakForce = breakForce;
+            _grabJoint.breakTorque = breakTorque;
+            _isWorldGrab = true;
+            return true;
+        }
+
+        /// <summary>
         /// Destroys the active grab FixedJoint if one exists.
         /// Uses DestroyImmediate so the joint is removed before the current physics
         /// step, allowing throw impulses applied in the same FixedUpdate to take effect.
@@ -118,6 +182,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 DestroyImmediate(_grabJoint);
                 _grabJoint = null;
+                _isWorldGrab = false;
             }
         }
 
@@ -128,6 +193,7 @@ namespace PhysicsDrivenMovement.Character
         public void NotifyJointBroken()
         {
             _grabJoint = null;
+            _isWorldGrab = false;
         }
 
         /// <summary>
@@ -168,10 +234,17 @@ namespace PhysicsDrivenMovement.Character
 
         private void OnTriggerEnter(Collider other)
         {
-            if (other.attachedRigidbody == null)
-                return;
-
             Rigidbody rb = other.attachedRigidbody;
+
+            if (rb == null)
+            {
+                // Static collider (wall, floor, etc.) — track separately.
+                if (!other.isTrigger && !_overlappingStatic.Contains(other))
+                {
+                    _overlappingStatic.Add(other);
+                }
+                return;
+            }
 
             // Exclude self-ragdoll bodies.
             if (_selfBodies != null && _selfBodies.Contains(rb))
@@ -186,10 +259,15 @@ namespace PhysicsDrivenMovement.Character
 
         private void OnTriggerExit(Collider other)
         {
-            if (other.attachedRigidbody == null)
-                return;
+            Rigidbody rb = other.attachedRigidbody;
 
-            _overlapping.Remove(other.attachedRigidbody);
+            if (rb == null)
+            {
+                _overlappingStatic.Remove(other);
+                return;
+            }
+
+            _overlapping.Remove(rb);
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -223,13 +301,26 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void PruneDestroyedStaticEntries()
+        {
+            for (int i = _overlappingStatic.Count - 1; i >= 0; i--)
+            {
+                if (_overlappingStatic[i] == null)
+                {
+                    _overlappingStatic.RemoveAt(i);
+                }
+            }
+        }
+
         private void FixedUpdate()
         {
             // Periodic cleanup of destroyed objects.
             PruneDestroyedEntries();
+            PruneDestroyedStaticEntries();
 
             // Check if grab joint was destroyed externally (e.g. by physics break).
-            if (_grabJoint != null && _grabJoint.connectedBody == null)
+            // Skip this check for world grabs where connectedBody is intentionally null.
+            if (_grabJoint != null && !_isWorldGrab && _grabJoint.connectedBody == null)
             {
                 DestroyGrabJoint();
             }

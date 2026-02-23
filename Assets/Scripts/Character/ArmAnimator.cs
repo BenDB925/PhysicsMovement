@@ -255,14 +255,12 @@ namespace PhysicsDrivenMovement.Character
         // ── Private Methods ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Drives both arms into a raised pose (hands up). Skips arms that are
-        /// currently grabbing or punching so those systems retain control.
-        /// Negative angle on the swing axis lifts the arm backward/upward.
+        /// Drives both arms into a raised pose (hands up). Grabbed arms are
+        /// still driven so the character can lift props overhead. Only punching
+        /// arms are skipped (punch has its own short-lived target).
         /// </summary>
         private void ApplyRaisedPose()
         {
-            bool leftGrabbing = _grabController != null && _grabController.IsGrabbingLeft;
-            bool rightGrabbing = _grabController != null && _grabController.IsGrabbingRight;
             bool leftPunching = _punchController != null && _punchController.IsPunchingLeft;
             bool rightPunching = _punchController != null && _punchController.IsPunchingRight;
 
@@ -271,13 +269,13 @@ namespace PhysicsDrivenMovement.Character
             float currentElbow = _raiseT * _raiseElbowAngle;
             Quaternion elbowTarget = Quaternion.AngleAxis(-currentElbow, _elbowAxis);
 
-            if (_upperArmL != null && !leftGrabbing && !leftPunching)
+            if (_upperArmL != null && !leftPunching)
                 _upperArmL.targetRotation = upperTarget;
-            if (_upperArmR != null && !rightGrabbing && !rightPunching)
+            if (_upperArmR != null && !rightPunching)
                 _upperArmR.targetRotation = upperTarget;
-            if (_lowerArmL != null && !leftGrabbing && !leftPunching)
+            if (_lowerArmL != null && !leftPunching)
                 _lowerArmL.targetRotation = elbowTarget;
-            if (_lowerArmR != null && !rightGrabbing && !rightPunching)
+            if (_lowerArmR != null && !rightPunching)
                 _lowerArmR.targetRotation = elbowTarget;
         }
 
