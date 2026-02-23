@@ -97,29 +97,29 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 60f)]
         [Tooltip("Peak forward/backward swing angle (degrees) for upper leg joints during gait. " +
                  "Controls the visible stride amplitude. Typical range: 15–35°.")]
-        private float _stepAngle = 25f;
+        private float _stepAngle = 50.3f;
 
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
                  "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
                  "Eliminates body-outruns-legs: cadence is always proportional to real speed.")]
-        private float _stepFrequencyScale = 1.5f;
+        private float _stepFrequencyScale = 0.1f;
 
         [SerializeField, Range(0f, 10f)]
         [Tooltip("Minimum gait cadence in cycles per second, applied even when the character " +
                  "is nearly stationary (optional slow idle cycle). Default 0 = legs still at idle.")]
-        private float _stepFrequency = 0f;
+        private float _stepFrequency = 1f;
 
         [SerializeField, Range(0f, 60f)]
         [Tooltip("Constant knee-bend angle (degrees) applied to lower leg joints during gait. " +
                  "Larger values = more aggressive, deliberate stride. Default 55°.")]
-        private float _kneeAngle = 55f;
+        private float _kneeAngle = 60f;
 
         [SerializeField, Range(0f, 45f)]
         [Tooltip("Extra upward lift bias (degrees) added to the upper leg that is in the " +
                  "forward-swing phase (sin(phase) > 0). Biases the knee toward the chest " +
                  "for a powerful, high-stepping gait. Default 15°.")]
-        private float _upperLegLiftBoost = 15f;
+        private float _upperLegLiftBoost = 31.9f;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Controls three related smooth-transition behaviours:\n" +
@@ -164,7 +164,7 @@ namespace PhysicsDrivenMovement.Character
                  "movement direction so legs always step forward regardless of torso pitch angle. " +
                  "When false, the legacy local-frame swing is used (may cause feet to drag when " +
                  "the torso is pitched forward). Toggle for side-by-side comparison.")]
-        private bool _useWorldSpaceSwing = true;
+        private bool _useWorldSpaceSwing = false;
 
         [SerializeField]
         [Tooltip("When true, writes one debug line every 10 FixedUpdate frames to " +
