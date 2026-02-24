@@ -308,7 +308,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private int _directionChangeGraceCounter;
 
-        
+        // Short grace window for backwardMotion trigger only — 20 frames (0.2s) after a
+        // sharp turn to let post-corner residual momentum dissipate before the EMA can fire.
+        // Separate from _directionChangeGraceCounter (80 frames) which guards stuckCondition.
+        private int _backwardMotionGraceCounter;
+        private const int BackwardMotionGraceFrames = 20;
+
         private const float DirectionChangeTriggerAngle = 45f;  // degrees
 
         /// <summary>
@@ -687,6 +692,7 @@ namespace PhysicsDrivenMovement.Character
                         if (dirChangeDeg > DirectionChangeTriggerAngle)
                         {
                             _directionChangeGraceCounter = _directionChangeGraceFrames;
+                            _backwardMotionGraceCounter  = BackwardMotionGraceFrames;
                             _stuckFrameCounter = 0;
                             // Reset gait phase so the first step after a turn is always clean.
                             // Without this, gait resumes mid-step in the old direction, which
@@ -700,6 +706,7 @@ namespace PhysicsDrivenMovement.Character
                 }
 
                 if (_directionChangeGraceCounter > 0) _directionChangeGraceCounter--;
+                if (_backwardMotionGraceCounter  > 0) _backwardMotionGraceCounter--;
 
                 // Yaw misalignment guard: if hips haven't yet rotated to face input, not stuck.
                 float yawMisalignDeg = 0f;
@@ -722,13 +729,12 @@ namespace PhysicsDrivenMovement.Character
                 // Using the EMA prevents normal gait oscillation (fwdProg swings -0.4→+1.0 each step)
                 // from spuriously triggering recovery mid-walk — only genuine sustained backward drift
                 // activates this path.
-                // Grace period: also suppress for _directionChangeGraceFrames after a sharp turn —
-                // post-corner residual momentum makes fwdProg negative briefly, which isn't a real
-                // backward loop. The Scorpion loop only manifests after a full gait cycle anyway.
+                // Short grace: suppress for 20 frames after a sharp turn to let post-corner residual
+                // momentum dissipate before the EMA can accumulate a negative trigger value.
                 bool backwardMotion = _smoothedInputMag > 0.5f
                     && _smoothedForwardProgress < -0.15f   // sustained backward trend (EMA filtered)
                     && yawMisalignDeg < 45f                // not mid-turn
-                    && _directionChangeGraceCounter <= 0   // not in post-corner grace window
+                    && _backwardMotionGraceCounter <= 0    // not in short post-corner grace window
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
