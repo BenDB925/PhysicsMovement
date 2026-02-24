@@ -365,6 +365,8 @@ namespace PhysicsDrivenMovement.Editor
                 using var so = new SerializedObject(pm);
                 so.FindProperty("_moveForce").floatValue = 150f;
                 so.FindProperty("_jumpForce").floatValue = 100f;
+                so.FindProperty("_turnForceScaleThreshold").floatValue = 6f;
+                so.FindProperty("_minTurnForceScale").floatValue = 0.3f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 

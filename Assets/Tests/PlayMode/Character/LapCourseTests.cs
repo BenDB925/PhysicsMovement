@@ -488,7 +488,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private IEnumerator SettleCharacter()
         {
-            for (int i = 0; i < SettleFrames; i++)
+            // Wait one frame for Start() to run (PlayerMovement.Start caches Camera.main).
+            yield return new WaitForFixedUpdate();
+
+            // Null the camera so ghost driver input is treated as raw world-space XZ.
+            // A stale Camera.main from CameraFollowTests would rotate input by a random yaw.
+            _pm?.SetCameraForTest(null);
+
+            for (int i = 1; i < SettleFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
             }

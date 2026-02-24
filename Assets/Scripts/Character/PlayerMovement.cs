@@ -23,6 +23,14 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
 
+        /// <summary>Yaw angular velocity (rad/s) above which moveForce begins scaling down.
+        /// Prevents corner-stuck by reducing drive force when hips are spinning too fast for legs to keep up.
+        /// Normal BC yaw corrections reach ~4 rad/s, so threshold must be higher to avoid slowing normal walking.</summary>
+        [SerializeField] private float _turnForceScaleThreshold = 6f;
+
+        /// <summary>Minimum force multiplier applied when angular velocity is at or above 2× threshold.</summary>
+        [SerializeField] private float _minTurnForceScale = 0.3f;
+
         [SerializeField, Range(0f, 20f)]
         private float _maxSpeed = 5f;
 
@@ -76,6 +84,16 @@ namespace PhysicsDrivenMovement.Character
         {
             _currentMoveInput = input;
             _overrideMoveInput = true;
+        }
+
+        /// <summary>
+        /// Test seam: override the camera reference used for camera-relative movement.
+        /// Pass <c>null</c> to disable camera-relative mode (input treated as raw world-space XZ).
+        /// Call after the first physics frame (after Start() has run) to ensure the override sticks.
+        /// </summary>
+        public void SetCameraForTest(Camera camera)
+        {
+            _camera = camera;
         }
 
         /// <summary>
@@ -300,7 +318,13 @@ namespace PhysicsDrivenMovement.Character
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             if (horizontalVelocity.magnitude < _maxSpeed)
             {
-                _rb.AddForce(worldDirection * _moveForce, ForceMode.Force);
+                // Scale down drive force when hips are spinning hard — legs can't keep up at full force mid-corner.
+                float absAngVelY = Mathf.Abs(_rb.angularVelocity.y);
+                float turnScale = absAngVelY <= _turnForceScaleThreshold
+                    ? 1f
+                    : Mathf.Lerp(1f, _minTurnForceScale,
+                        Mathf.Clamp01((absAngVelY - _turnForceScaleThreshold) / _turnForceScaleThreshold));
+                _rb.AddForce(worldDirection * (_moveForce * turnScale), ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
