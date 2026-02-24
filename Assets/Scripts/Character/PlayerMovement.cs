@@ -96,7 +96,8 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public void SetMoveInputForTest(Vector2 input)
         {
-            _currentMoveInput = input;
+            _currentMoveInput  = input;
+            _smoothedMoveInput = input;  // bypass smoothing — tests expect immediate response
             _overrideMoveInput = true;
         }
 
