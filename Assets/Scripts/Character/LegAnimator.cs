@@ -642,6 +642,12 @@ namespace PhysicsDrivenMovement.Character
                         {
                             _directionChangeGraceCounter = DirectionChangeGraceFrames;
                             _stuckFrameCounter = 0;
+                            // Reset gait phase so the first step after a turn is always clean.
+                            // Without this, gait resumes mid-step in the old direction, which
+                            // immediately looks like a stuck condition and fires recovery.
+                            _phase = 0f;
+                            _smoothedInputMag = 0f;
+                            SetAllLegTargetsToIdentity();
                         }
                     }
                     _lastInputDir = worldInputDir3D;
@@ -670,7 +676,7 @@ namespace PhysicsDrivenMovement.Character
                 // direction-change grace period. This catches the post-corner Scorpion loop where
                 // the character is upright but legs are phased wrong and pushing backwards.
                 bool backwardMotion = _smoothedInputMag > 0.5f
-                    && forwardProgress < -0.5f             // actively moving backwards
+                    && forwardProgress < -0.2f             // moving backward (even slowly)
                     && yawMisalignDeg < 45f                // not mid-turn
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
