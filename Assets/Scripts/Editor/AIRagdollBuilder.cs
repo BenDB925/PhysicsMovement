@@ -62,8 +62,8 @@ namespace PhysicsDrivenMovement.Editor
             AILocomotion locomotion = aiGO.AddComponent<AILocomotion>();
             using (var so = new SerializedObject(locomotion))
             {
-                so.FindProperty("_moveForce").floatValue = 300f;
-                so.FindProperty("_maxSpeed").floatValue = 3f;
+                so.FindProperty("_moveForce").floatValue = 80f;
+                so.FindProperty("_maxSpeed").floatValue = 2f;
                 so.FindProperty("_arrivalDistance").floatValue = 1.0f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }

@@ -16,12 +16,13 @@ namespace PhysicsDrivenMovement.AI
     public class AILocomotion : MonoBehaviour, IMovementInput
     {
         [SerializeField, Range(0f, 2000f)]
-        [Tooltip("Movement force applied to Hips Rigidbody toward the target. Same as PlayerMovement._moveForce.")]
-        private float _moveForce = 300f;
+        [Tooltip("Movement force applied to Hips Rigidbody toward the target. " +
+                 "Lower than player (150) for a gentle stroll that the balance controller can handle.")]
+        private float _moveForce = 80f;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Maximum horizontal speed. Lower than player default — visitors stroll.")]
-        private float _maxSpeed = 3f;
+        private float _maxSpeed = 2f;
 
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Distance at which the AI is considered to have arrived at the target.")]
