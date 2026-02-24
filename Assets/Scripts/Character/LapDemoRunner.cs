@@ -171,6 +171,10 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // Point toward current waypoint on XZ plane.
+            // Lookahead blend: as we get within LookaheadRadius of the current gate,
+            // start blending toward the next gate's direction. This prevents the sharp
+            // input snap at high-angle corners (gate 9 is a 108° turn).
+            const float LookaheadRadius = 6f;
             Vector3 hipsPos   = _hipsTransform.position;
             Vector3 target    = CourseWaypoints[_currentWaypoint];
             Vector3 toTarget  = new Vector3(target.x - hipsPos.x, 0f, target.z - hipsPos.z);
@@ -179,6 +183,20 @@ namespace PhysicsDrivenMovement.Character
             if (dist > 0.01f)
             {
                 Vector3 dir = toTarget / dist;
+
+                // Blend toward next waypoint direction when approaching current gate.
+                int nextIdx = _currentWaypoint + 1;
+                if (nextIdx < CourseWaypoints.Length && dist < LookaheadRadius)
+                {
+                    Vector3 nextTarget  = CourseWaypoints[nextIdx];
+                    Vector3 toNext      = new Vector3(nextTarget.x - target.x, 0f, nextTarget.z - target.z);
+                    if (toNext.sqrMagnitude > 0.01f)
+                    {
+                        float blend = 1f - (dist / LookaheadRadius); // 0 at LookaheadRadius, 1 at gate centre
+                        dir = Vector3.Slerp(dir, toNext.normalized, blend * 0.6f).normalized;
+                    }
+                }
+
                 _movement.SetMoveInputForTest(new Vector2(dir.x, dir.z));
             }
 

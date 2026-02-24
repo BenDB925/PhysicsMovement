@@ -236,15 +236,30 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 {
                     framesSinceHit++;
 
+                    const float LookaheadRadius = 6f;
                     Vector3 targetWorld = HairpinWaypoints[currentGate] + TestOriginOffset;
                     Vector3 hipsXZ      = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
                     Vector3 targetXZ    = new Vector3(targetWorld.x, 0f, targetWorld.z);
                     Vector3 toTarget    = targetXZ - hipsXZ;
                     float   dist        = toTarget.magnitude;
 
-                    input = dist > 0.01f
-                        ? new Vector2(toTarget.x / dist, toTarget.z / dist)
-                        : Vector2.zero;
+                    input = Vector2.zero;
+                    if (dist > 0.01f)
+                    {
+                        Vector3 dir = toTarget / dist;
+                        int nextGate = currentGate + 1;
+                        if (nextGate < totalGates && dist < LookaheadRadius)
+                        {
+                            Vector3 nextWorld = HairpinWaypoints[nextGate] + TestOriginOffset;
+                            Vector3 toNext    = new Vector3(nextWorld.x - targetWorld.x, 0f, nextWorld.z - targetWorld.z);
+                            if (toNext.sqrMagnitude > 0.01f)
+                            {
+                                float blend = 1f - (dist / LookaheadRadius);
+                                dir = Vector3.Slerp(dir, toNext.normalized, blend * 0.6f).normalized;
+                            }
+                        }
+                        input = new Vector2(dir.x, dir.z);
+                    }
 
                     if (dist <= GetGateRadius(currentGate))
                     {
