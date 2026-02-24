@@ -241,15 +241,19 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 // Walk forward
                 Vector3 startPos = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
+                bool fellDuringWalk = false;
                 for (int f = 0; f < WalkFrames; f++)
                 {
                     _pm.SetMoveInputForTest(Vector2.up);
+                    if (_cs.CurrentState == CharacterStateType.Fallen ||
+                        _cs.CurrentState == CharacterStateType.GettingUp)
+                        fellDuringWalk = true;
                     yield return new WaitForFixedUpdate();
                 }
                 Vector3 endPos = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
                 float disp = Vector3.Dot(endPos - startPos, Vector3.forward);
                 displacements.Add(disp);
-                Debug.Log($"[StopStart] Cycle {cycle} walk: {disp:F2}m");
+                Debug.Log($"[StopStart] Cycle {cycle} walk: {disp:F2}m | fell={fellDuringWalk} | state={_cs.CurrentState}");
 
                 // Full stop
                 for (int f = 0; f < StopFrames; f++)
