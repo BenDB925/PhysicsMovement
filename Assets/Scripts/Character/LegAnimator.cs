@@ -332,7 +332,7 @@ namespace PhysicsDrivenMovement.Character
         // stuckCondition uses instantaneous progress as before (it has a 25-frame window).
         // Alpha = 1/80 ≈ 0.0125 (80-frame half-window ≈ 1 full gait cycle at stepFreq 1.25Hz).
         private float _smoothedForwardProgress;
-        private const float FwdProgressEmaAlpha = 0.0125f;
+        private const float FwdProgressEmaAlpha = 0.005f;
 
 #if UNITY_EDITOR
         // ── Debug Ring Buffer ─────────────────────────────────────────────────
