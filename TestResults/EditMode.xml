@@ -1,34 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="14" result="Passed" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.0919334">
-  <test-suite type="TestSuite" id="1000" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.091933" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="14" result="Passed" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.0925067">
+  <test-suite type="TestSuite" id="1000" name="PhysicsDrivenMovementDemo" fullname="PhysicsDrivenMovementDemo" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.092507" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
     <properties>
       <property name="platform" value="EditMode" />
     </properties>
-    <test-suite type="Assembly" id="1018" name="PhysicsDrivenMovement.Tests.EditMode.dll" fullname="H:/Work/PhysicsDrivenMovementDemo/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.EditMode.dll" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.082166" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1018" name="PhysicsDrivenMovement.Tests.EditMode.dll" fullname="H:/Work/PhysicsDrivenMovementDemo/Library/ScriptAssemblies/PhysicsDrivenMovement.Tests.EditMode.dll" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.082725" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="24304" />
+        <property name="_PID" value="28216" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestSuite" id="1019" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.081347" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1019" name="PhysicsDrivenMovement" fullname="PhysicsDrivenMovement" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.082024" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-suite type="TestSuite" id="1020" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.080918" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1020" name="Tests" fullname="PhysicsDrivenMovement.Tests" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.081619" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
           <properties />
-          <test-suite type="TestSuite" id="1021" name="EditMode" fullname="PhysicsDrivenMovement.Tests.EditMode" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.080465" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestSuite" id="1021" name="EditMode" fullname="PhysicsDrivenMovement.Tests.EditMode" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.081186" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
             <properties />
-            <test-suite type="TestSuite" id="1022" name="Character" fullname="PhysicsDrivenMovement.Tests.EditMode.Character" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.073593" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestSuite" id="1022" name="Character" fullname="PhysicsDrivenMovement.Tests.EditMode.Character" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.073767" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-suite type="TestFixture" id="1009" name="ArmAnimatorTests" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.063222" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <test-suite type="TestFixture" id="1009" name="ArmAnimatorTests" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.063582" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
                 <properties />
-                <test-case id="1010" name="Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" methodname="Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1971265289" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.023460" asserts="0">
+                <test-case id="1010" name="Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" methodname="Awake_ChildArmJointsPresent_AllFourArmJointsAreFound" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1994620759" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.024028" asserts="0">
                   <properties>
                     <property name="Description" value="ArmAnimator.Awake should locate UpperArm_L, UpperArm_R, LowerArm_L, LowerArm_R ConfigurableJoints and store them in its private fields." />
                     <property name="retryIteration" value="0" />
                     <property name="repeatIteration" value="0" />
                   </properties>
                 </test-case>
-                <test-case id="1014" name="DoesNotThrowWhenCharacterStateIsAbsent" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.DoesNotThrowWhenCharacterStateIsAbsent" methodname="DoesNotThrowWhenCharacterStateIsAbsent" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1886639835" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.005942" asserts="0">
+                <test-case id="1014" name="DoesNotThrowWhenCharacterStateIsAbsent" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.DoesNotThrowWhenCharacterStateIsAbsent" methodname="DoesNotThrowWhenCharacterStateIsAbsent" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1666681385" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.005774" asserts="0">
                   <properties>
                     <property name="Description" value="ArmAnimator.FixedUpdate must not throw when CharacterState is absent from the GameObject." />
                     <property name="retryIteration" value="0" />
@@ -38,21 +38,21 @@
 [ArmAnimator] 'LowerArm_R' ConfigurableJoint not found in children.
 ]]></output>
                 </test-case>
-                <test-case id="1012" name="FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" methodname="FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1863563788" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.012228" asserts="0">
+                <test-case id="1012" name="FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" methodname="FixedUpdate_GaitPhaseQuarterCycle_LeftArmSwingsOppositeToLeftLeg" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1394409750" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.012384" asserts="0">
                   <properties>
                     <property name="Description" value="Arm swing should be opposite to leg swing: when LegAnimator phase produces left leg forward (positive left upper leg swing), the left arm should swing backward (negative left upper arm swing), and vice versa for right side." />
                     <property name="retryIteration" value="0" />
                     <property name="repeatIteration" value="0" />
                   </properties>
                 </test-case>
-                <test-case id="1011" name="FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" methodname="FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1279312376" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.001775" asserts="0">
+                <test-case id="1011" name="FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" methodname="FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="237461527" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.001827" asserts="0">
                   <properties>
                     <property name="Description" value="When LegAnimator.SmoothedInputMag is 0, all arm joint targetRotations should be set to Quaternion.identity." />
                     <property name="retryIteration" value="0" />
                     <property name="repeatIteration" value="0" />
                   </properties>
                 </test-case>
-                <test-case id="1013" name="RequiredFields_ExistWithSensibleDefaults" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.RequiredFields_ExistWithSensibleDefaults" methodname="RequiredFields_ExistWithSensibleDefaults" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="1032782959" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.001220" asserts="0">
+                <test-case id="1013" name="RequiredFields_ExistWithSensibleDefaults" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests.RequiredFields_ExistWithSensibleDefaults" methodname="RequiredFields_ExistWithSensibleDefaults" classname="PhysicsDrivenMovement.Tests.EditMode.Character.ArmAnimatorTests" runstate="Runnable" seed="981360226" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.001233" asserts="0">
                   <properties>
                     <property name="Description" value="ArmAnimator._armSwingAngle must be &gt; 0 and ≤ 90, and _armSwingAxis must not be the zero vector, out of the box." />
                     <property name="retryIteration" value="0" />
@@ -60,16 +60,16 @@
                   </properties>
                 </test-case>
               </test-suite>
-              <test-suite type="TestFixture" id="1015" name="PlayerRagdollPrefabTests" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.008595" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <test-suite type="TestFixture" id="1015" name="PlayerRagdollPrefabTests" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.008483" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
                 <properties />
-                <test-case id="1017" name="PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests.PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" methodname="PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" seed="879972736" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.005737" asserts="0">
+                <test-case id="1017" name="PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests.PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" methodname="PlayerRagdollPrefab_GroundSensors_UseEnvironmentLayerMask" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" seed="103076650" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.005649" asserts="0">
                   <properties>
                     <property name="Description" value="Both GroundSensor components should include Environment layer in their ground mask." />
                     <property name="retryIteration" value="0" />
                     <property name="repeatIteration" value="0" />
                   </properties>
                 </test-case>
-                <test-case id="1016" name="PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests.PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" methodname="PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" seed="387079554" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.001069" asserts="0">
+                <test-case id="1016" name="PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" fullname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests.PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" methodname="PlayerRagdollPrefab_RigidbodyParts_AreAssignedToPlayerPartsLayer" classname="PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests" runstate="Runnable" seed="479318205" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.001101" asserts="0">
                   <properties>
                     <property name="Description" value="All Rigidbody body-part GameObjects in PlayerRagdoll prefab should be assigned to Player1Parts layer, not Default." />
                     <property name="retryIteration" value="0" />
@@ -78,51 +78,51 @@
                 </test-case>
               </test-suite>
             </test-suite>
-            <test-suite type="TestFixture" id="1001" name="GameSettingsTests" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.006065" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1001" name="GameSettingsTests" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.006605" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-case id="1007" name="AllPlayerAndEnvironmentLayers_AreUnique" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.AllPlayerAndEnvironmentLayers_AreUnique" methodname="AllPlayerAndEnvironmentLayers_AreUnique" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="119768781" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.001916" asserts="0">
+              <test-case id="1007" name="AllPlayerAndEnvironmentLayers_AreUnique" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.AllPlayerAndEnvironmentLayers_AreUnique" methodname="AllPlayerAndEnvironmentLayers_AreUnique" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="1486516064" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.002086" asserts="0">
                 <properties>
                   <property name="Description" value="All four player layers and the environment layer must have distinct indices." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1006" name="LayerEnvironment_ConstantValue_IsTwelve" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerEnvironment_ConstantValue_IsTwelve" methodname="LayerEnvironment_ConstantValue_IsTwelve" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="319126724" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000225" asserts="0">
+              <test-case id="1006" name="LayerEnvironment_ConstantValue_IsTwelve" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerEnvironment_ConstantValue_IsTwelve" methodname="LayerEnvironment_ConstantValue_IsTwelve" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="133205733" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000319" asserts="0">
                 <properties>
                   <property name="Description" value="Environment must live on layer 12." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1002" name="LayerPlayer1Parts_ConstantValue_IsEight" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer1Parts_ConstantValue_IsEight" methodname="LayerPlayer1Parts_ConstantValue_IsEight" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="2145492243" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000168" asserts="0">
+              <test-case id="1002" name="LayerPlayer1Parts_ConstantValue_IsEight" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer1Parts_ConstantValue_IsEight" methodname="LayerPlayer1Parts_ConstantValue_IsEight" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="149161882" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000194" asserts="0">
                 <properties>
                   <property name="Description" value="Player 1 parts must live on layer 8 — matches TagManager.asset and PLAN.md §Phase 0." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1003" name="LayerPlayer2Parts_ConstantValue_IsNine" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer2Parts_ConstantValue_IsNine" methodname="LayerPlayer2Parts_ConstantValue_IsNine" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="318588050" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000158" asserts="0">
+              <test-case id="1003" name="LayerPlayer2Parts_ConstantValue_IsNine" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer2Parts_ConstantValue_IsNine" methodname="LayerPlayer2Parts_ConstantValue_IsNine" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="1761328514" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000177" asserts="0">
                 <properties>
                   <property name="Description" value="Player 2 parts must live on layer 9." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1004" name="LayerPlayer3Parts_ConstantValue_IsTen" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer3Parts_ConstantValue_IsTen" methodname="LayerPlayer3Parts_ConstantValue_IsTen" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="1708735830" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000158" asserts="0">
+              <test-case id="1004" name="LayerPlayer3Parts_ConstantValue_IsTen" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer3Parts_ConstantValue_IsTen" methodname="LayerPlayer3Parts_ConstantValue_IsTen" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="872147960" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000187" asserts="0">
                 <properties>
                   <property name="Description" value="Player 3 parts must live on layer 10." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1005" name="LayerPlayer4Parts_ConstantValue_IsEleven" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer4Parts_ConstantValue_IsEleven" methodname="LayerPlayer4Parts_ConstantValue_IsEleven" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="445574379" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000160" asserts="0">
+              <test-case id="1005" name="LayerPlayer4Parts_ConstantValue_IsEleven" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.LayerPlayer4Parts_ConstantValue_IsEleven" methodname="LayerPlayer4Parts_ConstantValue_IsEleven" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="245339337" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000233" asserts="0">
                 <properties>
                   <property name="Description" value="Player 4 parts must live on layer 11." />
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1008" name="PlayerLayerIndices_AreInUserAssignableRange" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.PlayerLayerIndices_AreInUserAssignableRange" methodname="PlayerLayerIndices_AreInUserAssignableRange" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="1483891573" result="Passed" start-time="2026-02-23 22:07:18Z" end-time="2026-02-23 22:07:18Z" duration="0.000495" asserts="0">
+              <test-case id="1008" name="PlayerLayerIndices_AreInUserAssignableRange" fullname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests.PlayerLayerIndices_AreInUserAssignableRange" methodname="PlayerLayerIndices_AreInUserAssignableRange" classname="PhysicsDrivenMovement.Tests.EditMode.GameSettingsTests" runstate="Runnable" seed="1582494393" result="Passed" start-time="2026-02-24 07:54:02Z" end-time="2026-02-24 07:54:02Z" duration="0.000555" asserts="0">
                 <properties>
                   <property name="Description" value="Each player layer index must fall in the user-assignable range (8–31)." />
                   <property name="retryIteration" value="0" />
