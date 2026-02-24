@@ -169,23 +169,36 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         // ── Ghost driver ──────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Ghost driver with navigation suspension.
+        /// When the character is Fallen or GettingUp, navigation input is zeroed and the
+        /// driver waits for a "good state" (Standing + tilt &lt;15° for 10 consecutive frames)
+        /// before resuming. Gate timeouts are frozen during suspension so they don't
+        /// consume budget while the character isn't being asked to move.
+        /// </summary>
         private IEnumerator RunGhostDriver(HairpinResult result)
         {
-            int totalGates     = HairpinWaypoints.Length;
-            int currentGate    = 1;
-            int frame          = 0;
-            int framesSinceHit = 0;
-            bool done          = false;
-            bool prevFallen    = false;
-            bool prevStuck     = false;
+            const int StableFramesRequired = 10;
+            const float StableTiltDeg      = 15f;
+
+            int totalGates      = HairpinWaypoints.Length;
+            int currentGate     = 1;
+            int frame           = 0;
+            int framesSinceHit  = 0;
+            int stableFrames    = 0;
+            bool navSuspended   = false;
+            bool done           = false;
+            bool prevFallen     = false;
+            bool prevStuck      = false;
 
             while (!done && frame < MaxFrames)
             {
                 frame++;
-                framesSinceHit++;
 
                 bool fallen = (_cs != null && _cs.CurrentState == CharacterStateType.Fallen)
                            || (_bc != null && _bc.IsFallen);
+                bool gettingUp = _cs != null && _cs.CurrentState == CharacterStateType.GettingUp;
+
                 if (fallen && !prevFallen) result.FallCount++;
                 prevFallen = fallen;
 
@@ -193,37 +206,70 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 if (recovering && !prevStuck) result.StuckEventCount++;
                 prevStuck = recovering;
 
-                Vector3 targetWorld = HairpinWaypoints[currentGate] + TestOriginOffset;
-                Vector3 hipsXZ      = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
-                Vector3 targetXZ    = new Vector3(targetWorld.x, 0f, targetWorld.z);
-                Vector3 toTarget    = targetXZ - hipsXZ;
-                float   dist        = toTarget.magnitude;
+                // Navigation suspension: enter when fallen or getting up.
+                if (fallen || gettingUp)
+                {
+                    navSuspended = true;
+                    stableFrames = 0;
+                }
 
-                Vector2 input = dist > 0.01f
-                    ? new Vector2(toTarget.x / dist, toTarget.z / dist)
-                    : Vector2.zero;
+                if (navSuspended)
+                {
+                    // Check for "good state": standing + tilt below threshold.
+                    bool standing = _cs != null && _cs.CurrentState == CharacterStateType.Standing;
+                    float tilt    = _bc != null ? _bc.TiltAngleDeg : 90f;
+                    bool stable   = standing && tilt < StableTiltDeg;
+
+                    if (stable) stableFrames++;
+                    else        stableFrames = 0;
+
+                    if (stableFrames >= StableFramesRequired)
+                    {
+                        navSuspended = false;
+                        stableFrames = 0;
+                        framesSinceHit = 0; // reset gate clock so we get a fresh timeout window
+                    }
+                }
+
+                Vector2 input = Vector2.zero;
+                if (!navSuspended)
+                {
+                    framesSinceHit++;
+
+                    Vector3 targetWorld = HairpinWaypoints[currentGate] + TestOriginOffset;
+                    Vector3 hipsXZ      = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
+                    Vector3 targetXZ    = new Vector3(targetWorld.x, 0f, targetWorld.z);
+                    Vector3 toTarget    = targetXZ - hipsXZ;
+                    float   dist        = toTarget.magnitude;
+
+                    input = dist > 0.01f
+                        ? new Vector2(toTarget.x / dist, toTarget.z / dist)
+                        : Vector2.zero;
+
+                    if (dist <= GetGateRadius(currentGate))
+                    {
+                        result.GatesHit++;
+                        result.LastGateReached = currentGate;
+                        framesSinceHit = 0;
+                        currentGate++;
+                        if (currentGate >= totalGates) { done = true; break; }
+                    }
+
+                    if (framesSinceHit >= GateMissedTimeout)
+                    {
+                        bool isFallen    = fallen;
+                        bool isRecovering = recovering;
+                        Debug.Log($"[HairpinCorner] Gate {currentGate} MISSED at frame {frame} " +
+                                  $"(dist={dist:F2}m, fallen={isFallen}, recovering={isRecovering})");
+                        result.GatesMissed++;
+                        result.LastGateReached = currentGate;
+                        framesSinceHit = 0;
+                        currentGate++;
+                        if (currentGate >= totalGates) { done = true; break; }
+                    }
+                }
+
                 _pm.SetMoveInputForTest(input);
-
-                if (dist <= GetGateRadius(currentGate))
-                {
-                    result.GatesHit++;
-                    result.LastGateReached = currentGate;
-                    framesSinceHit = 0;
-                    currentGate++;
-                    if (currentGate >= totalGates) { done = true; break; }
-                }
-
-                if (framesSinceHit >= GateMissedTimeout)
-                {
-                    Debug.Log($"[HairpinCorner] Gate {currentGate} MISSED at frame {frame} " +
-                              $"(dist={dist:F2}m, fallen={fallen}, recovering={recovering})");
-                    result.GatesMissed++;
-                    result.LastGateReached = currentGate;
-                    framesSinceHit = 0;
-                    currentGate++;
-                    if (currentGate >= totalGates) { done = true; break; }
-                }
-
                 yield return new WaitForFixedUpdate();
             }
 

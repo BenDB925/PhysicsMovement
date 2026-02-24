@@ -91,9 +91,10 @@ namespace PhysicsDrivenMovement.Character
         // ── Runtime state ─────────────────────────────────────────────────────────
 
         private GameObject     _instance;
-        private PlayerMovement _movement;
-        private CharacterState _characterState;
-        private Transform      _hipsTransform;
+        private PlayerMovement    _movement;
+        private CharacterState    _characterState;
+        private BalanceController _balance;
+        private Transform         _hipsTransform;
 
         private int   _currentWaypoint;
         private int   _fallCount;
@@ -102,6 +103,12 @@ namespace PhysicsDrivenMovement.Character
         private float _lapTime;
         private bool  _lapComplete;
         private bool  _lapRunning;
+
+        // Navigation suspension state — entered on Fallen/GettingUp, exited once stable.
+        private bool _navSuspended  = false;
+        private int  _stableFrames  = 0;
+        private const int  StableFramesRequired = 10;
+        private const float StableTiltDeg       = 15f;
 
         private string _statusLine  = "Settling…";
         private string _pbLine      = "";
@@ -127,13 +134,40 @@ namespace PhysicsDrivenMovement.Character
         {
             if (!_lapRunning || _movement == null) return;
 
-            // Ghost driver: pause input when fallen — let the character get up first.
-            if (_characterState != null &&
-                (_characterState.CurrentState == CharacterStateType.Fallen ||
-                 _characterState.CurrentState == CharacterStateType.GettingUp))
+            // Ghost driver: suspend navigation on Fallen/GettingUp.
+            // Wait for "good state" (Standing + tilt < StableTiltDeg for StableFramesRequired
+            // consecutive frames) before resuming, so we don't immediately push the character
+            // over again while BC is still restoring upright posture.
+            bool fallen    = _characterState != null &&
+                             (_characterState.CurrentState == CharacterStateType.Fallen ||
+                              _characterState.CurrentState == CharacterStateType.GettingUp);
+
+            if (fallen)
             {
-                _movement.SetMoveInputForTest(Vector2.zero);
-                return;
+                _navSuspended = true;
+                _stableFrames = 0;
+            }
+
+            if (_navSuspended)
+            {
+                bool standing = _characterState != null &&
+                                _characterState.CurrentState == CharacterStateType.Standing;
+                float tilt    = _balance != null ? _balance.TiltAngleDeg : 90f;
+                bool stable   = standing && tilt < StableTiltDeg;
+
+                if (stable) _stableFrames++;
+                else        _stableFrames = 0;
+
+                if (_stableFrames >= StableFramesRequired)
+                {
+                    _navSuspended = false;
+                    _stableFrames = 0;
+                }
+                else
+                {
+                    _movement.SetMoveInputForTest(Vector2.zero);
+                    return;
+                }
             }
 
             // Point toward current waypoint on XZ plane.
@@ -175,6 +209,7 @@ namespace PhysicsDrivenMovement.Character
             _hipsTransform  = _instance.transform;
             _movement       = _instance.GetComponentInChildren<PlayerMovement>();
             _characterState = _instance.GetComponentInChildren<CharacterState>();
+            _balance        = _instance.GetComponentInChildren<BalanceController>();
 
             if (_movement == null)
             {
