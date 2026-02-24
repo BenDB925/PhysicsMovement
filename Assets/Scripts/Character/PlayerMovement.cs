@@ -81,8 +81,11 @@ namespace PhysicsDrivenMovement.Character
 
         // ─── Public Properties ─────────────────────────────────────────────
 
-        /// <summary>Latest sampled movement input from the Player action map.</summary>
-        public Vector2 CurrentMoveInput => _smoothedMoveInput;
+        /// <summary>Latest sampled movement input from the Player action map (raw, unsmoothed).</summary>
+        public Vector2 CurrentMoveInput => _currentMoveInput;
+
+        /// <summary>Smoothed move input direction — what LegAnimator and movement forces use.</summary>
+        public Vector2 SmoothedMoveInput => _smoothedMoveInput;
 
         // ─── Test Seams ────────────────────────────────────────────────────
 
@@ -205,8 +208,13 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4: Smooth the move input direction to prevent instant snaps.
             //         Rotates _smoothedMoveInput toward _currentMoveInput at _inputTurnSpeed
             //         deg/s. Legs and gait restart never see an instant 90°+ direction change.
-            //         When _inputTurnSpeed is 0, smoothing is disabled (raw input passthrough).
-            if (_inputTurnSpeed > 0f && _currentMoveInput.sqrMagnitude > 0.001f)
+            //         When _inputTurnSpeed is 0, or when override is active (tests), pass raw.
+            if (_overrideMoveInput || _inputTurnSpeed <= 0f || _currentMoveInput.sqrMagnitude <= 0.001f)
+            {
+                // Test override or smoothing disabled — pass raw input directly.
+                _smoothedMoveInput = _currentMoveInput;
+            }
+            else
             {
                 if (_smoothedMoveInput.sqrMagnitude < 0.001f)
                 {
@@ -226,10 +234,6 @@ namespace PhysicsDrivenMovement.Character
                         _smoothedMoveInput.x * sin + _smoothedMoveInput.y * cos);
                     _smoothedMoveInput = rotated.normalized * _currentMoveInput.magnitude;
                 }
-            }
-            else
-            {
-                _smoothedMoveInput = _currentMoveInput;
             }
 
             // STEP 5: Movement forces. Skip when character is fallen.

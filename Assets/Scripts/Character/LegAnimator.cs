@@ -526,7 +526,7 @@ namespace PhysicsDrivenMovement.Character
             //         Without the velocity check, inputMagnitude drops to zero the frame
             //         the key is released, SetAllLegTargetsToIdentity() fires, and the
             //         legs snap to rest even though the body is still sliding forward.
-            float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+            float inputMagnitude = _playerMovement.SmoothedMoveInput.magnitude;
 
             float horizontalSpeedGate = 0f;
             if (_hipsRigidbody != null)
@@ -594,7 +594,7 @@ namespace PhysicsDrivenMovement.Character
             //          into a large arc mid-stride and clipping the ground.
             //          Also reset on sharp direction change (dot < 0.5 = >60° turn).
             Vector2 currentInputDir = inputMagnitude > 0.01f
-                ? _playerMovement.CurrentMoveInput.normalized
+                ? _playerMovement.SmoothedMoveInput.normalized
                 : Vector2.zero;
 
             // A clean stop→start is detected by input going from zero to non-zero,
@@ -736,7 +736,7 @@ namespace PhysicsDrivenMovement.Character
                 float exitForwardVel = 0f;
                 if (_hipsRigidbody != null && _playerMovement != null)
                 {
-                    Vector2 inp = _playerMovement.CurrentMoveInput;
+                    Vector2 inp = _playerMovement.SmoothedMoveInput;
                     if (inp.sqrMagnitude > 0.01f)
                     {
                         Vector3 inputDir3 = new Vector3(inp.x, 0f, inp.y).normalized;
@@ -744,7 +744,7 @@ namespace PhysicsDrivenMovement.Character
                         exitForwardVel = Vector3.Dot(new Vector3(vel.x, 0f, vel.z), inputDir3);
                     }
                 }
-                bool hasForwardTraction = exitForwardVel > -0.1f || _playerMovement.CurrentMoveInput.sqrMagnitude < 0.01f;
+                bool hasForwardTraction = exitForwardVel > -0.1f || _playerMovement.SmoothedMoveInput.sqrMagnitude < 0.01f;
 
                 if (_recoveryFrameCounter <= 0 && uprightEnough && hasForwardTraction)
                 {
@@ -766,8 +766,11 @@ namespace PhysicsDrivenMovement.Character
             // still sliding (velocity-based isMoving may still be true). This ensures the
             // restart phase-reset fires reliably on the next input — otherwise residual
             // velocity keeps the gait branch running and _smoothedInputMag never decays.
+            // Gate: only decay if input was also zero last frame (_prevInputWasZero) to
+            // avoid decaying on the first frame of a SetMoveInputForTest injection where
+            // _smoothedMoveInput hasn't caught up to raw input yet.
             bool inputActive = inputMagnitude > 0.01f;
-            if (!inputActive && _smoothedInputMag > 0.01f)
+            if (!inputActive && _prevInputWasZero && _smoothedInputMag > 0.01f)
             {
                 float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
                 _phase = Mathf.Max(0f, _phase - decayStep);
@@ -1069,7 +1072,7 @@ namespace PhysicsDrivenMovement.Character
             // start-of-movement window. The velocity path takes over once the body is moving.
             if (_playerMovement != null)
             {
-                Vector2 moveInput = _playerMovement.CurrentMoveInput;
+                Vector2 moveInput = _playerMovement.SmoothedMoveInput;
                 if (moveInput.magnitude > 0.01f)
                 {
                     Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);
@@ -1281,3 +1284,4 @@ namespace PhysicsDrivenMovement.Character
         }
     }
 }
+
