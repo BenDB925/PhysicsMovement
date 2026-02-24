@@ -767,10 +767,7 @@ namespace PhysicsDrivenMovement.Character
                     _isRecovering = false;
                     _stuckFrameCounter = 0;
                     _phase = 0f;
-                    // Seed smoothedInputMag so legs have immediate authority on first step.
-                    // Without this, the ramp from 0 takes ~50 frames during which residual
-                    // body momentum carries the character backward (confirmed in debug dump).
-                    _smoothedInputMag = 0.3f;
+                    _smoothedInputMag = 0f;
                     _recoveryCooldownCounter = _recoveryFrames * 2;
                     SetLegSpringMultiplier(1f);
                 }
