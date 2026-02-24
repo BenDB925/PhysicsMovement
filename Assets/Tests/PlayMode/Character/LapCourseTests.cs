@@ -103,10 +103,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // â"€â"€ Gate radii â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
         /// <summary>Radius for tight corners (hairpin, chicane, slalom, S-bend).</summary>
-        private const float TightGateRadius = 2.5f;
+        private const float TightGateRadius = 1.0f;
 
         /// <summary>Radius for wide-open waypoints (straights, return leg).</summary>
-        private const float OpenGateRadius = 3.5f;
+        private const float OpenGateRadius = 1.5f;
 
         // DESIGN: tight gates apply to corners; open gates apply to straights and return.
         // Index thresholds: waypoints 0-3 are straight (open), 4-20 are corners (tight),

@@ -42,8 +42,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             new Vector3(16f, 0f,  5f),   // 9: confirm moving away cleanly
         };
 
-        private const float TightGateRadius = 2.5f;
-        private const float OpenGateRadius  = 3.5f;
+        private const float TightGateRadius = 1.0f;
+        private const float OpenGateRadius  = 1.5f;
 
         private static float GetGateRadius(int i)
         {
