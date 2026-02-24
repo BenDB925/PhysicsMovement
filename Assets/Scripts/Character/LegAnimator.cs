@@ -191,7 +191,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Yaw angular velocity threshold (rad/s) above which gait is suppressed to " +
                  "prevent leg tangle during rapid spinning. Default 4 rad/s. " +
                  "Gait re-enables with hysteresis at threshold × 0.5 held for 5 consecutive frames.")]
-        private float _angularVelocityGaitThreshold = 8f;
+        private float _angularVelocityGaitThreshold = 14f;
 
         // ── Stuck-Leg Recovery (Option D) ────────────────────────────────
 
