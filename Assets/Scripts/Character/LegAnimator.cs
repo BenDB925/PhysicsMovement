@@ -350,6 +350,8 @@ namespace PhysicsDrivenMovement.Character
 
         // ── Unity Lifecycle ─────────────────────────────────────────────────
 
+        private BalanceController _balanceController;
+
         private void Awake()
         {
             // STEP 1: Cache sibling components on the Hips GameObject.
@@ -367,6 +369,8 @@ namespace PhysicsDrivenMovement.Character
             {
                 Debug.LogError("[LegAnimator] Missing Rigidbody on this GameObject.", this);
             }
+
+            TryGetComponent(out _balanceController);
 
             // STEP 2: Locate the four leg ConfigurableJoints by searching children by name.
             //         The hierarchy is: Hips → UpperLeg_L → LowerLeg_L
@@ -649,7 +653,14 @@ namespace PhysicsDrivenMovement.Character
                 SetAllLegTargetsToIdentity();
 
                 _recoveryFrameCounter--;
-                if (_recoveryFrameCounter <= 0)
+
+                // Only exit recovery once BC has actually restored upright posture,
+                // AND the minimum frame count has elapsed. Prevents restarting gait
+                // on a still-tilted body which immediately causes another stumble.
+                float tiltDeg = _balanceController != null ? _balanceController.TiltAngleDeg : 0f;
+                bool uprightEnough = tiltDeg < 20f;
+
+                if (_recoveryFrameCounter <= 0 && uprightEnough)
                 {
                     // Recovery complete: restart gait from scratch, start cooldown.
                     _isRecovering = false;

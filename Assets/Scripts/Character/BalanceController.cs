@@ -252,6 +252,9 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public bool IsFallen { get; private set; }
 
+        /// <summary>Current tilt angle in degrees between hips up-axis and world up. 0 = perfectly upright.</summary>
+        public float TiltAngleDeg => _rb != null ? Vector3.Angle(_rb.transform.up, Vector3.up) : 0f;
+
         /// <summary>
         /// Test seam: directly override IsGrounded/IsFallen without needing GroundSensor components.
         /// FixedUpdate will not overwrite these values while the override is active.
