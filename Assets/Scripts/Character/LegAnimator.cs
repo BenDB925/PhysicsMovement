@@ -327,6 +327,13 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Cooldown frames after recovery before stuck detector can fire again.</summary>
         private int _recoveryCooldownCounter;
 
+        // Smoothed (EMA) forward progress — averages over ~1 gait cycle to filter out
+        // the normal sinusoidal oscillation. Only the backwardMotion trigger uses this;
+        // stuckCondition uses instantaneous progress as before (it has a 25-frame window).
+        // Alpha = 1/80 ≈ 0.0125 (80-frame half-window ≈ 1 full gait cycle at stepFreq 1.25Hz).
+        private float _smoothedForwardProgress;
+        private const float FwdProgressEmaAlpha = 0.0125f;
+
 #if UNITY_EDITOR
         // ── Debug Ring Buffer ─────────────────────────────────────────────────
         private const int DebugRingSize = 500; // 5 seconds at 100 Hz
@@ -623,6 +630,7 @@ namespace PhysicsDrivenMovement.Character
                 // stuck detector fires before character gets moving. 0.3 gives a gentle
                 // first step without the visual pop of snapping straight to 1.0.
                 _smoothedInputMag = restarting ? 0.3f : 0f;
+                _smoothedForwardProgress = 0f;  // reset EMA on restart/turn so stale value can't trigger backwardMotion
                 SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
             }
 
@@ -655,6 +663,11 @@ namespace PhysicsDrivenMovement.Character
                     Vector3 hipsVelFlat   = new Vector3(hipsVel.x, 0f, hipsVel.z);
                     forwardProgress       = Vector3.Dot(hipsVelFlat, worldInputDir3D);
                 }
+
+                // Update EMA of forward progress — filters out normal gait oscillation.
+                // Only used by backwardMotion guard to avoid spurious recovery mid-walk.
+                _smoothedForwardProgress = Mathf.Lerp(_smoothedForwardProgress, forwardProgress, FwdProgressEmaAlpha);
+
 #if UNITY_EDITOR
                 _lastForwardProgress = forwardProgress;
 #endif
@@ -702,12 +715,13 @@ namespace PhysicsDrivenMovement.Character
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
-                // Backward motion override: if actively moving backwards under forward input,
-                // trigger recovery immediately after a short window (5 frames), bypassing the
-                // direction-change grace period. This catches the post-corner Scorpion loop where
-                // the character is upright but legs are phased wrong and pushing backwards.
+                // Backward motion override: if the smoothed (EMA over ~1 gait cycle) forward
+                // progress is persistently negative, trigger recovery after a short window (5 frames).
+                // Using the EMA prevents normal gait oscillation (fwdProg swings -0.4→+1.0 each step)
+                // from spuriously triggering recovery mid-walk — only genuine sustained backward drift
+                // activates this path.
                 bool backwardMotion = _smoothedInputMag > 0.5f
-                    && forwardProgress < -0.2f             // moving backward (even slowly)
+                    && _smoothedForwardProgress < -0.15f   // sustained backward trend (EMA filtered)
                     && yawMisalignDeg < 45f                // not mid-turn
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
@@ -768,6 +782,7 @@ namespace PhysicsDrivenMovement.Character
                     _stuckFrameCounter = 0;
                     _phase = 0f;
                     _smoothedInputMag = 0f;
+                    _smoothedForwardProgress = 0f;  // reset EMA so stale negative doesn't re-trigger
                     _recoveryCooldownCounter = _recoveryFrames * 2;
                     SetLegSpringMultiplier(1f);
                 }
