@@ -55,9 +55,6 @@ namespace PhysicsDrivenMovement.Editor
                 Object.DestroyImmediate(zone);
             }
 
-            // Remove ArmAnimator — AI doesn't need arm swing (no PlayerMovement driving it).
-            RemoveComponent<ArmAnimator>(aiGO);
-
             // STEP 4: Add AI components.
             AILocomotion locomotion = aiGO.AddComponent<AILocomotion>();
             using (var so = new SerializedObject(locomotion))

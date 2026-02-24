@@ -156,9 +156,14 @@ namespace PhysicsDrivenMovement.Character
             TryGetComponent(out _grabController);
             TryGetComponent(out _punchController);
 
-            // STEP 1c: Create input for raise-hands action.
-            _inputActions = new PlayerInputActions();
-            _inputActions.Enable();
+            // STEP 1c: Create input for raise-hands action (player-controlled only).
+            //          AI ragdolls have no PlayerMovement — skip input to avoid
+            //          reading the player's RaiseHands button.
+            if (TryGetComponent<PlayerMovement>(out _))
+            {
+                _inputActions = new PlayerInputActions();
+                _inputActions.Enable();
+            }
 
             // STEP 2: Locate the four arm ConfigurableJoints by searching children by name.
             //         Pattern mirrors LegAnimator's Awake exactly — hierarchy-agnostic name lookup.
