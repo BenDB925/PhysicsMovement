@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using PhysicsDrivenMovement.AI;
 using PhysicsDrivenMovement.Core;
 using PhysicsDrivenMovement.Environment;
 
@@ -142,7 +143,7 @@ namespace PhysicsDrivenMovement.Editor
             light.color     = new Color(1f, 0.97f, 0.91f); // warm white
             lightGO.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
 
-            // STEP 5: Camera.
+            // STEP 5: Camera with CameraFollow.
             GameObject camGO = new GameObject("Main Camera");
             Camera cam = camGO.AddComponent<Camera>();
             cam.clearFlags  = CameraClearFlags.Skybox;
@@ -151,6 +152,10 @@ namespace PhysicsDrivenMovement.Editor
                 new Vector3(0f, 8f, -16f),
                 Quaternion.Euler(25f, 0f, 0f));
             camGO.tag = "MainCamera";
+            camGO.AddComponent<Character.CameraFollow>();
+
+            // STEP 5b: Place the player ragdoll prefab in the lobby.
+            PlacePlayerRagdoll();
 
             // STEP 6: Build each room.
             GameObject arenaRoot = new GameObject("Museum");
@@ -162,7 +167,10 @@ namespace PhysicsDrivenMovement.Editor
             // STEP 7: Spawn points in Main Lobby corners.
             BuildSpawnPoints();
 
-            // STEP 8: Save scene.
+            // STEP 8: Add AISpawner with prefab reference (if AI prefab exists).
+            BuildAISpawner();
+
+            // STEP 9: Save scene.
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
 
@@ -394,6 +402,49 @@ namespace PhysicsDrivenMovement.Editor
                 GameObject spawn = new GameObject($"SpawnPoint_{i + 1}");
                 spawn.transform.localPosition = positions[i];
             }
+        }
+
+        // ─── Player Ragdoll ──────────────────────────────────────────────────
+
+        private static void PlacePlayerRagdoll()
+        {
+            const string playerPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+            GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(playerPrefabPath);
+
+            if (playerPrefab == null)
+            {
+                Debug.LogWarning($"[ArenaBuilder] Player ragdoll prefab not found at '{playerPrefabPath}'. " +
+                                 "Run 'Build Player Ragdoll' first, then rebuild the arena.");
+                return;
+            }
+
+            // Place in the lobby at the first spawn point position.
+            GameObject player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
+            player.transform.position = new Vector3(-6f, 1.1f, 4f);
+            player.name = "PlayerRagdoll";
+        }
+
+        // ─── AI Spawner ──────────────────────────────────────────────────────
+
+        private static void BuildAISpawner()
+        {
+            const string aiPrefabPath = "Assets/Prefabs/AIRagdoll.prefab";
+            GameObject aiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(aiPrefabPath);
+
+            if (aiPrefab == null)
+            {
+                Debug.LogWarning($"[ArenaBuilder] AI ragdoll prefab not found at '{aiPrefabPath}'. " +
+                                 "Run 'Build AI Ragdoll' first, then rebuild the arena to include AI visitors.");
+                return;
+            }
+
+            GameObject spawnerGO = new GameObject("AISpawner");
+            AISpawner spawner = spawnerGO.AddComponent<AISpawner>();
+
+            using var so = new SerializedObject(spawner);
+            so.FindProperty("_aiCount").intValue = 4;
+            so.FindProperty("_aiRagdollPrefab").objectReferenceValue = aiPrefab;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // ─── Geometry Helpers ───────────────────────────────────────────────

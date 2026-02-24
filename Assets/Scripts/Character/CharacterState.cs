@@ -4,15 +4,14 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Tracks the high-level locomotion/posture state for a player ragdoll so other
+    /// Tracks the high-level locomotion/posture state for a ragdoll so other
     /// systems can react to deterministic gameplay state transitions.
     /// Part of the Character state machine system and driven by data from
-    /// <see cref="BalanceController"/> and <see cref="PlayerMovement"/>.
+    /// <see cref="BalanceController"/> and any <see cref="IMovementInput"/> provider.
     /// Lifecycle: caches dependencies in Awake and evaluates transitions in FixedUpdate.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(BalanceController))]
-    [RequireComponent(typeof(PlayerMovement))]
     public class CharacterState : MonoBehaviour
     {
         [SerializeField, Range(0f, 1f)]
@@ -34,7 +33,7 @@ namespace PhysicsDrivenMovement.Character
         private float _getUpTimeout = 3f;
 
         private BalanceController _balanceController;
-        private PlayerMovement _playerMovement;
+        private IMovementInput _movementInput;
         private Rigidbody _rb;
         private float _fallenTimer;
         private float _gettingUpTimer;
@@ -55,9 +54,9 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Cache BalanceController, PlayerMovement, and Rigidbody dependencies.
+            // STEP 1: Cache BalanceController, IMovementInput, and Rigidbody dependencies.
             TryGetComponent(out _balanceController);
-            TryGetComponent(out _playerMovement);
+            _movementInput = GetComponent<IMovementInput>();
             TryGetComponent(out _rb);
 
             // STEP 2: Validate required components and log errors when missing.
@@ -66,9 +65,9 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogError("[CharacterState] Missing BalanceController.", this);
             }
 
-            if (_playerMovement == null)
+            if (_movementInput == null)
             {
-                Debug.LogError("[CharacterState] Missing PlayerMovement.", this);
+                Debug.LogError("[CharacterState] Missing IMovementInput (PlayerMovement or AILocomotion).", this);
             }
 
             if (_rb == null)
@@ -82,12 +81,12 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            if (_balanceController == null || _playerMovement == null)
+            if (_balanceController == null || _movementInput == null)
             {
                 return;
             }
 
-            float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+            float moveMagnitude = _movementInput.CurrentMoveInput.magnitude;
             bool isGrounded = _balanceController.IsGrounded;
             bool isFallen = _balanceController.IsFallen;
             bool wantsMove = moveMagnitude >= _moveEnterThreshold;

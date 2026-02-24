@@ -18,7 +18,7 @@ namespace PhysicsDrivenMovement.Character
     /// <see cref="Rigidbody"/>, <see cref="PlayerInputActions"/>.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
-    public class PlayerMovement : MonoBehaviour
+    public class PlayerMovement : MonoBehaviour, IMovementInput
     {
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;

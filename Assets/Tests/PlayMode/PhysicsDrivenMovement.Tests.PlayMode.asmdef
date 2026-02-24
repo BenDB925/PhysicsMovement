@@ -3,7 +3,9 @@
     "rootNamespace": "PhysicsDrivenMovement.Tests.PlayMode",
     "references": [
         "PhysicsDrivenMovement.Core",
-        "PhysicsDrivenMovement.Character"
+        "PhysicsDrivenMovement.Character",
+        "PhysicsDrivenMovement.AI",
+        "PhysicsDrivenMovement.Environment"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

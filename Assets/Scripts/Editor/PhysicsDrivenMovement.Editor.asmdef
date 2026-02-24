@@ -4,7 +4,8 @@
     "references": [
         "PhysicsDrivenMovement.Core",
         "PhysicsDrivenMovement.Character",
-        "PhysicsDrivenMovement.Environment"
+        "PhysicsDrivenMovement.Environment",
+        "PhysicsDrivenMovement.AI"
     ],
     "includePlatforms": [
         "Editor"

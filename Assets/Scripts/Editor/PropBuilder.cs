@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using PhysicsDrivenMovement.AI;
 using PhysicsDrivenMovement.Core;
 
 namespace PhysicsDrivenMovement.Editor
@@ -185,6 +186,10 @@ namespace PhysicsDrivenMovement.Editor
             Rigidbody rb    = exhibit.AddComponent<Rigidbody>();
             rb.mass         = 5f;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+
+            // Add AI interest point on the base (stable, won't move when knocked).
+            MuseumInterestPoint interestPoint = baseCube.AddComponent<MuseumInterestPoint>();
+            interestPoint.Initialise(viewDistance: 1.5f, viewDirectionLocal: Vector3.forward);
         }
 
         /// <summary>
@@ -222,6 +227,12 @@ namespace PhysicsDrivenMovement.Editor
             Rigidbody rb    = painting.AddComponent<Rigidbody>();
             rb.mass         = 2f;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+
+            // Add AI interest point — surface normal points away from the wall.
+            // West wall paintings (negative X) face east (+X), east wall paintings face west (-X).
+            Vector3 surfaceNormal = prop.Position.x < 0f ? Vector3.right : Vector3.left;
+            MuseumInterestPoint interestPoint = painting.AddComponent<MuseumInterestPoint>();
+            interestPoint.Initialise(viewDistance: 2f, viewDirectionLocal: surfaceNormal);
         }
 
         // ─── Geometry Helpers ───────────────────────────────────────────────

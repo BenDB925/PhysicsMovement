@@ -67,7 +67,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act
             object cachedBalance = GetPrivateField(_characterState, "_balanceController");
-            object cachedMovement = GetPrivateField(_characterState, "_playerMovement");
+            object cachedMovement = GetPrivateField(_characterState, "_movementInput");
             object cachedRigidbody = GetPrivateField(_characterState, "_rb");
 
             // Assert

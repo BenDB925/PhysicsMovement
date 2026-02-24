@@ -199,8 +199,8 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Right lower leg ConfigurableJoint, found by name in Awake.</summary>
         private ConfigurableJoint _lowerLegR;
 
-        /// <summary>Sibling PlayerMovement component used to read current move input magnitude.</summary>
-        private PlayerMovement _playerMovement;
+        /// <summary>Sibling IMovementInput provider used to read current move input magnitude.</summary>
+        private IMovementInput _movementInput;
 
         /// <summary>Sibling CharacterState component used to gate gait on posture state.</summary>
         private CharacterState _characterState;
@@ -293,9 +293,10 @@ namespace PhysicsDrivenMovement.Character
         private void Awake()
         {
             // STEP 1: Cache sibling components on the Hips GameObject.
-            if (!TryGetComponent(out _playerMovement))
+            _movementInput = GetComponent<IMovementInput>();
+            if (_movementInput == null)
             {
-                Debug.LogError("[LegAnimator] Missing PlayerMovement on this GameObject.", this);
+                Debug.LogError("[LegAnimator] Missing IMovementInput (PlayerMovement or AILocomotion) on this GameObject.", this);
             }
 
             if (!TryGetComponent(out _characterState))
@@ -414,7 +415,7 @@ namespace PhysicsDrivenMovement.Character
             _worldSwingAxis = Vector3.zero;
 
             // STEP 1: Gate on missing dependencies — skip gracefully.
-            if (_playerMovement == null || _characterState == null)
+            if (_movementInput == null || _characterState == null)
             {
                 return;
             }
@@ -439,7 +440,7 @@ namespace PhysicsDrivenMovement.Character
             //         Without the velocity check, inputMagnitude drops to zero the frame
             //         the key is released, SetAllLegTargetsToIdentity() fires, and the
             //         legs snap to rest even though the body is still sliding forward.
-            float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+            float inputMagnitude = _movementInput.CurrentMoveInput.magnitude;
 
             float horizontalSpeedGate = 0f;
             if (_hipsRigidbody != null)
@@ -473,7 +474,7 @@ namespace PhysicsDrivenMovement.Character
             //          into a large arc mid-stride and clipping the ground.
             //          Also reset on sharp direction change (dot < 0.5 = >60° turn).
             Vector2 currentInputDir = inputMagnitude > 0.01f
-                ? _playerMovement.CurrentMoveInput.normalized
+                ? _movementInput.CurrentMoveInput.normalized
                 : Vector2.zero;
 
             bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
@@ -776,9 +777,9 @@ namespace PhysicsDrivenMovement.Character
             // CurrentMoveInput is a raw 2D input; without camera transform it maps X→world-X,
             // Y→world-Z. This is an approximation sufficient for tests and the zero-velocity
             // start-of-movement window. The velocity path takes over once the body is moving.
-            if (_playerMovement != null)
+            if (_movementInput != null)
             {
-                Vector2 moveInput = _playerMovement.CurrentMoveInput;
+                Vector2 moveInput = _movementInput.CurrentMoveInput;
                 if (moveInput.magnitude > 0.01f)
                 {
                     Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);

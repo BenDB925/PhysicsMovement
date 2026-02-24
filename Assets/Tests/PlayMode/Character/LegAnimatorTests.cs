@@ -168,11 +168,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return null;
 
             // Act
-            object cached = GetPrivateField(_legAnimator, "_playerMovement");
+            object cached = GetPrivateField(_legAnimator, "_movementInput");
 
             // Assert
             Assert.That(cached, Is.Not.Null,
-                "LegAnimator must cache a PlayerMovement reference in Awake.");
+                "LegAnimator must cache an IMovementInput reference in Awake.");
         }
 
         [UnityTest]
