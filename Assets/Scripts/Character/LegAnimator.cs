@@ -305,7 +305,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private int _directionChangeGraceCounter;
 
-        private const int   DirectionChangeGraceFrames  = 60;   // 0.6s at 100 Hz — enough for BC to yaw to new direction
+        private const int   DirectionChangeGraceFrames  = 80;   // 0.8s at 100 Hz
         private const float DirectionChangeTriggerAngle = 45f;  // degrees
 
         /// <summary>Last valid normalised input direction (XZ world-space).</summary>
@@ -595,18 +595,7 @@ namespace PhysicsDrivenMovement.Character
             if (restarting || sharpTurn)
             {
                 _phase = 0f;
-                // On sharp turn: preserve partial smoothedInputMag so legs have immediate
-                // drive in the new direction. Full reset to 0 caused a slow ramp-up where
-                // legs couldn't generate traction, triggering the stuck→recovery loop.
-                // On restart from idle: reset normally since there's no prior amplitude.
-                if (sharpTurn && !restarting)
-                {
-                    _smoothedInputMag = Mathf.Max(_smoothedInputMag * 0.3f, 0.3f);
-                }
-                else
-                {
-                    _smoothedInputMag = 0f;
-                }
+                _smoothedInputMag = 0f;
                 SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
             }
 
@@ -657,12 +646,7 @@ namespace PhysicsDrivenMovement.Character
                             // Without this, gait resumes mid-step in the old direction, which
                             // immediately looks like a stuck condition and fires recovery.
                             _phase = 0f;
-                            // Preserve a minimum smoothedInputMag (0.3) so that when gait
-                            // resumes after the grace period, legs drive with meaningful
-                            // amplitude immediately. Resetting to 0 caused a slow ramp-up
-                            // window where legs were too weak to generate traction, making
-                            // the stuck detector fire and creating a recovery→stuck loop.
-                            _smoothedInputMag = Mathf.Max(_smoothedInputMag * 0.3f, 0.3f);
+                            _smoothedInputMag = 0f;
                             SetAllLegTargetsToIdentity();
                         }
                     }
@@ -694,7 +678,6 @@ namespace PhysicsDrivenMovement.Character
                 bool backwardMotion = _smoothedInputMag > 0.5f
                     && forwardProgress < -0.2f             // moving backward (even slowly)
                     && yawMisalignDeg < 45f                // not mid-turn
-                    && _directionChangeGraceCounter <= 0   // not in turn grace period
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
@@ -750,14 +733,11 @@ namespace PhysicsDrivenMovement.Character
                 if (_recoveryFrameCounter <= 0 && uprightEnough && hasForwardTraction)
                 {
                     // Recovery complete: restart gait from scratch, start cooldown.
-                    // Seed smoothedInputMag at 0.4 so legs immediately have meaningful
-                    // amplitude. Resetting to 0 caused a slow ramp-up that re-triggered
-                    // stuck detection, creating the recovery→stuck→recovery loop.
                     _isRecovering = false;
                     _stuckFrameCounter = 0;
                     _phase = 0f;
-                    _smoothedInputMag = 0.4f;
-                    _recoveryCooldownCounter = _recoveryFrames * 3;
+                    _smoothedInputMag = 0f;
+                    _recoveryCooldownCounter = _recoveryFrames * 2;
                     SetLegSpringMultiplier(1f);
                 }
 
