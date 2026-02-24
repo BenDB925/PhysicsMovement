@@ -722,9 +722,13 @@ namespace PhysicsDrivenMovement.Character
                 // Using the EMA prevents normal gait oscillation (fwdProg swings -0.4→+1.0 each step)
                 // from spuriously triggering recovery mid-walk — only genuine sustained backward drift
                 // activates this path.
+                // Grace period: also suppress for _directionChangeGraceFrames after a sharp turn —
+                // post-corner residual momentum makes fwdProg negative briefly, which isn't a real
+                // backward loop. The Scorpion loop only manifests after a full gait cycle anyway.
                 bool backwardMotion = _smoothedInputMag > 0.5f
                     && _smoothedForwardProgress < -0.15f   // sustained backward trend (EMA filtered)
                     && yawMisalignDeg < 45f                // not mid-turn
+                    && _directionChangeGraceCounter <= 0   // not in post-corner grace window
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
