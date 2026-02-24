@@ -150,6 +150,29 @@ Hips (root, no joint)
 
 ---
 
+### Phase 3X — Overnight Parameter Optimizer (run when locomotion is stable)
+
+> **Goal:** Systematically find the best-performing parameter combination for the lap course. Run overnight as an isolated cron job — no CI involvement.
+
+**Trigger condition:** Run this phase once all Phase 3 tests pass cleanly and playtesting confirms stable feel.
+
+**Score formula:** `lapTime + (missedGates × 10s penalty)`. Lower = better. A clean 35s lap beats a 58s perfect lap.
+
+| Task | Details |
+|------|---------|
+| 3X.1 | **Tighter course variant.** Add `LapCourseNimble` test with gate radii 0.6m tight / 1.0m open (vs current 1.0m / 1.5m). Requires sharper cornering to score well. |
+| 3X.2 | **Score-based optimizer.** Refactor `LapOptimizerTests` to emit a numeric score (not pass/fail). Save best combo to `results/optimizer-best.json`. |
+| 3X.3 | **Sweep parameters.** Candidates: `moveForce`, `_minAlignmentForceScale`, `_turnForceScaleThreshold`, `kP`, `kD`, `stepAngle`, `stepFreq`, `_kneeAngle`, `_recoveryFrames`, `_stuckFrameThreshold`. Start with 3–4 params × 3 values each. |
+| 3X.4 | **Overnight cron run.** Fire as `--session isolated --model github-copilot/gpt-5.3-codex` with `--timeout-seconds 28800` (8h). Agent runs sweep, saves results JSON, commits winning prefab values. |
+| 3X.5 | **Review and bake.** Inspect results, run manual playtest with winning values, update prefab. Do NOT change C# field defaults — prefab overrides only. |
+
+**Notes:**
+- `LapOptimizerTests` already exists and is `[Ignore]`d — expand from there
+- Never commit tuned values as C# defaults (breaks tests that assert defaults)
+- Prefab overrides are the correct place for production-tuned values
+
+---
+
 ### Phase 4 — Grabbing & Combat
 
 > **Goal:** Players can grab objects/other players and punch. Getting hit hard enough causes knockout (full ragdoll).
