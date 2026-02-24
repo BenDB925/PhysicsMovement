@@ -665,16 +665,28 @@ namespace PhysicsDrivenMovement.Character
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
-                if (stuckCondition)
+                // Backward motion override: if actively moving backwards under forward input,
+                // trigger recovery immediately after a short window (5 frames), bypassing the
+                // direction-change grace period. This catches the post-corner Scorpion loop where
+                // the character is upright but legs are phased wrong and pushing backwards.
+                bool backwardMotion = _smoothedInputMag > 0.5f
+                    && forwardProgress < -0.5f             // actively moving backwards
+                    && yawMisalignDeg < 45f                // not mid-turn
+                    && stateAllowsRecovery
+                    && _recoveryCooldownCounter <= 0;
+
+                if (stuckCondition || backwardMotion)
                     _stuckFrameCounter++;
                 else
                     _stuckFrameCounter = 0;
 
+                int triggerThreshold = backwardMotion ? 5 : _stuckFrameThreshold;
+
                 // Tick down the post-recovery cooldown each frame regardless.
                 if (_recoveryCooldownCounter > 0) _recoveryCooldownCounter--;
 
-                // Trigger recovery when stuck long enough.
-                if (_stuckFrameCounter >= _stuckFrameThreshold && stateAllowsRecovery)
+                // Trigger recovery when stuck long enough (or backward motion detected quickly).
+                if (_stuckFrameCounter >= triggerThreshold && stateAllowsRecovery)
                 {
                     _isRecovering = true;
                     _recoveryFrameCounter = _recoveryFrames;
@@ -692,13 +704,27 @@ namespace PhysicsDrivenMovement.Character
 
                 _recoveryFrameCounter--;
 
-                // Only exit recovery once BC has actually restored upright posture,
-                // AND the minimum frame count has elapsed. Prevents restarting gait
-                // on a still-tilted body which immediately causes another stumble.
+                // Only exit recovery once BC has restored upright posture AND the body
+                // has established at least some forward traction in the input direction.
+                // Tilt alone is insufficient — the Scorpion loop is upright but legs are
+                // phased wrong, so checking velocity ensures legs won't restart in a broken state.
                 float tiltDeg = _balanceController != null ? _balanceController.TiltAngleDeg : 0f;
                 bool uprightEnough = tiltDeg < 20f;
 
-                if (_recoveryFrameCounter <= 0 && uprightEnough)
+                float exitForwardVel = 0f;
+                if (_hipsRigidbody != null && _playerMovement != null)
+                {
+                    Vector2 inp = _playerMovement.CurrentMoveInput;
+                    if (inp.sqrMagnitude > 0.01f)
+                    {
+                        Vector3 inputDir3 = new Vector3(inp.x, 0f, inp.y).normalized;
+                        Vector3 vel = _hipsRigidbody.linearVelocity;
+                        exitForwardVel = Vector3.Dot(new Vector3(vel.x, 0f, vel.z), inputDir3);
+                    }
+                }
+                bool hasForwardTraction = exitForwardVel > 0.1f || _playerMovement.CurrentMoveInput.sqrMagnitude < 0.01f;
+
+                if (_recoveryFrameCounter <= 0 && uprightEnough && hasForwardTraction)
                 {
                     // Recovery complete: restart gait from scratch, start cooldown.
                     _isRecovering = false;
