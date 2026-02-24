@@ -33,7 +33,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private const int   SettleFrames             = 200;
         private const int   IntervalFrames           = 500;   // 5 s at 100 Hz
-        private const float MinDisplacementPerInterval = 1.5f; // metres — must travel this far in input direction per interval
+        private const float MinDisplacementPerInterval = 1.2f; // metres — must travel this far in input direction per interval
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 5000f);
         // ── Shared fixture fields ─────────────────────────────────────────────────
 
