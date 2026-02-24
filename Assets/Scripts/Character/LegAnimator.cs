@@ -269,6 +269,9 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Whether the character was moving last frame — used to detect movement restarts.</summary>
         private bool _wasMoving;
 
+        /// <summary>Whether move input was zero last frame — used to detect clean stop→start transitions.</summary>
+        private bool _prevInputWasZero;
+
         // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
 
         /// <summary>Baseline SLERP drive stored from each leg joint at Start, restored on landing.</summary>
@@ -594,7 +597,12 @@ namespace PhysicsDrivenMovement.Character
                 ? _playerMovement.CurrentMoveInput.normalized
                 : Vector2.zero;
 
-            bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
+            // A clean stop→start is detected by input going from zero to non-zero,
+            // regardless of body velocity. Using _wasMoving (velocity-based) missed cases
+            // where residual sliding kept isMoving=true through the stop, so _wasMoving
+            // never went false and the restarting phase-reset never fired.
+            bool inputJustResumed = _prevInputWasZero && inputMagnitude > 0.01f;
+            bool restarting = inputJustResumed && _smoothedInputMag < 0.05f;
             bool sharpTurn  = _prevInputDir.sqrMagnitude > 0.01f
                 && currentInputDir.sqrMagnitude > 0.01f
                 && Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
@@ -606,8 +614,9 @@ namespace PhysicsDrivenMovement.Character
                 SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
             }
 
-            _prevInputDir = currentInputDir;
-            _wasMoving    = isMoving;
+            _prevInputDir      = currentInputDir;
+            _wasMoving         = isMoving;
+            _prevInputWasZero  = inputMagnitude < 0.01f;
 
             // ── STEP 3E: Stuck-Leg Recovery (Option D) ────────────────────────────────
             //   Detection: character is stuck when ALL of the following are true for
