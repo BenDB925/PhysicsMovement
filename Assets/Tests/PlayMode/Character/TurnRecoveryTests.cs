@@ -212,5 +212,67 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Character is not making forward progress after 90° direction change. " +
                 $"Full results: [{string.Join(", ", displacements.ConvertAll(d => $"{d:F2}m"))}]");
         }
+        // ── Stop-start test ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Walks forward, stops completely, then walks again. Repeats 4 cycles.
+        /// Validates that gait restarts cleanly from rest — no stumble, no stuck loop.
+        ///
+        /// This reproduces the 500-recovery-frame failure: even after a very long pause,
+        /// gait restart immediately stumbles. Root cause is likely _smoothedInputMag=0
+        /// at gait restart causing a slow ramp-up that re-triggers stuck detection.
+        ///
+        /// Pass condition: each walk segment after the first must travel >= 2m in 3s.
+        /// </summary>
+        [UnityTest]
+        [Timeout(120000)]
+        public IEnumerator StopAndStart_CharacterWalksCleanlyAfterFullStop()
+        {
+            yield return SettleCharacter();
+
+            const int WalkFrames  = 300;  // 3s walk
+            const int StopFrames  = 200;  // 2s full stop
+            const int Cycles      = 4;
+            const float MinWalkDisplacement = 2.0f; // metres per walk segment
+
+            var displacements = new List<float>();
+
+            for (int cycle = 0; cycle < Cycles; cycle++)
+            {
+                // Walk forward
+                Vector3 startPos = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
+                for (int f = 0; f < WalkFrames; f++)
+                {
+                    _pm.SetMoveInputForTest(Vector2.up);
+                    yield return new WaitForFixedUpdate();
+                }
+                Vector3 endPos = new Vector3(_hipsRb.position.x, 0f, _hipsRb.position.z);
+                float disp = Vector3.Dot(endPos - startPos, Vector3.forward);
+                displacements.Add(disp);
+                Debug.Log($"[StopStart] Cycle {cycle} walk: {disp:F2}m");
+
+                // Full stop
+                for (int f = 0; f < StopFrames; f++)
+                {
+                    _pm.SetMoveInputForTest(Vector2.zero);
+                    yield return new WaitForFixedUpdate();
+                }
+                Debug.Log($"[StopStart] Cycle {cycle} stopped.");
+            }
+
+            _pm.SetMoveInputForTest(Vector2.zero);
+
+            // Skip cycle 0 (first walk from settle — may be slow to spin up).
+            var scored = displacements.GetRange(1, displacements.Count - 1);
+            float minDisp = float.MaxValue;
+            foreach (var d in scored) if (d < minDisp) minDisp = d;
+
+            Debug.Log($"[StopStart] Walk displacements: [{string.Join(", ", displacements.ConvertAll(d => $"{d:F2}m"))}]");
+            Debug.Log($"[StopStart] Min displacement after first walk: {minDisp:F2}m (threshold {MinWalkDisplacement}m)");
+
+            Assert.That(minDisp, Is.GreaterThanOrEqualTo(MinWalkDisplacement),
+                $"Stop-start: minimum walk displacement after full stop was {minDisp:F2}m < {MinWalkDisplacement}m. " +
+                $"Gait is not restarting cleanly from rest. Full results: [{string.Join(", ", displacements.ConvertAll(d => $"{d:F2}m"))}]");
+        }
     }
 }
