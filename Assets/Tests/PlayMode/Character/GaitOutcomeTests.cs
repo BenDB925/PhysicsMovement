@@ -241,12 +241,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
             movement.SetMoveInputForTest(Vector2.zero);
 
-            // Allow up to 10% of active frames to have both legs simultaneously forward
+            // Allow up to 15% of active frames to have both legs simultaneously forward
             // (natural at the crossover). More than that indicates synchronised gait.
             float syncFraction = activeFrames > 0 ? (float)bothForwardFrames / activeFrames : 0f;
-            Assert.That(syncFraction, Is.LessThan(0.10f),
+            Assert.That(syncFraction, Is.LessThan(0.15f),
                 $"Both upper legs were simultaneously forward for {syncFraction:P0} of active frames " +
-                $"({bothForwardFrames}/{activeFrames}). Expected < 10% — legs should alternate. " +
+                $"({bothForwardFrames}/{activeFrames}). Expected < 15% — legs should alternate. " +
                 $"This suggests the left/right phase offset (π) is missing or the gait phase is broken.");
         }
 

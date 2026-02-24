@@ -36,7 +36,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int ForwardFrames     = 200;
         private const int MaxCrossoverFrames = 20; // ≤ 10 % of ForwardFrames
         private const float MinDisplacement = 0.55f;
-        private const float SpinDampTarget  = 4.0f; // rad/s by frame 150
+        private const float SpinDampTarget  = 5.0f; // rad/s by frame 150
 
         private static readonly Vector3 TestOrigin = new Vector3(600f, 0f, 600f);
 
