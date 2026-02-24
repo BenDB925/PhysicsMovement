@@ -643,23 +643,20 @@ namespace PhysicsDrivenMovement.Character
 
             if (_isRecovering)
             {
-                // Gradually SLERP both UpperLeg joints toward the recovery pose each frame.
-                // Do NOT boost spring strength — at top speed a multiplier causes joint explosion.
-                // Normal spring strength + gradual target approach is sufficient to unstick legs.
-                float recoveryT = 1f - (_recoveryFrameCounter / (float)_recoveryFrames);
-                Quaternion recoveryPose = Quaternion.AngleAxis(-30f, _swingAxis);
-                if (_upperLegL != null)
-                    _upperLegL.targetRotation = Quaternion.Slerp(Quaternion.identity, recoveryPose, recoveryT);
-                if (_upperLegR != null)
-                    _upperLegR.targetRotation = Quaternion.Slerp(Quaternion.identity, recoveryPose, recoveryT);
+                // Recovery strategy: stop all leg drives and let BalanceController
+                // restore neutral posture naturally. This mirrors what happens when
+                // input stops — proven to work. Then restart gait fresh from phase 0.
+                SetAllLegTargetsToIdentity();
 
                 _recoveryFrameCounter--;
                 if (_recoveryFrameCounter <= 0)
                 {
-                    // Recovery complete: start cooldown and resume normal gait.
+                    // Recovery complete: restart gait from scratch, start cooldown.
                     _isRecovering = false;
                     _stuckFrameCounter = 0;
-                    _recoveryCooldownCounter = _recoveryFrames * 2; // cooldown = 2× recovery duration
+                    _phase = 0f;
+                    _smoothedInputMag = 0f;
+                    _recoveryCooldownCounter = _recoveryFrames * 2;
                     SetLegSpringMultiplier(1f);
                 }
 
