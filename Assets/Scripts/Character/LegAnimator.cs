@@ -305,8 +305,15 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private int _directionChangeGraceCounter;
 
-        private const int   DirectionChangeGraceFrames  = 80;   // 0.8s at 100 Hz
+        
         private const float DirectionChangeTriggerAngle = 45f;  // degrees
+
+        /// <summary>
+        /// Frames to suppress stuck detection after a direction snap > DirectionChangeTriggerAngle.
+        /// Exposed as serialized field so the CornerOptimizer can sweep it.
+        /// Default: 80 frames (0.8s at 100Hz).
+        /// </summary>
+        [SerializeField] private int _directionChangeGraceFrames = 80;
 
         /// <summary>Last valid normalised input direction (XZ world-space).</summary>
         private Vector3 _lastInputDir;
@@ -640,7 +647,7 @@ namespace PhysicsDrivenMovement.Character
                         float dirChangeDeg = Vector3.Angle(_lastInputDir, worldInputDir3D);
                         if (dirChangeDeg > DirectionChangeTriggerAngle)
                         {
-                            _directionChangeGraceCounter = DirectionChangeGraceFrames;
+                            _directionChangeGraceCounter = _directionChangeGraceFrames;
                             _stuckFrameCounter = 0;
                             // Reset gait phase so the first step after a turn is always clean.
                             // Without this, gait resumes mid-step in the old direction, which
