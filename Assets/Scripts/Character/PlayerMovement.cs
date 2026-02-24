@@ -318,13 +318,7 @@ namespace PhysicsDrivenMovement.Character
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             if (horizontalVelocity.magnitude < _maxSpeed)
             {
-                // Scale down drive force when hips are spinning hard — legs can't keep up at full force mid-corner.
-                float absAngVelY = Mathf.Abs(_rb.angularVelocity.y);
-                float turnScale = absAngVelY <= _turnForceScaleThreshold
-                    ? 1f
-                    : Mathf.Lerp(1f, _minTurnForceScale,
-                        Mathf.Clamp01((absAngVelY - _turnForceScaleThreshold) / _turnForceScaleThreshold));
-                _rb.AddForce(worldDirection * (_moveForce * turnScale), ForceMode.Force);
+                _rb.AddForce(worldDirection * _moveForce, ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)

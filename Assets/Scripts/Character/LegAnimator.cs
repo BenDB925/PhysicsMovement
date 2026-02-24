@@ -298,6 +298,19 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True while the recovery pose is being actively applied.</summary>
         private bool _isRecovering;
 
+        /// <summary>
+        /// Frames remaining in the direction-change grace period.
+        /// When input direction changes by > 45°, stuck detection is suppressed for
+        /// _directionChangeGraceFrames to give BC time to yaw before traction is expected.
+        /// </summary>
+        private int _directionChangeGraceCounter;
+
+        private const int   DirectionChangeGraceFrames  = 80;   // 0.8s at 100 Hz
+        private const float DirectionChangeTriggerAngle = 45f;  // degrees
+
+        /// <summary>Last valid normalised input direction (XZ world-space).</summary>
+        private Vector3 _lastInputDir;
+
         /// <summary>Counts FixedUpdate frames remaining in the current recovery window.</summary>
         private int _recoveryFrameCounter;
 
@@ -605,45 +618,57 @@ namespace PhysicsDrivenMovement.Character
             if (!_isRecovering)
             {
                 // Measure how much velocity is actually in the intended direction of travel.
-                // Raw horizontal speed fails at corners — hips slide sideways so speed > threshold
-                // even though the character isn't making forward progress.
                 float forwardProgress = 0f;
+                Vector3 worldInputDir3D = Vector3.zero;
                 if (_hipsRigidbody != null && currentInputDir.sqrMagnitude > 0.01f)
                 {
-                    // Convert 2D input direction to world-space forward vector (XZ plane).
-                    Vector3 worldInputDir = new Vector3(currentInputDir.x, 0f, currentInputDir.y).normalized;
+                    worldInputDir3D       = new Vector3(currentInputDir.x, 0f, currentInputDir.y).normalized;
                     Vector3 hipsVel       = _hipsRigidbody.linearVelocity;
                     Vector3 hipsVelFlat   = new Vector3(hipsVel.x, 0f, hipsVel.z);
-                    forwardProgress       = Vector3.Dot(hipsVelFlat, worldInputDir);
+                    forwardProgress       = Vector3.Dot(hipsVelFlat, worldInputDir3D);
                 }
 
-                // Stuck = trying to move but making no forward progress in the input direction.
-                // Guard 1: if hips are not yet aligned with input direction (large yaw error),
-                // the character is turning — forwardProgress dot will be low even at full speed.
-                // Don't count as stuck; BC needs time to yaw before traction is possible.
-                float yawMisalignDeg = 0f;
-                if (_hipsRigidbody != null && currentInputDir.sqrMagnitude > 0.01f)
+                // Direction-change grace period: when input snaps by > DirectionChangeTriggerAngle,
+                // reset the stuck counter and suppress detection for DirectionChangeGraceFrames.
+                // This prevents the stuck detector from firing during a legitimate sharp turn —
+                // forwardProgress will be near-zero immediately after a direction snap regardless
+                // of whether the legs are actually jammed.
+                if (worldInputDir3D.sqrMagnitude > 0.01f)
                 {
-                    Vector3 worldInputDir3 = new Vector3(currentInputDir.x, 0f, currentInputDir.y).normalized;
-                    Vector3 hipsForward    = new Vector3(_hipsRigidbody.transform.forward.x, 0f,
-                                                         _hipsRigidbody.transform.forward.z).normalized;
-                    yawMisalignDeg = Vector3.Angle(hipsForward, worldInputDir3);
+                    if (_lastInputDir.sqrMagnitude > 0.01f)
+                    {
+                        float dirChangeDeg = Vector3.Angle(_lastInputDir, worldInputDir3D);
+                        if (dirChangeDeg > DirectionChangeTriggerAngle)
+                        {
+                            _directionChangeGraceCounter = DirectionChangeGraceFrames;
+                            _stuckFrameCounter = 0;
+                        }
+                    }
+                    _lastInputDir = worldInputDir3D;
+                }
+
+                if (_directionChangeGraceCounter > 0) _directionChangeGraceCounter--;
+
+                // Yaw misalignment guard: if hips haven't yet rotated to face input, not stuck.
+                float yawMisalignDeg = 0f;
+                if (_hipsRigidbody != null && worldInputDir3D.sqrMagnitude > 0.01f)
+                {
+                    Vector3 hipsForward = new Vector3(_hipsRigidbody.transform.forward.x, 0f,
+                                                      _hipsRigidbody.transform.forward.z).normalized;
+                    yawMisalignDeg = Vector3.Angle(hipsForward, worldInputDir3D);
                 }
 
                 bool stuckCondition = _smoothedInputMag > 0.5f
                     && forwardProgress < _stuckSpeedThreshold
-                    && yawMisalignDeg < 45f          // not mid-turn
+                    && yawMisalignDeg < 45f
+                    && _directionChangeGraceCounter <= 0   // not in turn grace period
                     && stateAllowsRecovery
-                    && _recoveryCooldownCounter <= 0;  // don't re-fire immediately after recovery
+                    && _recoveryCooldownCounter <= 0;
 
                 if (stuckCondition)
-                {
                     _stuckFrameCounter++;
-                }
                 else
-                {
                     _stuckFrameCounter = 0;
-                }
 
                 // Tick down the post-recovery cooldown each frame regardless.
                 if (_recoveryCooldownCounter > 0) _recoveryCooldownCounter--;
