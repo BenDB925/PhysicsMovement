@@ -762,6 +762,25 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // ────────────────────────────────────────────────────────────────────────────────
+            // When input is zero, decay _smoothedInputMag and phase even if the body is
+            // still sliding (velocity-based isMoving may still be true). This ensures the
+            // restart phase-reset fires reliably on the next input — otherwise residual
+            // velocity keeps the gait branch running and _smoothedInputMag never decays.
+            bool inputActive = inputMagnitude > 0.01f;
+            if (!inputActive && _smoothedInputMag > 0.01f)
+            {
+                float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
+                _phase = Mathf.Max(0f, _phase - decayStep);
+                float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
+                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
+                if (_smoothedInputMag < 0.01f)
+                {
+                    _smoothedInputMag = 0f;
+                    _phase = 0f;
+                    SetAllLegTargetsToIdentity();
+                }
+            }
+
             if (isMoving)
             {
                 // STEP 4a: MOVING — advance phase accumulator based on actual speed.
