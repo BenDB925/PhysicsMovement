@@ -316,9 +316,20 @@ namespace PhysicsDrivenMovement.Character
             worldDirection.Normalize();
 
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            if (horizontalVelocity.magnitude < _maxSpeed)
+            // Check speed in the desired direction, not total horizontal speed.
+            // After a hard corner, the character may have high speed perpendicular to the
+            // new input direction. Checking total magnitude would prevent any force from
+            // being applied in the new direction, leaving the character unable to redirect.
+            float speedInDesiredDir = Vector3.Dot(horizontalVelocity, worldDirection);
+            if (speedInDesiredDir < _maxSpeed)
             {
-                _rb.AddForce(worldDirection * _moveForce, ForceMode.Force);
+                // Scale force down as speed approaches maxSpeed to avoid discontinuity.
+                float forceScale = 1f;
+                if (speedInDesiredDir > _maxSpeed * 0.8f)
+                {
+                    forceScale = 1f - Mathf.InverseLerp(_maxSpeed * 0.8f, _maxSpeed, speedInDesiredDir);
+                }
+                _rb.AddForce(worldDirection * _moveForce * forceScale, ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)

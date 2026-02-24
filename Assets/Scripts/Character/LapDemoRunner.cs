@@ -83,9 +83,9 @@ namespace PhysicsDrivenMovement.Character
 
         private static float GetGateRadius(int index)
         {
-            if (index <= 3)  return 3.5f;   // start + straight
-            if (index <= 20) return 2.5f;   // corners, slalom, S-bend
-            return 3.5f;                    // return leg
+            if (index <= 3) return 1.5f;   // start + straight
+            if (index <= 20) return 1.0f;   // corners, slalom, S-bend
+            return 1.5f;                    // return leg
         }
 
         // ── Runtime state ─────────────────────────────────────────────────────────
