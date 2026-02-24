@@ -308,12 +308,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private int _directionChangeGraceCounter;
 
-        // Short grace window for backwardMotion trigger only — 20 frames (0.2s) after a
-        // sharp turn to let post-corner residual momentum dissipate before the EMA can fire.
-        // Separate from _directionChangeGraceCounter (80 frames) which guards stuckCondition.
-        private int _backwardMotionGraceCounter;
-        private const int BackwardMotionGraceFrames = 20;
-
+        
         private const float DirectionChangeTriggerAngle = 45f;  // degrees
 
         /// <summary>
@@ -631,11 +626,9 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 // Seed smoothed magnitude so legs have enough amplitude to push off
-                // immediately on a stop→start restart. A cold zero causes slow ramp-up →
-                // too little leg force → stuck detector fires before character gets moving.
-                // 0.3 gives a gentle first step without the visual pop of snapping to 1.0.
-                // On a sharpTurn we reset to 0 — legs were already active and the BC needs
-                // to commit to the new yaw before applying strong leg drive.
+                // immediately. A cold zero causes slow ramp-up → too little leg force →
+                // stuck detector fires before character gets moving. 0.3 gives a gentle
+                // first step without the visual pop of snapping straight to 1.0.
                 _smoothedInputMag = restarting ? 0.3f : 0f;
                 _smoothedForwardProgress = 0f;  // reset EMA on restart/turn so stale value can't trigger backwardMotion
                 SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
@@ -692,7 +685,6 @@ namespace PhysicsDrivenMovement.Character
                         if (dirChangeDeg > DirectionChangeTriggerAngle)
                         {
                             _directionChangeGraceCounter = _directionChangeGraceFrames;
-                            _backwardMotionGraceCounter  = BackwardMotionGraceFrames;
                             _stuckFrameCounter = 0;
                             // Reset gait phase so the first step after a turn is always clean.
                             // Without this, gait resumes mid-step in the old direction, which
@@ -706,7 +698,6 @@ namespace PhysicsDrivenMovement.Character
                 }
 
                 if (_directionChangeGraceCounter > 0) _directionChangeGraceCounter--;
-                if (_backwardMotionGraceCounter  > 0) _backwardMotionGraceCounter--;
 
                 // Yaw misalignment guard: if hips haven't yet rotated to face input, not stuck.
                 float yawMisalignDeg = 0f;
@@ -729,12 +720,9 @@ namespace PhysicsDrivenMovement.Character
                 // Using the EMA prevents normal gait oscillation (fwdProg swings -0.4→+1.0 each step)
                 // from spuriously triggering recovery mid-walk — only genuine sustained backward drift
                 // activates this path.
-                // Short grace: suppress for 20 frames after a sharp turn to let post-corner residual
-                // momentum dissipate before the EMA can accumulate a negative trigger value.
                 bool backwardMotion = _smoothedInputMag > 0.5f
                     && _smoothedForwardProgress < -0.15f   // sustained backward trend (EMA filtered)
                     && yawMisalignDeg < 45f                // not mid-turn
-                    && _backwardMotionGraceCounter <= 0    // not in short post-corner grace window
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;
 
