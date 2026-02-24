@@ -55,11 +55,39 @@ namespace PhysicsDrivenMovement.Editor
                 Object.DestroyImmediate(zone);
             }
 
+            // STEP 3b: Reduce mass so AI visitors are easy to grab and throw.
+            //          0.35x player mass (~17kg total vs ~49kg).
+            const float massMultiplier = 0.35f;
+            Rigidbody[] allBodies = aiGO.GetComponentsInChildren<Rigidbody>(includeInactive: true);
+            foreach (Rigidbody rb in allBodies)
+            {
+                rb.mass *= massMultiplier;
+            }
+
+            // STEP 3c: Move HitReceiver from Head to Torso so body punches trigger KO.
+            //          Lower knockout threshold so punches reliably KO the lighter AI.
+            HitReceiver oldHitReceiver = aiGO.GetComponentInChildren<HitReceiver>();
+            if (oldHitReceiver != null)
+            {
+                Object.DestroyImmediate(oldHitReceiver);
+            }
+
+            // Find the Torso child and add HitReceiver there.
+            Transform torso = aiGO.transform.Find("Torso");
+            if (torso != null)
+            {
+                HitReceiver hitReceiver = torso.gameObject.AddComponent<HitReceiver>();
+                using var hrSo = new SerializedObject(hitReceiver);
+                hrSo.FindProperty("_knockoutVelocityThreshold").floatValue = 3f;
+                hrSo.FindProperty("_knockoutDuration").floatValue = 4f;
+                hrSo.ApplyModifiedPropertiesWithoutUndo();
+            }
+
             // STEP 4: Add AI components.
             AILocomotion locomotion = aiGO.AddComponent<AILocomotion>();
             using (var so = new SerializedObject(locomotion))
             {
-                so.FindProperty("_moveForce").floatValue = 80f;
+                so.FindProperty("_moveForce").floatValue = 30f;
                 so.FindProperty("_maxSpeed").floatValue = 2f;
                 so.FindProperty("_arrivalDistance").floatValue = 1.0f;
                 so.ApplyModifiedPropertiesWithoutUndo();

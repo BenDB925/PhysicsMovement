@@ -47,13 +47,15 @@ namespace PhysicsDrivenMovement.AI
 
         // ─── State ────────────────────────────────────────────────────────────
 
-        public enum AIState { Idle, Walking, Observing, Fleeing, KnockedOut }
+        public enum AIState { Idle, Walking, Observing, Fleeing, KnockedOut, Grabbed }
 
         private AILocomotion _locomotion;
         private CharacterState _characterState;
         private HitReceiver _hitReceiver;
+        private RagdollSetup _ragdollSetup;
 
         private AIState _currentState = AIState.Idle;
+        private AIState _stateBeforeGrab;
         private float _stateTimer;
 
         // Walking state
@@ -63,6 +65,9 @@ namespace PhysicsDrivenMovement.AI
 
         // Fleeing state
         private Vector3 _lastHitDirection;
+
+        // Grabbed detection
+        private HashSet<Rigidbody> _selfBodies;
 
         // Cached interest points (found at Start)
         private MuseumInterestPoint[] _allInterestPoints;
@@ -77,9 +82,18 @@ namespace PhysicsDrivenMovement.AI
         {
             TryGetComponent(out _locomotion);
             TryGetComponent(out _characterState);
+            TryGetComponent(out _ragdollSetup);
 
             // HitReceiver is on the Head child, not on Hips.
             _hitReceiver = GetComponentInChildren<HitReceiver>();
+
+            // Cache own bodies for grab detection.
+            _selfBodies = new HashSet<Rigidbody>();
+            Rigidbody[] bodies = GetComponentsInChildren<Rigidbody>(includeInactive: true);
+            foreach (Rigidbody rb in bodies)
+            {
+                _selfBodies.Add(rb);
+            }
         }
 
         private void Start()
@@ -121,6 +135,19 @@ namespace PhysicsDrivenMovement.AI
                 return;
             }
 
+            // Check if being grabbed — stop all movement while held.
+            bool isGrabbed = IsBeingGrabbed();
+            if (isGrabbed && _currentState != AIState.Grabbed && _currentState != AIState.KnockedOut)
+            {
+                EnterGrabbed();
+                return;
+            }
+            if (!isGrabbed && _currentState == AIState.Grabbed)
+            {
+                ExitGrabbed();
+                return;
+            }
+
             _stateTimer -= Time.fixedDeltaTime;
 
             switch (_currentState)
@@ -140,7 +167,50 @@ namespace PhysicsDrivenMovement.AI
                 case AIState.KnockedOut:
                     UpdateKnockedOut();
                     break;
+                case AIState.Grabbed:
+                    break; // Do nothing — just wait to be released.
             }
+        }
+
+        // ─── Grab Detection ───────────────────────────────────────────────────
+
+        private bool IsBeingGrabbed()
+        {
+            // Check if any HandGrabZone in the scene is grabbing one of our bodies.
+            HandGrabZone[] grabZones = Object.FindObjectsByType<HandGrabZone>(FindObjectsSortMode.None);
+            foreach (HandGrabZone zone in grabZones)
+            {
+                if (!zone.IsGrabbing)
+                    continue;
+
+                Rigidbody grabbed = zone.GrabbedTarget;
+                if (grabbed != null && _selfBodies.Contains(grabbed))
+                    return true;
+            }
+            return false;
+        }
+
+        private void EnterGrabbed()
+        {
+            _stateBeforeGrab = _currentState;
+            _currentState = AIState.Grabbed;
+            _locomotion.ClearTarget();
+        }
+
+        private void ExitGrabbed()
+        {
+            // After being released, flee away.
+            Rigidbody rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                Vector3 vel = rb.linearVelocity;
+                vel.y = 0f;
+                if (vel.sqrMagnitude > 0.1f)
+                {
+                    _lastHitDirection = vel.normalized;
+                }
+            }
+            EnterFleeing();
         }
 
         // ─── State Entry ──────────────────────────────────────────────────────

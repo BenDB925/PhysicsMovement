@@ -1,5 +1,5 @@
 using UnityEngine;
-using PhysicsDrivenMovement.Character;
+using PhysicsDrivenMovement.Core;
 
 namespace PhysicsDrivenMovement.AI
 {
@@ -56,12 +56,26 @@ namespace PhysicsDrivenMovement.AI
                 GameObject ai = Instantiate(_aiRagdollPrefab, pos, Quaternion.identity);
                 ai.name = $"AIVisitor_{i + 1}";
 
+                // Put AI on a different player layer so they can collide with the player.
+                // Cycle through layers 9-11 (Player2-4Parts). Layer 8 is the player.
+                int aiLayer = GameSettings.LayerPlayer2Parts + (i % 3);
+                SetLayerRecursive(ai, aiLayer);
+
                 // Tint the ragdoll body color.
                 Color color = AIColors[i % AIColors.Length];
                 TintRagdoll(ai, color);
             }
 
             Debug.Log($"[AISpawner] Spawned {_aiCount} AI visitors.");
+        }
+
+        private static void SetLayerRecursive(GameObject go, int layer)
+        {
+            go.layer = layer;
+            foreach (Transform child in go.GetComponentsInChildren<Transform>(includeInactive: true))
+            {
+                child.gameObject.layer = layer;
+            }
         }
 
         private static void TintRagdoll(GameObject root, Color color)

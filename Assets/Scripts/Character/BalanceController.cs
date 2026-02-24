@@ -230,6 +230,13 @@ namespace PhysicsDrivenMovement.Character
         private float _nextRecoveryTelemetryTime;
 
         /// <summary>
+        /// Ramp-up factor (0→1) after being re-enabled (e.g. knockout recovery).
+        /// Prevents a huge force spike when height error is large on re-enable.
+        /// </summary>
+        private float _reEnableRampT = 1f;
+        private const float ReEnableRampDuration = 1.5f;
+
+        /// <summary>
         /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
         /// <see cref="_deferLegJointsToAnimator"/> is true. Cached in Awake to avoid
         /// per-frame GetComponent calls.
@@ -366,6 +373,13 @@ namespace PhysicsDrivenMovement.Character
             _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
         }
 
+        private void OnEnable()
+        {
+            // When re-enabled after knockout, ramp forces from 0→1 over
+            // ReEnableRampDuration to prevent a sudden upward launch.
+            _reEnableRampT = 0f;
+        }
+
         private void OnValidate()
         {
             if (_fallenExitAngleThreshold > _fallenEnterAngleThreshold)
@@ -387,6 +401,15 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
+            // Advance re-enable ramp so forces ease in after knockout recovery.
+            // Uses quadratic curve (t²) so forces build up very gently at first,
+            // preventing the light AI (~17kg) from being launched by height maintenance.
+            if (_reEnableRampT < 1f)
+            {
+                _reEnableRampT = Mathf.Min(1f, _reEnableRampT + Time.fixedDeltaTime / ReEnableRampDuration);
+            }
+            float reEnableRamp = _reEnableRampT * _reEnableRampT;
+
             // STEP 1: Update ground state from foot sensors (unless overridden by test seam).
             if (!_overrideGroundState)
             {
@@ -531,6 +554,7 @@ namespace PhysicsDrivenMovement.Character
             // cannot correct.
             if (_enableComStabilization && effectivelyGrounded && _footL != null && _footR != null)
             {
+                float massRatioCom = _totalBodyMass > 0f ? _totalBodyMass / 49f : 1f;
                 Vector3 feetCenter = (_footL.transform.position + _footR.transform.position) * 0.5f;
                 Vector3 hipsPos = _rb.position;
                 Vector3 horizontalOffset = new Vector3(
@@ -538,23 +562,31 @@ namespace PhysicsDrivenMovement.Character
                     0f,
                     hipsPos.z - feetCenter.z);
                 Vector3 horizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-                Vector3 comForce = -horizontalOffset * _comStabilizationStrength
-                                   - horizontalVel * _comStabilizationDamping;
-                _rb.AddForce(comForce, ForceMode.Force);
+                Vector3 comForce = (-horizontalOffset * _comStabilizationStrength
+                                   - horizontalVel * _comStabilizationDamping) * massRatioCom;
+                _rb.AddForce(comForce * reEnableRamp, ForceMode.Force);
             }
 
             // STEP 3.7: Height maintenance.
             // When near ground, pushes hips up toward standing height to prevent the
             // character from settling into a seated basin-of-attraction.
+            // Force is scaled by total body mass so lighter AI characters don't get
+            // launched, and clamped to a safe max acceleration (15 m/s²).
             if (_enableHeightMaintenance && effectivelyGrounded)
             {
                 float hipsHeightError = _standingHipsHeight - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
-                    float heightForce = hipsHeightError * _heightMaintenanceStrength
-                                        - _rb.linearVelocity.y * _heightMaintenanceDamping;
+                    float massRatio = _totalBodyMass > 0f ? _totalBodyMass / 49f : 1f;
+                    float heightForce = hipsHeightError * _heightMaintenanceStrength * massRatio
+                                        - _rb.linearVelocity.y * _heightMaintenanceDamping * massRatio;
                     heightForce = Mathf.Max(0f, heightForce);
-                    _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
+
+                    // Clamp to safe max acceleration to prevent ceiling launches.
+                    float maxForce = 15f * _totalBodyMass;
+                    heightForce = Mathf.Min(heightForce, maxForce);
+
+                    _rb.AddForce(Vector3.up * (heightForce * reEnableRamp), ForceMode.Force);
                 }
             }
 

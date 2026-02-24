@@ -54,6 +54,12 @@ namespace PhysicsDrivenMovement.Character
                  "Higher = less oscillation during grab. Default 2.")]
         private float _grabArmDamperMultiplier = 2f;
 
+        [Header("Timing")]
+        [SerializeField, Range(0f, 0.5f)]
+        [Tooltip("How long the grab button must be held before a grab is attempted. " +
+                 "Releases within this window are treated as punches, not grabs. Default 0.15s.")]
+        private float _grabDelay = 0.15f;
+
         [Header("Throwing")]
         [SerializeField, Range(0f, 50f)]
         [Tooltip("Impulse multiplier applied to the released target when throwing. " +
@@ -100,6 +106,10 @@ namespace PhysicsDrivenMovement.Character
         // Track previous grab state for throw detection.
         private bool _wasGrabbingLeft;
         private bool _wasGrabbingRight;
+
+        // Per-hand hold timers — grab doesn't engage until held for _grabDelay.
+        private float _holdTimerL;
+        private float _holdTimerR;
 
         // Debug: hand renderers for grab color feedback.
         private Renderer _handRendererL;
@@ -235,13 +245,27 @@ namespace PhysicsDrivenMovement.Character
                                  _inputActions.Player.RightHand.IsPressed();
             }
 
-            // STEP 2: Track pre-update grab state for throw detection.
+            // STEP 2: Tick per-hand hold timers. Grab only engages after _grabDelay.
+            if (_grabLeftHeld)
+                _holdTimerL += Time.fixedDeltaTime;
+            else
+                _holdTimerL = 0f;
+
+            if (_grabRightHeld)
+                _holdTimerR += Time.fixedDeltaTime;
+            else
+                _holdTimerR = 0f;
+
+            // STEP 3: Track pre-update grab state for throw detection.
             _wasGrabbingLeft = IsGrabbingLeft;
             _wasGrabbingRight = IsGrabbingRight;
 
-            // STEP 3: Process grab/release per hand.
-            TryGrabOrRelease(_zoneL, _grabLeftHeld, _wasGrabbingLeft);
-            TryGrabOrRelease(_zoneR, _grabRightHeld, _wasGrabbingRight);
+            // STEP 4: Process grab/release per hand.
+            // Only attempt new grabs after the hold timer exceeds the delay.
+            bool leftEligible = _grabLeftHeld && _holdTimerL >= _grabDelay;
+            bool rightEligible = _grabRightHeld && _holdTimerR >= _grabDelay;
+            TryGrabOrRelease(_zoneL, leftEligible, _wasGrabbingLeft);
+            TryGrabOrRelease(_zoneR, rightEligible, _wasGrabbingRight);
 
             // STEP 4: Apply arm stiffening based on current grab state.
             ApplyArmStiffening();

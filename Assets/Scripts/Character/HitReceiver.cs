@@ -45,6 +45,10 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Baseline SLERP drives for every joint, captured in Start.</summary>
         private JointDrive[] _baselineDrives;
 
+        /// <summary>BalanceController on the root — disabled during knockout so balance
+        /// forces don't keep the legs standing while drives are zeroed.</summary>
+        private BalanceController _balanceController;
+
         /// <summary>Remaining knockout time. When >0, drives are zeroed.</summary>
         private float _knockoutTimer;
 
@@ -106,6 +110,9 @@ namespace PhysicsDrivenMovement.Character
             {
                 _baselineDrives[i] = _allJoints[i].slerpDrive;
             }
+
+            // Cache BalanceController so we can disable it during knockout.
+            _balanceController = root.GetComponentInChildren<BalanceController>();
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -158,6 +165,13 @@ namespace PhysicsDrivenMovement.Character
                     _allJoints[i].slerpDrive = zeroed;
                 }
             }
+
+            // Disable BalanceController so its PD torque, COM stabilization, and
+            // height maintenance don't keep the legs standing while drives are zeroed.
+            if (_balanceController != null)
+            {
+                _balanceController.enabled = false;
+            }
         }
 
         private void RecoverFromKnockout()
@@ -175,6 +189,12 @@ namespace PhysicsDrivenMovement.Character
 
                     _allJoints[i].slerpDrive = _baselineDrives[i];
                 }
+            }
+
+            // Re-enable BalanceController so the character can stand up again.
+            if (_balanceController != null)
+            {
+                _balanceController.enabled = true;
             }
         }
     }

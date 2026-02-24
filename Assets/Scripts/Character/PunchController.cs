@@ -82,6 +82,10 @@ namespace PhysicsDrivenMovement.Character
         private bool _rightPunchPressed;
         private bool _overridePunchInput;
 
+        // Buffered releases — captured in Update, consumed in FixedUpdate.
+        private bool _leftReleaseBuffered;
+        private bool _rightReleaseBuffered;
+
         // ── Public Properties ───────────────────────────────────────────────
 
         /// <summary>True while the left arm is actively punching.</summary>
@@ -154,6 +158,18 @@ namespace PhysicsDrivenMovement.Character
             CaptureBaselineDrives();
         }
 
+        private void Update()
+        {
+            // Buffer releases in Update (frame-synced) so FixedUpdate never misses them.
+            if (_inputActions != null)
+            {
+                if (_inputActions.Player.LeftHand.WasReleasedThisFrame())
+                    _leftReleaseBuffered = true;
+                if (_inputActions.Player.RightHand.WasReleasedThisFrame())
+                    _rightReleaseBuffered = true;
+            }
+        }
+
         private void FixedUpdate()
         {
             // STEP 1: Read per-hand punch input (unless overridden).
@@ -161,16 +177,15 @@ namespace PhysicsDrivenMovement.Character
             // is a grab-release (handled by GrabController), not a punch.
             if (!_overridePunchInput)
             {
-                bool leftReleased = _inputActions != null &&
-                                    _inputActions.Player.LeftHand.WasReleasedThisFrame();
-                bool rightReleased = _inputActions != null &&
-                                     _inputActions.Player.RightHand.WasReleasedThisFrame();
-
                 // Only punch if the hand was NOT grabbing (grab release ≠ punch).
-                _leftPunchPressed = leftReleased &&
+                _leftPunchPressed = _leftReleaseBuffered &&
                                     !(_grabController != null && _grabController.WasGrabbingLeft);
-                _rightPunchPressed = rightReleased &&
+                _rightPunchPressed = _rightReleaseBuffered &&
                                      !(_grabController != null && _grabController.WasGrabbingRight);
+
+                // Consume the buffer.
+                _leftReleaseBuffered = false;
+                _rightReleaseBuffered = false;
             }
 
             // STEP 2: Tick cooldowns.
