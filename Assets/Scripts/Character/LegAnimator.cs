@@ -722,7 +722,7 @@ namespace PhysicsDrivenMovement.Character
                         exitForwardVel = Vector3.Dot(new Vector3(vel.x, 0f, vel.z), inputDir3);
                     }
                 }
-                bool hasForwardTraction = exitForwardVel > 0.1f || _playerMovement.CurrentMoveInput.sqrMagnitude < 0.01f;
+                bool hasForwardTraction = exitForwardVel > -0.1f || _playerMovement.CurrentMoveInput.sqrMagnitude < 0.01f;
 
                 if (_recoveryFrameCounter <= 0 && uprightEnough && hasForwardTraction)
                 {
