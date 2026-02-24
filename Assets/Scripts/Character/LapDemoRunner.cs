@@ -110,6 +110,11 @@ namespace PhysicsDrivenMovement.Character
         private const int  StableFramesRequired = 10;
         private const float StableTiltDeg       = 15f;
 
+        // Smoothed ghost-driver input — target direction lerps at InputTurnSpeed deg/s.
+        // Prevents instant 90°+ snaps that the legs can't follow.
+        private Vector2 _smoothedInput = Vector2.zero;
+        private const float InputTurnSpeed = 270f; // degrees per second
+
         private string _statusLine  = "Settling…";
         private string _pbLine      = "";
         private string _lastLapLine = "";
@@ -165,8 +170,9 @@ namespace PhysicsDrivenMovement.Character
                 }
                 else
                 {
-                    _movement.SetMoveInputForTest(Vector2.zero);
-                    return;
+                _movement.SetMoveInputForTest(Vector2.zero);
+                _smoothedInput = Vector2.zero;
+                return;
                 }
             }
 
@@ -197,7 +203,23 @@ namespace PhysicsDrivenMovement.Character
                     }
                 }
 
-                _movement.SetMoveInputForTest(new Vector2(dir.x, dir.z));
+                // Smooth the input direction — rotate toward target at InputTurnSpeed deg/s.
+                // This mirrors how a real player naturally smooths their mouse movement,
+                // preventing instant 90°+ snaps that overwhelm the leg gait restart logic.
+                Vector2 targetInput = new Vector2(dir.x, dir.z);
+                if (_smoothedInput.sqrMagnitude < 0.001f)
+                {
+                    _smoothedInput = targetInput; // first frame — snap to avoid zero-input restart
+                }
+                else
+                {
+                    float maxDeg  = InputTurnSpeed * Time.fixedDeltaTime;
+                    float angleDeg = Vector2.SignedAngle(_smoothedInput, targetInput);
+                    float clampedDeg = Mathf.Clamp(angleDeg, -maxDeg, maxDeg);
+                    _smoothedInput = Rotate2D(_smoothedInput, clampedDeg).normalized;
+                }
+
+                _movement.SetMoveInputForTest(_smoothedInput);
             }
 
             // Check gate hit.
@@ -434,6 +456,14 @@ namespace PhysicsDrivenMovement.Character
                     Gizmos.DrawLine(wp, CourseWaypoints[i + 1]);
                 }
             }
+        }
+        /// <summary>Rotates a 2D vector by <paramref name="degrees"/> clockwise.</summary>
+        private static Vector2 Rotate2D(Vector2 v, float degrees)
+        {
+            float rad = degrees * Mathf.Deg2Rad;
+            float cos = Mathf.Cos(rad);
+            float sin = Mathf.Sin(rad);
+            return new Vector2(v.x * cos - v.y * sin, v.x * sin + v.y * cos);
         }
     }
 }

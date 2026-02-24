@@ -42,11 +42,22 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField]
         private Camera _camera;
 
+        /// <summary>
+        /// Max degrees per second the smoothed move input direction can rotate.
+        /// Prevents instant 90°+ snaps from the mouse that overwhelm leg gait restart.
+        /// 360 deg/s = one full rotation per second — fast enough to feel responsive,
+        /// slow enough that legs always have time to phase-reset cleanly.
+        /// Set to 0 to disable smoothing (raw input).
+        /// </summary>
+        [SerializeField, Range(0f, 720f)]
+        private float _inputTurnSpeed = 360f;
+
         private Rigidbody _rb;
         private BalanceController _balance;
         private CharacterState _characterState;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
+        private Vector2 _smoothedMoveInput;
 
         // ─── Jump state ────────────────────────────────────────────────────
 
@@ -71,7 +82,7 @@ namespace PhysicsDrivenMovement.Character
         // ─── Public Properties ─────────────────────────────────────────────
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
-        public Vector2 CurrentMoveInput => _currentMoveInput;
+        public Vector2 CurrentMoveInput => _smoothedMoveInput;
 
         // ─── Test Seams ────────────────────────────────────────────────────
 
@@ -191,10 +202,40 @@ namespace PhysicsDrivenMovement.Character
             //         jump succeeded, enforcing the one-frame consume rule.
             TryApplyJump();
 
-            // STEP 4: Movement forces. Skip when character is fallen.
+            // STEP 4: Smooth the move input direction to prevent instant snaps.
+            //         Rotates _smoothedMoveInput toward _currentMoveInput at _inputTurnSpeed
+            //         deg/s. Legs and gait restart never see an instant 90°+ direction change.
+            //         When _inputTurnSpeed is 0, smoothing is disabled (raw input passthrough).
+            if (_inputTurnSpeed > 0f && _currentMoveInput.sqrMagnitude > 0.001f)
+            {
+                if (_smoothedMoveInput.sqrMagnitude < 0.001f)
+                {
+                    // First non-zero input after a full stop — snap to avoid startup delay.
+                    _smoothedMoveInput = _currentMoveInput.normalized;
+                }
+                else
+                {
+                    float maxDeg   = _inputTurnSpeed * Time.fixedDeltaTime;
+                    float angleDeg = Vector2.SignedAngle(_smoothedMoveInput, _currentMoveInput);
+                    float clamped  = Mathf.Clamp(angleDeg, -maxDeg, maxDeg);
+                    float rad      = clamped * Mathf.Deg2Rad;
+                    float cos      = Mathf.Cos(rad);
+                    float sin      = Mathf.Sin(rad);
+                    Vector2 rotated = new Vector2(
+                        _smoothedMoveInput.x * cos - _smoothedMoveInput.y * sin,
+                        _smoothedMoveInput.x * sin + _smoothedMoveInput.y * cos);
+                    _smoothedMoveInput = rotated.normalized * _currentMoveInput.magnitude;
+                }
+            }
+            else
+            {
+                _smoothedMoveInput = _currentMoveInput;
+            }
+
+            // STEP 5: Movement forces. Skip when character is fallen.
             if (!_balance.IsFallen)
             {
-                ApplyMovementForces(_currentMoveInput);
+                ApplyMovementForces(_smoothedMoveInput);
             }
         }
 
