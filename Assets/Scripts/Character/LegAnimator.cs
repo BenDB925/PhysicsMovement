@@ -626,10 +626,11 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 // Seed smoothed magnitude so legs have enough amplitude to push off
-                // immediately. A cold zero causes slow ramp-up → too little leg force →
-                // stuck detector fires before character gets moving. 0.3 gives a gentle
-                // first step without the visual pop of snapping straight to 1.0.
-                _smoothedInputMag = restarting ? 0.3f : 0f;
+                // immediately in the new direction. A cold zero causes slow ramp-up →
+                // too little leg force → stuck detector fires before character gets moving.
+                // 0.3 gives a gentle first step without the visual pop of snapping to 1.0.
+                // Applied on both restarting (stop→start) and sharpTurn (corner snap).
+                _smoothedInputMag = 0.3f;
                 _smoothedForwardProgress = 0f;  // reset EMA on restart/turn so stale value can't trigger backwardMotion
                 SetAllLegTargetsToIdentity();  // snap joints to neutral immediately on phase reset
             }
