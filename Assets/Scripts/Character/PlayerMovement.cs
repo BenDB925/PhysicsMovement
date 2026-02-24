@@ -31,6 +31,13 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Minimum force multiplier applied when angular velocity is at or above 2× threshold.</summary>
         [SerializeField] private float _minTurnForceScale = 0.3f;
 
+        /// <summary>
+        /// Minimum force multiplier when the character is facing directly opposite to the input direction.
+        /// Force ramps from this value (facing away) up to 1.0 (facing toward). Prevents applying
+        /// strong backward force when turning sharply — the primary cause of falls during reversals.
+        /// </summary>
+        [SerializeField, Range(0f, 1f)] private float _minAlignmentForceScale = 0.05f;
+
         [SerializeField, Range(0f, 20f)]
         private float _maxSpeed = 5f;
 
@@ -375,6 +382,22 @@ namespace PhysicsDrivenMovement.Character
                 {
                     forceScale = 1f - Mathf.InverseLerp(_maxSpeed * 0.8f, _maxSpeed, speedInDesiredDir);
                 }
+
+                // Yaw-alignment force scaling: reduce drive force when hips are facing away from
+                // the input direction. Dot product of hips-forward vs worldDirection maps -1→1
+                // (facing opposite → facing same). Smoothstep remaps that to 0→1 and we lerp
+                // from _minAlignmentForceScale to 1.0 so force gently ramps in as the character
+                // turns to face the new direction. This prevents a sharp reversal from applying
+                // full force directly into the character's back — the primary cause of falls.
+                Vector3 hipsForward = new Vector3(_rb.transform.forward.x, 0f, _rb.transform.forward.z);
+                if (hipsForward.sqrMagnitude > 0.01f)
+                {
+                    float alignment  = Vector3.Dot(hipsForward.normalized, worldDirection); // -1 to 1
+                    float alignmentT = Mathf.SmoothStep(0f, 1f, (alignment + 1f) * 0.5f);   // 0 to 1
+                    float alignScale = Mathf.Lerp(_minAlignmentForceScale, 1f, alignmentT);
+                    forceScale *= alignScale;
+                }
+
                 _rb.AddForce(worldDirection * _moveForce * forceScale, ForceMode.Force);
             }
 
