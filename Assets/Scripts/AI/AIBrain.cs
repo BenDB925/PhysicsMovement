@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 using PhysicsDrivenMovement.Character;
 
 namespace PhysicsDrivenMovement.AI
@@ -156,22 +157,52 @@ namespace PhysicsDrivenMovement.AI
             _currentState = AIState.Walking;
             _targetInterestPoint = target;
 
-            // Plan path via MuseumNavigator.
             Vector3 from = transform.position;
             Vector3 to = target.ViewPosition;
 
-            _waypoints = MuseumNavigator.FindPath(from, to);
-            if (_waypoints == null)
-            {
-                _waypoints = new List<Vector3>();
-            }
+            // Use NavMesh pathfinding to route around obstacles.
+            _waypoints = CalculateNavMeshPath(from, to);
 
-            // Add the final destination (art view position) as the last waypoint.
-            _waypoints.Add(to);
             _waypointIndex = 0;
 
-            // Start walking to first waypoint.
-            _locomotion.SetTarget(_waypoints[0]);
+            if (_waypoints.Count > 0)
+            {
+                _locomotion.SetTarget(_waypoints[0]);
+            }
+            else
+            {
+                // No path found — go idle and try again later.
+                EnterIdle();
+            }
+        }
+
+        private List<Vector3> CalculateNavMeshPath(Vector3 from, Vector3 to)
+        {
+            NavMeshPath navPath = new NavMeshPath();
+            var waypoints = new List<Vector3>();
+
+            // Sample positions onto the NavMesh (snap to nearest walkable point).
+            if (!NavMesh.SamplePosition(from, out NavMeshHit fromHit, 5f, NavMesh.AllAreas))
+            {
+                return waypoints;
+            }
+
+            if (!NavMesh.SamplePosition(to, out NavMeshHit toHit, 5f, NavMesh.AllAreas))
+            {
+                return waypoints;
+            }
+
+            if (NavMesh.CalculatePath(fromHit.position, toHit.position, NavMesh.AllAreas, navPath) &&
+                navPath.status != NavMeshPathStatus.PathInvalid)
+            {
+                // Skip the first corner (current position) — start walking to the second.
+                for (int i = 1; i < navPath.corners.Length; i++)
+                {
+                    waypoints.Add(navPath.corners[i]);
+                }
+            }
+
+            return waypoints;
         }
 
         private void EnterObserving()
@@ -210,7 +241,13 @@ namespace PhysicsDrivenMovement.AI
             fleeDir.y = 0f;
             fleeDir.Normalize();
 
+            // Find a valid flee target on the NavMesh.
             Vector3 fleeTarget = transform.position + fleeDir * _fleeDistance;
+            if (NavMesh.SamplePosition(fleeTarget, out NavMeshHit hit, _fleeDistance, NavMesh.AllAreas))
+            {
+                fleeTarget = hit.position;
+            }
+
             _locomotion.SetTarget(fleeTarget);
         }
 

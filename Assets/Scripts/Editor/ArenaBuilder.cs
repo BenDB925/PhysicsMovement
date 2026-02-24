@@ -1,6 +1,8 @@
+using Unity.AI.Navigation;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using PhysicsDrivenMovement.AI;
 using PhysicsDrivenMovement.Core;
 using PhysicsDrivenMovement.Environment;
@@ -167,10 +169,20 @@ namespace PhysicsDrivenMovement.Editor
             // STEP 7: Spawn points in Main Lobby corners.
             BuildSpawnPoints();
 
-            // STEP 8: Add AISpawner with prefab reference (if AI prefab exists).
+            // STEP 8: Add NavMeshSurface for AI pathfinding.
+            //         Bakes on the Environment layer so walls/floors form walkable area.
+            //         Props added later by PropBuilder will re-bake via its own menu item.
+            NavMeshSurface navSurface = arenaRoot.AddComponent<NavMeshSurface>();
+            navSurface.collectObjects = CollectObjects.All;
+            navSurface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+            navSurface.layerMask = 1 << GameSettings.LayerEnvironment;
+            navSurface.agentTypeID = 0; // Humanoid
+            navSurface.BuildNavMesh();
+
+            // STEP 9: Add AISpawner with prefab reference (if AI prefab exists).
             BuildAISpawner();
 
-            // STEP 9: Save scene.
+            // STEP 10: Save scene.
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
 

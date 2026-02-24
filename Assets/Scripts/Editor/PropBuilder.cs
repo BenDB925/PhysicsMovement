@@ -1,3 +1,4 @@
+using Unity.AI.Navigation;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -132,7 +133,15 @@ namespace PhysicsDrivenMovement.Editor
                 }
             }
 
-            // STEP 4: Mark scene dirty so changes are saved.
+            // STEP 4: Re-bake NavMesh so props become obstacles for AI pathfinding.
+            NavMeshSurface navSurface = Object.FindFirstObjectByType<NavMeshSurface>();
+            if (navSurface != null)
+            {
+                navSurface.BuildNavMesh();
+                Debug.Log("[PropBuilder] NavMesh re-baked with props as obstacles.");
+            }
+
+            // STEP 5: Mark scene dirty so changes are saved.
             EditorSceneManager.MarkSceneDirty(
                 UnityEngine.SceneManagement.SceneManager.GetActiveScene());
 

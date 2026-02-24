@@ -5,7 +5,8 @@
         "PhysicsDrivenMovement.Core",
         "PhysicsDrivenMovement.Character",
         "PhysicsDrivenMovement.Environment",
-        "PhysicsDrivenMovement.AI"
+        "PhysicsDrivenMovement.AI",
+        "Unity.AI.Navigation"
     ],
     "includePlatforms": [
         "Editor"
