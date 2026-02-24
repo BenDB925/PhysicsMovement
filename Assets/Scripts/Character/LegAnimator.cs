@@ -327,6 +327,14 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Cooldown frames after recovery before stuck detector can fire again.</summary>
         private int _recoveryCooldownCounter;
 
+#if UNITY_EDITOR
+        // ── Debug Ring Buffer ─────────────────────────────────────────────────
+        private const int DebugRingSize = 500; // 5 seconds at 100 Hz
+        private readonly string[] _debugRing = new string[DebugRingSize];
+        private int _debugRingHead;
+        private float _lastForwardProgress;
+#endif
+
         // ── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -647,6 +655,9 @@ namespace PhysicsDrivenMovement.Character
                     Vector3 hipsVelFlat   = new Vector3(hipsVel.x, 0f, hipsVel.z);
                     forwardProgress       = Vector3.Dot(hipsVelFlat, worldInputDir3D);
                 }
+#if UNITY_EDITOR
+                _lastForwardProgress = forwardProgress;
+#endif
 
                 // Direction-change grace period: when input snaps by > DirectionChangeTriggerAngle,
                 // reset the stuck counter and suppress detection for DirectionChangeGraceFrames.
@@ -905,6 +916,10 @@ namespace PhysicsDrivenMovement.Character
                     WriteDebugLogLine();
                 }
             }
+
+#if UNITY_EDITOR
+            RecordDebugFrame();
+#endif
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -1141,6 +1156,59 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogError("[LegAnimator] ApplyLocalSpaceSwing: _lowerLegR is null — targetRotation NOT applied to LowerLeg_R.");
             }
         }
+
+#if UNITY_EDITOR
+        // ── Debug Ring Buffer — G-key dump (editor only) ─────────────────────
+
+        private void Update()
+        {
+            if (UnityEngine.Input.GetKeyDown(KeyCode.G))
+                DumpDebugRing();
+        }
+
+        private void RecordDebugFrame()
+        {
+            _debugRing[_debugRingHead % DebugRingSize] = string.Format(
+                "F{0:D5} | state={1,-12} | inputMag={2:F2} | smoothMag={3:F2} | fwdProg={4:F3} | " +
+                "stuckCtr={5:D3} | cooldown={6:D3} | grace={7:D3} | phase={8:F2} | recovery={9} | prevZero={10}",
+                Time.frameCount,
+                _characterState != null ? _characterState.CurrentState.ToString() : "?",
+                _playerMovement != null ? _playerMovement.SmoothedMoveInput.magnitude : 0f,
+                _smoothedInputMag,
+                _lastForwardProgress,
+                _stuckFrameCounter,
+                _recoveryCooldownCounter,
+                _directionChangeGraceCounter,
+                _phase,
+                _isRecovering ? 1 : 0,
+                _prevInputWasZero ? 1 : 0);
+            _debugRingHead++;
+        }
+
+        private void DumpDebugRing()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=== LegAnimator Debug Dump ===");
+            sb.AppendLine($"Captured: {System.DateTime.Now:HH:mm:ss.fff}  UnityFrame: {Time.frameCount}");
+            sb.AppendLine("Columns: frameNum | state | inputMag | smoothedInputMag | forwardProgress | stuckCounter | cooldown | graceCounter | gaitPhase | inRecovery | prevInputWasZero");
+            sb.AppendLine();
+
+            int count = Mathf.Min(_debugRingHead, DebugRingSize);
+            int start = _debugRingHead >= DebugRingSize ? _debugRingHead % DebugRingSize : 0;
+            for (int i = 0; i < count; i++)
+            {
+                int idx = (start + i) % DebugRingSize;
+                if (_debugRing[idx] != null)
+                    sb.AppendLine(_debugRing[idx]);
+            }
+
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(Application.dataPath),
+                "debug-leg-dump.txt");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            Debug.Log($"[LegAnimator] Dump written → {path}");
+        }
+#endif
 
         /// <summary>
         /// Formats and writes one gait debug line to <see cref="DebugLogPath"/> and to
