@@ -618,8 +618,21 @@ namespace PhysicsDrivenMovement.Character
                 }
 
                 // Stuck = trying to move but making no forward progress in the input direction.
+                // Guard 1: if hips are not yet aligned with input direction (large yaw error),
+                // the character is turning — forwardProgress dot will be low even at full speed.
+                // Don't count as stuck; BC needs time to yaw before traction is possible.
+                float yawMisalignDeg = 0f;
+                if (_hipsRigidbody != null && currentInputDir.sqrMagnitude > 0.01f)
+                {
+                    Vector3 worldInputDir3 = new Vector3(currentInputDir.x, 0f, currentInputDir.y).normalized;
+                    Vector3 hipsForward    = new Vector3(_hipsRigidbody.transform.forward.x, 0f,
+                                                         _hipsRigidbody.transform.forward.z).normalized;
+                    yawMisalignDeg = Vector3.Angle(hipsForward, worldInputDir3);
+                }
+
                 bool stuckCondition = _smoothedInputMag > 0.5f
                     && forwardProgress < _stuckSpeedThreshold
+                    && yawMisalignDeg < 45f          // not mid-turn
                     && stateAllowsRecovery
                     && _recoveryCooldownCounter <= 0;  // don't re-fire immediately after recovery
 
