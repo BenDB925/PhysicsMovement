@@ -230,11 +230,21 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 3: Settle — let the character stand up naturally.
+            // Also null the camera reference so the ghost driver gets raw world-space input.
+            // The camera still follows for visual purposes but must not rotate the input vector —
+            // ghost driver waypoints are world-space coordinates, not camera-relative directions.
             _statusLine = $"Settling ({_settleSeconds:F0}s)…";
             float settleEnd = Time.time + _settleSeconds;
+            bool cameraNulled = false;
             while (Time.time < settleEnd)
             {
                 yield return new WaitForFixedUpdate();
+                // Null camera after first physics frame so Start() has already cached it.
+                if (!cameraNulled && _movement != null)
+                {
+                    _movement.SetCameraForTest(null);
+                    cameraNulled = true;
+                }
             }
 
             // STEP 4: Start lap.
