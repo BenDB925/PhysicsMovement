@@ -2231,19 +2231,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 yield return new WaitForFixedUpdate();
             }
 
-            // Assert 1: UpperLeg_L targetRotation should NOT be identity (recovery pose applied).
-            float angleL = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
-            Assert.That(angleL, Is.GreaterThan(10f),
-                $"UpperLeg_L targetRotation must be in recovery pose (> 10 degrees from identity). " +
-                $"Actual angle from identity: {angleL:F2}°. " +
-                "LegAnimator stuck detection may not have fired, or recovery pose not applied.");
-
-            // Assert 2: UpperLeg_R targetRotation should also be in recovery pose.
-            float angleR = Quaternion.Angle(_upperLegRJoint.targetRotation, Quaternion.identity);
-            Assert.That(angleR, Is.GreaterThan(10f),
-                $"UpperLeg_R targetRotation must be in recovery pose (> 10 degrees from identity). " +
-                $"Actual angle from identity: {angleR:F2}°. " +
-                "Both upper-leg joints must receive recovery pose during stuck recovery.");
+            // Assert: IsRecovering must be true — stuck detection fired and recovery is active.
+            // Note: recovery no longer drives a non-identity pose (it holds identity and lets BC
+            // restore balance). We check the flag directly, not the joint angle.
+            Assert.That(_legAnimator.IsRecovering, Is.True,
+                "IsRecovering must be true after stuck conditions are met for _stuckFrameThreshold frames. " +
+                "LegAnimator stuck detection may not have fired.");
         }
 
         /// <summary>
@@ -2271,27 +2264,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_legAnimator, "_stuckFrameThreshold", testStuckThreshold);
             SetPrivateField(_legAnimator, "_recoveryFrames", testRecoveryFrames);
 
-            // Act Phase 1: wait through detection + recovery window + buffer.
-            int totalFrames = testStuckThreshold + testRecoveryFrames + 10;
+            // Act Phase 1: wait through detection + full recovery window.
+            // Keep velocity zeroed throughout so stuck condition stays true during recovery.
+            int totalFrames = testStuckThreshold + testRecoveryFrames + 5;
             for (int i = 0; i < totalFrames; i++)
             {
                 _hipsRb.linearVelocity = Vector3.zero;
                 yield return new WaitForFixedUpdate();
             }
 
-            // Release constraint to allow movement.
+            // Release constraint BEFORE checking — once constraints are released the hips
+            // can move, so forwardProgress > threshold and stuck won't re-fire even after cooldown.
             _hipsRb.constraints = RigidbodyConstraints.None;
 
-            // Act Phase 2: wait 20 more frames.
-            for (int i = 0; i < 20; i++)
-            {
-                yield return new WaitForFixedUpdate();
-            }
+            // Wait one more frame for the exit condition to evaluate with freed constraints.
+            yield return new WaitForFixedUpdate();
 
-            // Assert: _isRecovering must be false (recovery completed).
+            // Assert: _isRecovering must be false — recovery exited cleanly.
+            // tiltDeg = 0 (no BC in rig, fallback is 0) so uprightEnough = true immediately.
             bool isRecoveringAfter = _legAnimator.IsRecovering;
             Assert.That(isRecoveringAfter, Is.False,
-                "IsRecovering must be false after the recovery window expires. " +
+                "IsRecovering must be false after the recovery window expires with an upright rig. " +
                 "Recovery must self-terminate after _recoveryFrames frames.");
         }
     }

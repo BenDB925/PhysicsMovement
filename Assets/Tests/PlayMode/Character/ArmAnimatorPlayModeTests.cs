@@ -307,8 +307,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // ── Components ───────────────────────────────────────────────────
             _hipsGO.AddComponent<RagdollSetup>();
             _hipsGO.AddComponent<BalanceController>();
-            _hipsGO.AddComponent<CharacterState>();
             _movement = _hipsGO.AddComponent<PlayerMovement>();
+            _hipsGO.AddComponent<CharacterState>();
             _hipsGO.AddComponent<LegAnimator>();
             _hipsGO.AddComponent<ArmAnimator>();
 

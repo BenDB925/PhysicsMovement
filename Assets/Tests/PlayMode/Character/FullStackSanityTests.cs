@@ -262,8 +262,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // ── Components ───────────────────────────────────────────────────
             _hipsGO.AddComponent<RagdollSetup>();
             _balance        = _hipsGO.AddComponent<BalanceController>();
-            _characterState = _hipsGO.AddComponent<CharacterState>();
             _movement       = _hipsGO.AddComponent<PlayerMovement>();
+            _characterState = _hipsGO.AddComponent<CharacterState>();
             _hipsGO.AddComponent<LegAnimator>();
 
             // Inject move override so tests aren't polluted by live input.

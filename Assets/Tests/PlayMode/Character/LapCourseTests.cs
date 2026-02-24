@@ -17,8 +17,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// The course covers: straight, hairpin, chicane, slalom, S-bend, and return to start.
     ///
     /// Two tests:
-    ///   1. CompleteLap_WithinTimeLimit_NoFalls — regression gate: must clear all gates, no falls, within budget.
-    ///   2. CompleteLap_RecordsLapTime         — diagnostic: always passes, logs a prominent [LAP TIME] line.
+    ///   1. CompleteLap_WithinTimeLimit_NoFalls â€” regression gate: must clear all gates, no falls, within budget.
+    ///   2. CompleteLap_RecordsLapTime         â€” diagnostic: always passes, logs a prominent [LAP TIME] line.
     ///
     /// Rig construction notes:
     ///   - Ground box is on layer 12 (Environment). Physics.IgnoreLayerCollision(8,12,false)
@@ -26,7 +26,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     ///   - ALL child body segments are placed on layer 8 (LayerPlayer1Parts) to mirror the
     ///     production prefab hierarchy. RagdollSetup.Awake will move LowerLeg_L / LowerLeg_R
     ///     to layer 13 (LowerLegParts) and call Physics.IgnoreLayerCollision(13,12,true) so
-    ///     lower legs pass through the floor — exactly the production setup.
+    ///     lower legs pass through the floor â€” exactly the production setup.
     ///   - Foot child GOs carry GroundSensor only (no Collider), so the sensor casts while
     ///     the foot itself adds zero friction to the ground surface.
     ///   - RagdollSetup is added BEFORE BalanceController/CharacterState/PlayerMovement so
@@ -38,14 +38,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class LapCourseTests
     {
-        // ── Course geometry ────────────────────────────────────────────────────────
+        // â”€â”€ Course geometry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        // DESIGN: The course fits within a 35×35 m flat area.
+        // DESIGN: The course fits within a 35Ã—35 m flat area.
         // Waypoints are visited in order; the character must pass within gateRadius of each.
         // The full lap:
         //   (1) Start at origin
         //   (2) Long straight ~15 m north
-        //   (3) Tight 180° hairpin
+        //   (3) Tight 180Â° hairpin
         //   (4) Chicane: left-right-left, 3 gates ~4 m apart
         //   (5) Slalom: 5 alternating gates ~5 m apart
         //   (6) S-bend: two smooth arcs
@@ -53,7 +53,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         /// <summary>
         /// Pre-designed lap course. Each Vector3 is an XZ waypoint (Y is ignored during
-        /// distance checks — checked on the flat XZ plane only). Y values are 0.
+        /// distance checks â€” checked on the flat XZ plane only). Y values are 0.
         /// Course is offset by TestOriginOffset to avoid conflicts with other test objects
         /// that may occupy the world origin area.
         /// </summary>
@@ -64,31 +64,31 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // (1) Start
             new Vector3( 0f,  0f,  0f),
 
-            // (2) Long straight — 15 m north
+            // (2) Long straight â€” 15 m north
             new Vector3( 0f,  0f,  5f),
             new Vector3( 0f,  0f, 10f),
             new Vector3( 0f,  0f, 15f),
 
-            // (3) Tight 180° hairpin — loop around a point at (8, 0, 15)
+            // (3) Tight 180Â° hairpin â€” loop around a point at (8, 0, 15)
             new Vector3( 4f,  0f, 15f),
             new Vector3( 8f,  0f, 15f),   // hairpin apex
             new Vector3(12f,  0f, 15f),
             new Vector3(16f,  0f, 15f),
             new Vector3(16f,  0f, 10f),   // post-hairpin straighten
 
-            // (4) Chicane — left-right-left, gates ~4 m apart
+            // (4) Chicane â€” left-right-left, gates ~4 m apart
             new Vector3(12f,  0f,  8f),   // chicane gate 1 (left)
             new Vector3(16f,  0f,  4f),   // chicane gate 2 (right)
             new Vector3(12f,  0f,  0f),   // chicane gate 3 (left)
 
-            // (5) Slalom — 5 alternating gates ~5 m apart
+            // (5) Slalom â€” 5 alternating gates ~5 m apart
             new Vector3( 8f,  0f, -4f),   // slalom gate 1 (right)
             new Vector3( 4f,  0f, -8f),   // slalom gate 2 (left)
             new Vector3( 8f,  0f,-12f),   // slalom gate 3 (right)
             new Vector3( 4f,  0f,-16f),   // slalom gate 4 (left)
             new Vector3( 8f,  0f,-20f),   // slalom gate 5 (right)
 
-            // (6) S-bend — two arcs
+            // (6) S-bend â€” two arcs
             new Vector3( 4f,  0f,-24f),   // arc 1 apex
             new Vector3( 0f,  0f,-20f),   // inflection
             new Vector3(-4f,  0f,-16f),   // arc 2 apex
@@ -100,7 +100,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             new Vector3( 0f,  0f,  0f),   // finish line
         };
 
-        // ── Gate radii ────────────────────────────────────────────────────────────
+        // â”€â”€ Gate radii â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Radius for tight corners (hairpin, chicane, slalom, S-bend).</summary>
         private const float TightGateRadius = 2.5f;
@@ -118,7 +118,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return OpenGateRadius;                                  // return leg
         }
 
-        // ── Timing ────────────────────────────────────────────────────────────────
+        // â”€â”€ Timing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Frames to let the character settle before driving (2 s @ 100 Hz).</summary>
         private const int SettleFrames = 200;
@@ -132,14 +132,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// <summary>Frame budget for the pass/fail assertion (40 s @ 100 Hz).</summary>
         private const int LapBudgetFrames = 4000;
 
-        // ── Spawn constants ────────────────────────────────────────────────────────
+        // â”€â”€ Spawn constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private const float HipsSpawnHeight = 1.0f;
         private const int   LayerEnvironment   = GameSettings.LayerEnvironment;     // 12
         private const int   LayerPlayer        = GameSettings.LayerPlayer1Parts;    // 8
         private const int   LayerLowerLegParts = GameSettings.LayerLowerLegParts;  // 13
 
-        // ── Shared state ──────────────────────────────────────────────────────────
+        // â”€â”€ Shared state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private GameObject     _groundGO;
         private GameObject     _hipsGO;
@@ -152,7 +152,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private int   _savedSolverIterations;
         private int   _savedSolverVelocityIterations;
 
-        // ── Setup / Teardown ──────────────────────────────────────────────────────
+        // â”€â”€ Setup / Teardown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [SetUp]
         public void SetUp()
@@ -165,8 +165,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverIterations   = 12;
             Physics.defaultSolverVelocityIterations = 4;
 
-            // Enable player→environment collision (layer 8 ↔ layer 12).
-            // Also ensure LowerLegParts (13) does NOT collide with environment — will be
+            // Enable playerâ†’environment collision (layer 8 â†” layer 12).
+            // Also ensure LowerLegParts (13) does NOT collide with environment â€” will be
             // called by RagdollSetup.Awake too, but setting here as a safety net.
             Physics.IgnoreLayerCollision(LayerPlayer,        LayerEnvironment, false);
             Physics.IgnoreLayerCollision(LayerLowerLegParts, LayerEnvironment, true);
@@ -186,7 +186,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
-        // ── Tests ─────────────────────────────────────────────────────────────────
+        // â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Regression gate: the character must complete the lap circuit with no falls
@@ -233,13 +233,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Debug.Log(headline);
             Debug.Log($"[LapCourse] Full summary: {BuildSummary(result)}");
 
-            // ── Personal best tracking ────────────────────────────────────────────
+            // â”€â”€ Personal best tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             SavePBIfFaster(lapSeconds, result.FallCount, result.GatesHit, result.TotalGates);
 
             Assert.Pass(headline);
         }
 
-        // ── PB persistence ────────────────────────────────────────────────────────
+        // â”€â”€ PB persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static string PBFilePath =>
             Path.Combine(Application.dataPath, "..", "Logs", "lap-pb.txt");
@@ -279,10 +279,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Directory.CreateDirectory(Path.GetDirectoryName(pbPath)!);
             File.WriteAllText(pbPath, $"{newPB}\n{prevLine}\n");
 
-            Debug.Log($"[LapCourse] 🏆 NEW PB! {newPB}");
+            Debug.Log($"[LapCourse] ðŸ† NEW PB! {newPB}");
         }
 
-        // ── Ghost driver coroutine ────────────────────────────────────────────────
+        // â”€â”€ Ghost driver coroutine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Drives the character through the waypoint course. Each FixedUpdate frame,
@@ -293,7 +293,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             int totalGates      = CourseWaypoints.Length;
             result.TotalGates   = totalGates;
-            int currentGate     = 1;   // gate 0 = spawn — already there
+            int currentGate     = 1;   // gate 0 = spawn â€” already there
             int lapFrame        = 0;
             int framesSinceHit  = 0;
             bool lapComplete    = false;
@@ -371,10 +371,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _pm.SetMoveInputForTest(Vector2.zero);
         }
 
-        // ── World construction ────────────────────────────────────────────────────
+        // â”€â”€ World construction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
-        /// Creates a 40×40 m flat ground box on Layer 12 (Environment) at the test area.
+        /// Creates a 40Ã—40 m flat ground box on Layer 12 (Environment) at the test area.
         /// </summary>
         private void CreateFlatGround()
         {
@@ -401,8 +401,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// at the ground surface. The GroundSensor uses transform.position as cast origin when
         /// no Collider is present (safe fallback documented in GroundSensor.GetCastOrigin).
         ///
-        /// Component add order: RagdollSetup → BalanceController → CharacterState →
-        ///   PlayerMovement → LegAnimator → ArmAnimator.
+        /// Component add order: RagdollSetup â†’ BalanceController â†’ CharacterState â†’
+        ///   PlayerMovement â†’ LegAnimator â†’ ArmAnimator.
         /// RagdollSetup must run before BC so joints and layer ignores are configured when BC
         /// calls GetComponentsInChildren to locate GroundSensors.
         /// </summary>
@@ -413,7 +413,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 HipsSpawnHeight,
                 CourseWaypoints[0].z) + TestOriginOffset;
 
-            // ── Hips root ──
+            // â”€â”€ Hips root â”€â”€
             _hipsGO = new GameObject("Hips_Lap");
             _hipsGO.transform.position = spawnPos;
             _hipsGO.layer = LayerPlayer;
@@ -426,12 +426,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             BoxCollider hipsCol = _hipsGO.AddComponent<BoxCollider>();
             hipsCol.size = new Vector3(0.26f, 0.20f, 0.15f);
 
-            // ── Torso ──
+            // â”€â”€ Torso â”€â”€
             GameObject torsoGO = CreateBoxSegment("Torso", _hipsGO, LayerPlayer,
                 new Vector3(0f, 0.32f, 0f), 12f, new Vector3(0.28f, 0.32f, 0.14f));
             ConfigureJoint(torsoGO, _hipsRb, 300f, 30f, 1000f);
 
-            // ── Left leg ──
+            // â”€â”€ Left leg â”€â”€
             GameObject upperLegL = CreateCapsuleSegment("UpperLeg_L", _hipsGO, LayerPlayer,
                 new Vector3(-0.10f, -0.22f, 0f), 4f, 0.07f, 0.36f);
             ConfigureJoint(upperLegL, _hipsRb, 1200f, 120f, 5000f);
@@ -440,12 +440,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 new Vector3(0f, -0.38f, 0f), 2.5f, 0.055f, 0.33f);
             ConfigureJoint(lowerLegL, upperLegL.GetComponent<Rigidbody>(), 1200f, 120f, 5000f);
 
-            // Foot: GroundSensor attachment only — NO Collider so feet add zero ground friction.
+            // Foot: GroundSensor attachment only â€” NO Collider so feet add zero ground friction.
             GameObject footL = CreateSensorOnlySegment("Foot_L", lowerLegL,
                 new Vector3(0f, -0.35f, 0.07f));
             AddGroundSensor(footL);
 
-            // ── Right leg ──
+            // â”€â”€ Right leg â”€â”€
             GameObject upperLegR = CreateCapsuleSegment("UpperLeg_R", _hipsGO, LayerPlayer,
                 new Vector3(0.10f, -0.22f, 0f), 4f, 0.07f, 0.36f);
             ConfigureJoint(upperLegR, _hipsRb, 1200f, 120f, 5000f);
@@ -458,7 +458,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 new Vector3(0f, -0.35f, 0.07f));
             AddGroundSensor(footR);
 
-            // ── Arms ──
+            // â”€â”€ Arms â”€â”€
             GameObject upperArmL = CreateCapsuleSegment("UpperArm_L", torsoGO, LayerPlayer,
                 new Vector3(-0.20f, 0.10f, 0f), 2f, 0.055f, 0.28f);
             ConfigureJoint(upperArmL, torsoGO.GetComponent<Rigidbody>(), 800f, 80f, 3000f);
@@ -475,16 +475,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 new Vector3(0f, -0.30f, 0f), 1.5f, 0.045f, 0.25f);
             ConfigureJoint(lowerArmR, upperArmR.GetComponent<Rigidbody>(), 100f, 10f, 400f);
 
-            // ── Components — RagdollSetup FIRST so joints/layers are configured before BC ──
+            // â”€â”€ Components â€” RagdollSetup FIRST so joints/layers are configured before BC â”€â”€
             _hipsGO.AddComponent<RagdollSetup>();
             _bc = _hipsGO.AddComponent<BalanceController>();
-            _cs = _hipsGO.AddComponent<CharacterState>();
             _pm = _hipsGO.AddComponent<PlayerMovement>();
+            _cs = _hipsGO.AddComponent<CharacterState>();
             _hipsGO.AddComponent<LegAnimator>();
             _hipsGO.AddComponent<ArmAnimator>();
         }
 
-        // ── Settle helper ─────────────────────────────────────────────────────────
+        // â”€â”€ Settle helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private IEnumerator SettleCharacter()
         {
@@ -494,7 +494,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
         }
 
-        // ── Result container ──────────────────────────────────────────────────────
+        // â”€â”€ Result container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private class LapResult
         {
@@ -516,7 +516,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                    $"Complete={r.LapComplete}";
         }
 
-        // ── Build helpers ─────────────────────────────────────────────────────────
+        // â”€â”€ Build helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static GameObject CreateBoxSegment(string name, GameObject parent, int layer,
             Vector3 localPos, float mass, Vector3 boxSize)
@@ -558,7 +558,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         /// <summary>
         /// Creates a collider-free child GO used only as a sensor attachment point.
-        /// No Rigidbody, no Collider — purely a transform anchor.
+        /// No Rigidbody, no Collider â€” purely a transform anchor.
         /// </summary>
         private static GameObject CreateSensorOnlySegment(string name, GameObject parent,
             Vector3 localPos)
@@ -575,7 +575,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             ConfigurableJoint joint = child.AddComponent<ConfigurableJoint>();
             joint.connectedBody = parentRb;
 
-            // Linear motions: Locked — child position stays relative to parent.
+            // Linear motions: Locked â€” child position stays relative to parent.
             // This is correct: RagdollSetup.DisableNeighboringCollisions uses joint.connectedBody
             // to find pairs; and Locked keeps the limb attached at the anchor.
             joint.xMotion = ConfigurableJointMotion.Locked;

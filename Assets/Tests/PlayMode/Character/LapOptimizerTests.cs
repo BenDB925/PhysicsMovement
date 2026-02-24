@@ -12,21 +12,21 @@ using UnityEngine.TestTools;
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// Lap parameter optimizer — runs a 27-combination grid sweep across moveForce,
+    /// Lap parameter optimizer â€” runs a 27-combination grid sweep across moveForce,
     /// maxSpeed, and kPYaw, scores each run on the lap circuit, and writes a ranked
     /// report to Logs/lap-optimizer-results.txt.
     ///
     /// ALL tests in this file are [Ignore] and excluded from standard CI. Run manually.
     ///
-    /// Scoring: (gatesHit × 100) - (fallCount × 500) - (lapFrames / 10).
+    /// Scoring: (gatesHit Ã— 100) - (fallCount Ã— 500) - (lapFrames / 10).
     /// Higher = better. Gates hit is the primary signal; falls are heavily penalised.
     ///
-    /// Parameters swept (3 × 3 × 3 = 27 combinations):
+    /// Parameters swept (3 Ã— 3 Ã— 3 = 27 combinations):
     ///   moveForce : {200, 280, 360}
     ///   maxSpeed  : {4, 5, 6}
     ///   kPYaw     : {80, 120, 160}
     ///
-    /// Rig construction mirrors LapCourseTests exactly — see that class for detailed
+    /// Rig construction mirrors LapCourseTests exactly â€” see that class for detailed
     /// rationale on foot-collider-free design and layer configuration.
     ///
     /// Collaborators: <see cref="BalanceController"/>, <see cref="PlayerMovement"/>,
@@ -35,7 +35,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class LapOptimizerTests
     {
-        // ── Course (identical to LapCourseTests — copied for isolation) ────────────
+        // â”€â”€ Course (identical to LapCourseTests â€” copied for isolation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 4000f);
 
@@ -44,24 +44,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // (1) Start
             new Vector3( 0f,  0f,  0f),
 
-            // (2) Long straight — 15 m north
+            // (2) Long straight â€” 15 m north
             new Vector3( 0f,  0f,  5f),
             new Vector3( 0f,  0f, 10f),
             new Vector3( 0f,  0f, 15f),
 
-            // (3) Tight 180° hairpin
+            // (3) Tight 180Â° hairpin
             new Vector3( 4f,  0f, 15f),
             new Vector3( 8f,  0f, 15f),
             new Vector3(12f,  0f, 15f),
             new Vector3(16f,  0f, 15f),
             new Vector3(16f,  0f, 10f),
 
-            // (4) Chicane — left-right-left
+            // (4) Chicane â€” left-right-left
             new Vector3(12f,  0f,  8f),
             new Vector3(16f,  0f,  4f),
             new Vector3(12f,  0f,  0f),
 
-            // (5) Slalom — 5 alternating gates
+            // (5) Slalom â€” 5 alternating gates
             new Vector3( 8f,  0f, -4f),
             new Vector3( 4f,  0f, -8f),
             new Vector3( 8f,  0f,-12f),
@@ -90,26 +90,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return OpenGateRadius;
         }
 
-        // ── Timing ───────────────────────────────────────────────────────────────────
+        // â”€â”€ Timing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private const int SettleFrames            = 200;
         private const int MaxLapFrames            = 6000;
         private const int GateMissedTimeoutFrames = 600;
         private const string ReportPath           = "Logs/lap-optimizer-results.txt";
 
-        // ── Layer constants ───────────────────────────────────────────────────────────
+        // â”€â”€ Layer constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private const int LayerEnvironment   = GameSettings.LayerEnvironment;     // 12
         private const int LayerPlayer        = GameSettings.LayerPlayer1Parts;    // 8
         private const int LayerLowerLegParts = GameSettings.LayerLowerLegParts;  // 13
 
-        // ── Parameter grids ───────────────────────────────────────────────────────────
+        // â”€â”€ Parameter grids â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static readonly float[] MoveForceSweep = { 200f, 280f, 360f };
         private static readonly float[] MaxSpeedSweep  = { 4f,   5f,   6f   };
         private static readonly float[] KPYawSweep     = { 80f,  120f, 160f };
 
-        // ── Shared state ──────────────────────────────────────────────────────────────
+        // â”€â”€ Shared state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private GameObject     _groundGO;
         private GameObject     _hipsGO;
@@ -122,7 +122,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private int   _savedSolverIterations;
         private int   _savedSolverVelocityIterations;
 
-        // ── Setup / Teardown ──────────────────────────────────────────────────────────
+        // â”€â”€ Setup / Teardown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [SetUp]
         public void SetUp()
@@ -150,11 +150,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
-        // ── Optimizer test ────────────────────────────────────────────────────────────
+        // â”€â”€ Optimizer test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [UnityTest]
         [Timeout(3600000)]
-        [Ignore("On-demand optimizer — excluded from standard CI run. " +
+        [Ignore("On-demand optimizer â€” excluded from standard CI run. " +
                 "Remove [Ignore] or run via Unity Test Runner when tuning locomotion parameters.")]
         public IEnumerator LapOptimizer_SweepLocomotionParameters_WritesRankedReport()
         {
@@ -211,8 +211,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             sb.AppendLine($"Total trials : {results.Count}");
             sb.AppendLine($"Generated    : {System.DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             sb.AppendLine();
-            sb.AppendLine("Scoring: (gatesHit×100) - (fallCount×500) - (lapFrames/10)");
-            sb.AppendLine("──────────────────────────────────────────────────────────────────────");
+            sb.AppendLine("Scoring: (gatesHitÃ—100) - (fallCountÃ—500) - (lapFrames/10)");
+            sb.AppendLine("â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€");
             sb.AppendLine("RANKED RESULTS (all 27):");
             sb.AppendLine();
 
@@ -235,7 +235,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.Pass($"Optimizer complete. Best score: {results[0].Score}. See {ReportPath}");
         }
 
-        // ── Ghost driver ──────────────────────────────────────────────────────────────
+        // â”€â”€ Ghost driver â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private IEnumerator RunGhostDriver(TrialResult trial)
         {
@@ -295,7 +295,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _pm.SetMoveInputForTest(Vector2.zero);
         }
 
-        // ── World construction ────────────────────────────────────────────────────────
+        // â”€â”€ World construction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void CreateFlatGround()
         {
@@ -376,16 +376,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 new Vector3(0f, -0.30f, 0f), 1.5f, 0.045f, 0.25f);
             ConfigureJoint(lowerArmR, upperArmR.GetComponent<Rigidbody>(), 100f, 10f, 400f);
 
-            // Components — RagdollSetup FIRST
+            // Components â€” RagdollSetup FIRST
             _hipsGO.AddComponent<RagdollSetup>();
             _bc = _hipsGO.AddComponent<BalanceController>();
-            _cs = _hipsGO.AddComponent<CharacterState>();
             _pm = _hipsGO.AddComponent<PlayerMovement>();
+            _cs = _hipsGO.AddComponent<CharacterState>();
             _hipsGO.AddComponent<LegAnimator>();
             _hipsGO.AddComponent<ArmAnimator>();
         }
 
-        // ── Build helpers ─────────────────────────────────────────────────────────────
+        // â”€â”€ Build helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static GameObject CreateBoxSegment(string name, GameObject parent, int layer,
             Vector3 localPos, float mass, Vector3 boxSize)
@@ -488,7 +488,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             fi.SetValue(target, value);
         }
 
-        // ── Trial result ──────────────────────────────────────────────────────────────
+        // â”€â”€ Trial result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private class TrialResult
         {
@@ -502,7 +502,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             public int   TotalGates;
 
             /// <summary>
-            /// Score = (gatesHit × 100) − (fallCount × 500) − (lapFrames / 10).
+            /// Score = (gatesHit Ã— 100) âˆ’ (fallCount Ã— 500) âˆ’ (lapFrames / 10).
             /// Higher is better.
             /// </summary>
             public float Score =>

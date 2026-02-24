@@ -9,10 +9,10 @@ using UnityEngine.TestTools;
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// Focused regression tests for the tight 180° hairpin corner — the section where
+    /// Focused regression tests for the tight 180Â° hairpin corner â€” the section where
     /// the character consistently gets stuck when arriving at top speed.
     ///
-    /// These tests isolate the hairpin (gates 4–8 of the lap course) so we don't have
+    /// These tests isolate the hairpin (gates 4â€“8 of the lap course) so we don't have
     /// to run a full 40s lap to get a signal. The character spawns at full running
     /// approach speed (via a short run-up straight), then drives through the hairpin.
     ///
@@ -23,13 +23,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     ///   Gate 3  ( 8, 0,  15)  hairpin apex
     ///   Gate 4  (12, 0,  15)  hairpin exit
     ///   Gate 5  (16, 0,  15)  post-hairpin wide
-    ///   Gate 6  (16, 0,  10)  post-hairpin turn  ← the stuck gate
+    ///   Gate 6  (16, 0,  10)  post-hairpin turn  â† the stuck gate
     ///
     /// The character must pass all 7 gates with no falls and no stuck-leg loops.
     /// </summary>
     public class HairpinCornerTests
     {
-        // ── Course geometry ────────────────────────────────────────────────────────
+        // â”€â”€ Course geometry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 4000f);
 
@@ -44,7 +44,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             new Vector3( 8f, 0f, 15f),   // 5: apex
             new Vector3(12f, 0f, 15f),   // 6: exit
             new Vector3(16f, 0f, 15f),   // 7: post-hairpin wide
-            new Vector3(16f, 0f, 10f),   // 8: POST-HAIRPIN TURN — the stuck gate
+            new Vector3(16f, 0f, 10f),   // 8: POST-HAIRPIN TURN â€” the stuck gate
             new Vector3(16f, 0f,  5f),   // 9: confirm he's moving away cleanly
         };
 
@@ -58,21 +58,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return OpenGateRadius;
         }
 
-        // ── Timing ────────────────────────────────────────────────────────────────
+        // â”€â”€ Timing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private const int SettleFrames          = 200;   // 2 s @ 100 Hz
-        private const int MaxFrames             = 3000;  // 30 s budget — plenty for this section
+        private const int MaxFrames             = 3000;  // 30 s budget â€” plenty for this section
         private const int GateMissedTimeout     = 400;   // 4 s per gate before counting miss
         private const int BudgetFrames          = 2000;  // 20 s pass/fail assertion
 
-        // ── Rig constants ─────────────────────────────────────────────────────────
+        // â”€â”€ Rig constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private const float HipsSpawnHeight    = 1.0f;
         private const int   LayerEnvironment   = GameSettings.LayerEnvironment;
         private const int   LayerPlayer        = GameSettings.LayerPlayer1Parts;
         private const int   LayerLowerLegParts = GameSettings.LayerLowerLegParts;
 
-        // ── Shared state ──────────────────────────────────────────────────────────
+        // â”€â”€ Shared state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private GameObject    _groundGO;
         private GameObject    _hipsGO;
@@ -85,7 +85,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private int   _savedSolverIterations;
         private int   _savedSolverVelocityIterations;
 
-        // ── Setup / Teardown ──────────────────────────────────────────────────────
+        // â”€â”€ Setup / Teardown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [SetUp]
         public void SetUp()
@@ -116,7 +116,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
-        // ── Tests ─────────────────────────────────────────────────────────────────
+        // â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Regression: character must clear the full hairpin sequence including the
@@ -148,7 +148,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         /// <summary>
         /// Diagnostic: always passes, logs timing + gate details. Run this when
-        /// debugging — it tells you exactly which gate failed and at what frame.
+        /// debugging â€” it tells you exactly which gate failed and at what frame.
         /// </summary>
         [UnityTest]
         [Timeout(60000)]
@@ -159,18 +159,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return RunGhostDriver(result);
 
             float secs = result.FrameCount / 100f;
-            Debug.Log($"[HairpinCorner] ── DIAGNOSTIC ──────────────────────────");
+            Debug.Log($"[HairpinCorner] â”€â”€ DIAGNOSTIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€");
             Debug.Log($"[HairpinCorner] Time:   {secs:F2}s ({result.FrameCount} frames)");
             Debug.Log($"[HairpinCorner] Falls:  {result.FallCount}");
             Debug.Log($"[HairpinCorner] Gates:  {result.GatesHit}/{HairpinWaypoints.Length} hit, {result.GatesMissed} missed");
             Debug.Log($"[HairpinCorner] Last gate reached: {result.LastGateReached}");
             Debug.Log($"[HairpinCorner] Stuck events detected: {result.StuckEventCount}");
-            Debug.Log($"[HairpinCorner] ────────────────────────────────────────");
+            Debug.Log($"[HairpinCorner] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€");
 
             Assert.Pass(BuildSummary(result));
         }
 
-        // ── Ghost driver ──────────────────────────────────────────────────────────
+        // â”€â”€ Ghost driver â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private IEnumerator RunGhostDriver(HairpinResult result)
         {
@@ -222,7 +222,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     if (currentGate >= totalGates) { done = true; break; }
                 }
 
-                // Gate timeout → count as missed, advance.
+                // Gate timeout â†’ count as missed, advance.
                 if (framesSinceHit >= GateMissedTimeout)
                 {
                     Debug.Log($"[HairpinCorner] Gate {currentGate} MISSED at frame {frame} " +
@@ -247,7 +247,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _pm.SetMoveInputForTest(Vector2.zero);
         }
 
-        // ── World construction ─────────────────────────────────────────────────────
+        // â”€â”€ World construction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void CreateFlatGround()
         {
@@ -266,7 +266,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 HipsSpawnHeight,
                 HairpinWaypoints[0].z) + TestOriginOffset;
 
-            // ── Hips root ──
+            // â”€â”€ Hips root â”€â”€
             _hipsGO = new GameObject("Hips_Hairpin");
             _hipsGO.transform.position = spawnPos;
             _hipsGO.layer = LayerPlayer;
@@ -277,12 +277,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _hipsRb.collisionDetectionMode = CollisionDetectionMode.Continuous;
             _hipsGO.AddComponent<BoxCollider>().size = new Vector3(0.26f, 0.20f, 0.15f);
 
-            // ── Torso ──
+            // â”€â”€ Torso â”€â”€
             GameObject torsoGO = CreateBoxSegment("Torso", _hipsGO, LayerPlayer,
                 new Vector3(0f, 0.32f, 0f), 12f, new Vector3(0.28f, 0.32f, 0.14f));
             ConfigureJoint(torsoGO, _hipsRb, 300f, 30f, 1000f);
 
-            // ── Left leg ──
+            // â”€â”€ Left leg â”€â”€
             GameObject upperLegL = CreateCapsuleSegment("UpperLeg_L", _hipsGO, LayerPlayer,
                 new Vector3(-0.10f, -0.22f, 0f), 4f, 0.07f, 0.36f);
             ConfigureJoint(upperLegL, _hipsRb, 1200f, 120f, 5000f);
@@ -291,7 +291,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             ConfigureJoint(lowerLegL, upperLegL.GetComponent<Rigidbody>(), 1200f, 120f, 5000f);
             AddGroundSensor(CreateSensorOnlySegment("Foot_L", lowerLegL, new Vector3(0f, -0.35f, 0.07f)));
 
-            // ── Right leg ──
+            // â”€â”€ Right leg â”€â”€
             GameObject upperLegR = CreateCapsuleSegment("UpperLeg_R", _hipsGO, LayerPlayer,
                 new Vector3(0.10f, -0.22f, 0f), 4f, 0.07f, 0.36f);
             ConfigureJoint(upperLegR, _hipsRb, 1200f, 120f, 5000f);
@@ -300,7 +300,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             ConfigureJoint(lowerLegR, upperLegR.GetComponent<Rigidbody>(), 1200f, 120f, 5000f);
             AddGroundSensor(CreateSensorOnlySegment("Foot_R", lowerLegR, new Vector3(0f, -0.35f, 0.07f)));
 
-            // ── Arms ──
+            // â”€â”€ Arms â”€â”€
             GameObject upperArmL = CreateCapsuleSegment("UpperArm_L", torsoGO, LayerPlayer,
                 new Vector3(-0.20f, 0.10f, 0f), 2f, 0.055f, 0.28f);
             ConfigureJoint(upperArmL, torsoGO.GetComponent<Rigidbody>(), 800f, 80f, 3000f);
@@ -313,16 +313,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             CreateCapsuleSegment("LowerArm_R", upperArmR, LayerPlayer,
                 new Vector3(0f, -0.30f, 0f), 1.5f, 0.045f, 0.25f);
 
-            // ── Character components — RagdollSetup first ──
+            // â”€â”€ Character components â€” RagdollSetup first â”€â”€
             _hipsGO.AddComponent<RagdollSetup>();
             _bc = _hipsGO.AddComponent<BalanceController>();
-            _cs = _hipsGO.AddComponent<CharacterState>();
             _pm = _hipsGO.AddComponent<PlayerMovement>();
+            _cs = _hipsGO.AddComponent<CharacterState>();
             _hipsGO.AddComponent<LegAnimator>();
             _hipsGO.AddComponent<ArmAnimator>();
         }
 
-        // ── Settle ────────────────────────────────────────────────────────────────
+        // â”€â”€ Settle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private IEnumerator SettleCharacter()
         {
@@ -330,7 +330,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 yield return new WaitForFixedUpdate();
         }
 
-        // ── Result container ──────────────────────────────────────────────────────
+        // â”€â”€ Result container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private class HairpinResult
         {
@@ -350,7 +350,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                    $"LastGate={r.LastGateReached} | StuckEvents={r.StuckEventCount}";
         }
 
-        // ── Build helpers (identical to LapCourseTests) ───────────────────────────
+        // â”€â”€ Build helpers (identical to LapCourseTests) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static GameObject CreateBoxSegment(string name, GameObject parent, int layer,
             Vector3 localPos, float mass, Vector3 boxSize)
