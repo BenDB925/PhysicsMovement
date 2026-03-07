@@ -73,7 +73,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator WalkStraight_NoFalls()
         {
-            SpawnAndConfigureCourse(new[]
+            yield return SpawnAndConfigureCourse(new[]
             {
                 new Vector3(0f, 0f, 20f)
             });
@@ -102,7 +102,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator TurnAndWalk_CornerRecovery()
         {
-            SpawnAndConfigureCourse(new[]
+            yield return SpawnAndConfigureCourse(new[]
             {
                 new Vector3(10f, 0f, 0f),
                 new Vector3(10f, 0f, 10f),
@@ -130,10 +130,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"(limit {MaxConsecutiveFallenCorner}).");
         }
 
-        private void SpawnAndConfigureCourse(Vector3[] waypoints)
+        private IEnumerator SpawnAndConfigureCourse(Vector3[] waypoints)
         {
-            _ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            _ground.transform.localScale = new Vector3(10f, 1f, 10f);
+            // Ground: flat cube 60x60 at y=-0.5 so surface is exactly y=0.
+            // Must be LayerEnvironment (12) so GroundSensor and hips collide with it.
+            _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _ground.name = "TestGround";
+            _ground.transform.position   = new Vector3(0f, -0.5f, 0f);
+            _ground.transform.localScale = new Vector3(60f, 1f, 60f);
             _ground.layer = GameSettings.LayerEnvironment;
 
 #if UNITY_EDITOR
@@ -144,7 +148,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
-            _player = Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            // Spawn slightly above ground so ragdoll settles cleanly onto it.
+            _player = Object.Instantiate(prefab, new Vector3(0f, 0.05f, 0f), Quaternion.identity);
             Assert.That(_player, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             PlayerMovement playerMovement = _player.GetComponent<PlayerMovement>();
@@ -152,6 +157,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             _characterState = _player.GetComponent<CharacterState>();
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
+
+            // Warmup: 60 frames with zero input so physics settles before we start driving.
+            // Without this the ragdoll is mid-fall when input starts and falls immediately.
+            playerMovement.SetMoveInputForTest(Vector2.zero);
+            for (int i = 0; i < 60; i++)
+                yield return new WaitForFixedUpdate();
 
             _courseRunnerGO = new GameObject("WaypointCourseRunner");
             _courseRunner = _courseRunnerGO.AddComponent<WaypointCourseRunner>();
