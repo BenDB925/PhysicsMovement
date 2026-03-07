@@ -152,10 +152,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _player = Object.Instantiate(prefab, new Vector3(0f, 0.05f, 0f), Quaternion.identity);
             Assert.That(_player, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
-            PlayerMovement playerMovement = _player.GetComponent<PlayerMovement>();
+            PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
             Assert.That(playerMovement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
 
-            _characterState = _player.GetComponent<CharacterState>();
+            _characterState = _player.GetComponentInChildren<CharacterState>();
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
 
             // Warmup: 60 frames with zero input so physics settles before we start driving.

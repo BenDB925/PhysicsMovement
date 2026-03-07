@@ -16,11 +16,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         public int FramesElapsed { get; private set; }
         public int CurrentWaypointIndex { get; private set; }
 
+        private Transform _hipsTransform;
+
         public void Initialize(GameObject player, Vector3[] waypoints)
         {
             _ghostDriver = new GhostDriver();
             _player = player;
-            _playerMovement = _player != null ? _player.GetComponent<PlayerMovement>() : null;
+            _playerMovement = _player != null ? _player.GetComponentInChildren<PlayerMovement>() : null;
+            // Position tracking uses the Hips rigidbody, not the empty root transform.
+            var rb = _player != null ? _player.GetComponentInChildren<Rigidbody>() : null;
+            _hipsTransform = rb != null ? rb.transform : (_player != null ? _player.transform : null);
             _waypoints = waypoints ?? Array.Empty<Vector3>();
 
             FramesElapsed = 0;
@@ -43,7 +48,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             FramesElapsed++;
 
-            Vector3 currentPosition = _player.transform.position;
+            Vector3 currentPosition = _hipsTransform != null ? _hipsTransform.position : _player.transform.position;
             Vector3 targetWaypoint = _waypoints[CurrentWaypointIndex];
             Vector2 input = _ghostDriver.Update(currentPosition, targetWaypoint, Time.fixedDeltaTime);
             _playerMovement.SetMoveInputForTest(input);
