@@ -1382,7 +1382,7 @@ MonoBehaviour:
   _yawAlignThresholdDeg: 90
   _swingAxis: {x: 1, y: 0, z: 0}
   _kneeAxis: {x: 1, y: 0, z: 0}
-  _useWorldSpaceSwing: 0
+  _useWorldSpaceSwing: 1
   _debugLog: 0
   _airborneSpringMultiplier: 0.15
   _angularVelocityGaitThreshold: 8
