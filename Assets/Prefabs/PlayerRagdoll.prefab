@@ -1334,8 +1334,8 @@ MonoBehaviour:
   _kDYaw: 40
   _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
-  _fallenEnterAngleThreshold: 65
-  _fallenExitAngleThreshold: 55
+  _fallenEnterAngleThreshold: 50
+  _fallenExitAngleThreshold: 40
   _enableStartupStandAssist: 0
   _startupStandAssistDuration: 4
   _enablePersistentSeatedRecovery: 0
