@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
@@ -43,6 +44,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverIterations = 12;
             Physics.defaultSolverVelocityIterations = 4;
 
+            Physics.IgnoreLayerCollision(GameSettings.LayerPlayer1Parts, GameSettings.LayerPlayer1Parts, true);
             Physics.IgnoreLayerCollision(GameSettings.LayerPlayer1Parts, GameSettings.LayerEnvironment, false);
             Physics.IgnoreLayerCollision(GameSettings.LayerLowerLegParts, GameSettings.LayerEnvironment, true);
         }
@@ -148,12 +150,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
-            // Spawn slightly above ground so ragdoll settles cleanly onto it.
-            _player = Object.Instantiate(prefab, new Vector3(0f, 0.05f, 0f), Quaternion.identity);
+            // Spawn high enough to avoid starting interpenetrated with the floor.
+            _player = Object.Instantiate(prefab, new Vector3(0f, 1f, 0f), Quaternion.identity);
             Assert.That(_player, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
             Assert.That(playerMovement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
+            SetPrivateFloat(playerMovement, "_moveForce", 1500f);
+            SetPrivateFloat(playerMovement, "_maxSpeed", 8f);
 
             _characterState = _player.GetComponentInChildren<CharacterState>();
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
@@ -180,6 +184,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             else
             {
                 consecutiveFallen = 0;
+            }
+        }
+
+        private static void SetPrivateFloat(object target, string fieldName, float value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field != null && field.FieldType == typeof(float))
+            {
+                field.SetValue(target, value);
             }
         }
     }

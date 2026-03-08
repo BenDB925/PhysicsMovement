@@ -23,9 +23,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _ghostDriver = new GhostDriver();
             _player = player;
             _playerMovement = _player != null ? _player.GetComponentInChildren<PlayerMovement>() : null;
-            // Position tracking uses the Hips rigidbody, not the empty root transform.
-            var rb = _player != null ? _player.GetComponentInChildren<Rigidbody>() : null;
-            _hipsTransform = rb != null ? rb.transform : (_player != null ? _player.transform : null);
+            if (_playerMovement == null)
+            {
+                Debug.LogError("[WaypointCourseRunner] PlayerMovement not found during Initialize.");
+            }
+
+            Rigidbody movementBody = _playerMovement != null ? _playerMovement.GetComponent<Rigidbody>() : null;
+            _hipsTransform = movementBody != null
+                ? movementBody.transform
+                : (_playerMovement != null ? _playerMovement.transform : (_player != null ? _player.transform : null));
             _waypoints = waypoints ?? Array.Empty<Vector3>();
 
             FramesElapsed = 0;
