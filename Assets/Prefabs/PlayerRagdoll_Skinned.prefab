@@ -868,7 +868,7 @@ MonoBehaviour:
   _airborneMultiplier: 0.2
   _fallenEnterAngleThreshold: 65
   _fallenExitAngleThreshold: 55
-  _enableStartupStandAssist: 0
+  _enableStartupStandAssist: 1
   _startupStandAssistDuration: 4
   _enablePersistentSeatedRecovery: 0
   _persistentSeatedRecoveryAssistScale: 0.35

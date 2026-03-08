@@ -227,6 +227,8 @@ namespace PhysicsDrivenMovement.Character
                  "the legs forcefully into the forward-split pose. Default 2.5.")]
         private float _recoverySpringMultiplier = 2.5f;
 
+        private const int RecoveryCooldownFrames = 120;
+
         // ── Private Fields ──────────────────────────────────────────────────
 
         /// <summary>Left upper leg ConfigurableJoint, found by name in Awake.</summary>
@@ -327,6 +329,8 @@ namespace PhysicsDrivenMovement.Character
         /// verification; read-only at runtime.
         /// </summary>
         private bool _isGaitBiasedForward;
+
+        private int _recoveryCooldownFrameCounter;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -624,6 +628,11 @@ namespace PhysicsDrivenMovement.Character
             _prevInputDir = currentInputDir;
             _wasMoving    = isMoving;
 
+            if (_recoveryCooldownFrameCounter > 0)
+            {
+                _recoveryCooldownFrameCounter--;
+            }
+
             // ── STEP 3E: Stuck-Leg Recovery (Option D) ────────────────────────────────
             //   Detection: character is stuck when ALL of the following are true for
             //   _stuckFrameThreshold consecutive frames:
@@ -642,6 +651,7 @@ namespace PhysicsDrivenMovement.Character
                 // Update stuck counter.
                 bool stuckCondition = _smoothedInputMag > 0.5f
                     && horizontalSpeedGate < _stuckSpeedThreshold
+                    && _recoveryCooldownFrameCounter <= 0
                     && stateAllowsRecovery;
 
                 if (stuckCondition)
@@ -676,6 +686,7 @@ namespace PhysicsDrivenMovement.Character
                     // Recovery complete: restore spring and resume normal gait.
                     _isRecovering = false;
                     _stuckFrameCounter = 0;
+                    _recoveryCooldownFrameCounter = RecoveryCooldownFrames;
                     SetLegSpringMultiplier(1f);
                 }
 
@@ -743,8 +754,10 @@ namespace PhysicsDrivenMovement.Character
                 //   the stuck state: the forward phase is enhanced while the backward phase
                 //   becomes neutral. Within 1–2 gait cycles at least one foot replants in front,
                 //   the condition clears, and normal gait resumes (visible as a brief stumble).
-                //   Detection uses actual foot world positions (body-aware). The bias magnitude
-                //   uses the existing stepAngle and smoothedInputMag (no new magic numbers).
+                //   Detection uses actual foot world positions (body-aware) measured against
+                //   the commanded travel heading when available, with hips forward as a fallback.
+                //   The bias magnitude uses the existing stepAngle and smoothedInputMag
+                //   (no new magic numbers).
                 if (inputMagnitude > 0.01f && _footL != null && _footR != null)
                 {
                     bool leftBehind = IsFootBehindHips(_footL);
@@ -856,26 +869,39 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>
         /// Returns true when the given foot Transform is behind the hips in the horizontal
-        /// plane, measured against the hips' physical forward direction. "Behind" means
-        /// the horizontal dot product of (foot − hips) with hips forward is negative.
-        /// Returns false if the transform is null or hips forward is degenerate (near-vertical).
+        /// plane, measured against the commanded travel heading when available and the hips'
+        /// physical forward direction otherwise. "Behind" means the horizontal dot product
+        /// of (foot − hips) with that reference direction is negative.
+        /// Returns false if the transform is null or the reference direction is degenerate.
         /// </summary>
         private bool IsFootBehindHips(Transform footTransform)
         {
             if (footTransform == null) return false;
 
             Vector3 hipToFoot = footTransform.position - transform.position;
-            Vector3 hipForwardFlat = new Vector3(transform.forward.x, 0f, transform.forward.z);
+            Vector3 referenceDirection = _playerMovement != null
+                ? _playerMovement.CurrentMoveWorldDirection
+                : Vector3.zero;
 
-            if (hipForwardFlat.sqrMagnitude < 0.0001f) return false;
+            if (referenceDirection.sqrMagnitude >= 0.0001f)
+            {
+                referenceDirection = new Vector3(referenceDirection.x, 0f, referenceDirection.z);
+            }
+            else
+            {
+                referenceDirection = new Vector3(transform.forward.x, 0f, transform.forward.z);
+            }
 
-            hipForwardFlat.Normalize();
+            if (referenceDirection.sqrMagnitude < 0.0001f) return false;
+
+            referenceDirection.Normalize();
             float forwardDot = Vector3.Dot(
                 new Vector3(hipToFoot.x, 0f, hipToFoot.z),
-                hipForwardFlat);
+                referenceDirection);
 
             return forwardDot < 0f;
         }
+
 
         /// <summary>
         /// Applies world-space swing targets to the four leg ConfigurableJoints.
@@ -1119,6 +1145,19 @@ namespace PhysicsDrivenMovement.Character
         private void WriteDebugLogLine()
         {
             float velMag = _hipsRigidbody != null ? _hipsRigidbody.linearVelocity.magnitude : 0f;
+            float horizontalSpeed = 0f;
+            float yawAngularVelocity = 0f;
+            if (_hipsRigidbody != null)
+            {
+                Vector3 horizontalVelocity = _hipsRigidbody.linearVelocity;
+                horizontalSpeed = new Vector3(horizontalVelocity.x, 0f, horizontalVelocity.z).magnitude;
+                yawAngularVelocity = _hipsRigidbody.angularVelocity.y;
+            }
+
+            float inputMagnitude = _playerMovement != null ? _playerMovement.CurrentMoveInput.magnitude : 0f;
+            CharacterStateType currentState = _characterState != null
+                ? _characterState.CurrentState
+                : CharacterStateType.Standing;
             Vector3 gf = GetWorldGaitForward();
 
             Vector3 ulActual = _upperLegL != null ? _upperLegL.transform.localEulerAngles : Vector3.zero;
@@ -1126,9 +1165,17 @@ namespace PhysicsDrivenMovement.Character
 
             string line =
                 $"FRAME:{Time.frameCount}" +
+                $" state:{currentState}" +
+                $" input:{inputMagnitude:F2}" +
                 $" vel:{velMag:F2}" +
+                $" hSpeed:{horizontalSpeed:F2}" +
+                $" yawVel:{yawAngularVelocity:F2}" +
                 $" gaitFwd:{gf.x:F2},{gf.y:F2},{gf.z:F2}" +
                 $" swingAxis:{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).x:F2},{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).y:F2},{(_useWorldSpaceSwing ? _worldSwingAxis : _swingAxis).z:F2}" +
+                $" recovering:{_isRecovering}" +
+                $" stuckCtr:{_stuckFrameCounter}" +
+                $" cooldown:{_recoveryCooldownFrameCounter}" +
+                $" biasedFwd:{_isGaitBiasedForward}" +
                 $" UL_targetEuler:{_upperLegLTargetEuler.x:F0},{_upperLegLTargetEuler.y:F0},{_upperLegLTargetEuler.z:F0}" +
                 $" UL_actualEuler:{ulActual.x:F0},{ulActual.y:F0},{ulActual.z:F0}" +
                 $" LL_targetEuler:{_lowerLegLTargetEuler.x:F0},{_lowerLegLTargetEuler.y:F0},{_lowerLegLTargetEuler.z:F0}" +

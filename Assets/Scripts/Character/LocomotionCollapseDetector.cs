@@ -75,6 +75,9 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            Vector3 horizontalVelocity = new Vector3(_hipsBody.linearVelocity.x, 0f, _hipsBody.linearVelocity.z);
+            float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
+
             // STEP 2: Preserve a short grounded grace window so one-frame airborne blips do not reset the detector.
             if (_balanceController.IsGrounded)
             {
@@ -98,8 +101,6 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 3: Evaluate the sustained collapse evidence using intent, progress, support, and posture.
-            Vector3 horizontalVelocity = new Vector3(_hipsBody.linearVelocity.x, 0f, _hipsBody.linearVelocity.z);
-            float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
             float projectedProgress = Vector3.Dot(horizontalVelocity, requestedDirection);
             float uprightAngle = Vector3.Angle(transform.up, Vector3.up);
 
@@ -190,7 +191,7 @@ namespace PhysicsDrivenMovement.Character
 
         private bool TryGetRequestedDirection(out Vector3 requestedDirection)
         {
-            requestedDirection = Vector3.ProjectOnPlane(_playerMovement.CurrentFacingDirection, Vector3.up);
+            requestedDirection = Vector3.ProjectOnPlane(_playerMovement.CurrentMoveWorldDirection, Vector3.up);
             if (requestedDirection.sqrMagnitude < 0.0001f)
             {
                 return false;

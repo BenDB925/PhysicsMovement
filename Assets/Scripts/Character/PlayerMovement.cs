@@ -33,7 +33,7 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
-             "0 disables the slew limit and forwards the raw heading immediately.")]
+                 "0 disables the slew limit and forwards the raw heading immediately.")]
         private float _maxFacingTurnRateDegPerSecond = 540f;
 
         [SerializeField]
@@ -49,12 +49,10 @@ namespace PhysicsDrivenMovement.Character
         private bool _hasFacingDirection;
         private bool _hasReceivedMovementInput;
 
-        // ─── Jump state ────────────────────────────────────────────────────
-
         /// <summary>
         /// True when the jump button was pressed this frame (or injected via test seam).
         /// Consumed (cleared) in FixedUpdate after the jump attempt is processed to
-        /// enforce the one-frame consume rule — the impulse never fires twice per press.
+        /// enforce the one-frame consume rule - the impulse never fires twice per press.
         /// </summary>
         private bool _jumpPressedThisFrame;
 
@@ -65,11 +63,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private bool _overrideJumpInput;
 
-        // ─── Move input override ───────────────────────────────────────────
-
         private bool _overrideMoveInput;
-
-        // ─── Public Properties ─────────────────────────────────────────────
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
         public Vector2 CurrentMoveInput => _currentMoveInput;
@@ -80,7 +74,19 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public Vector3 CurrentFacingDirection => _hasFacingDirection ? _currentFacingDirection : transform.forward;
 
-        // ─── Test Seams ────────────────────────────────────────────────────
+        /// <summary>
+        /// Current world-space travel direction implied by the active move input.
+        /// Exposed so downstream systems can reason about commanded travel independent of facing slew.
+        /// </summary>
+        public Vector3 CurrentMoveWorldDirection
+        {
+            get
+            {
+                return TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection)
+                    ? worldDirection
+                    : Vector3.zero;
+            }
+        }
 
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
@@ -97,7 +103,7 @@ namespace PhysicsDrivenMovement.Character
         /// Test seam: directly inject a jump-button state, bypassing the Input System.
         /// When <paramref name="pressed"/> is <c>true</c>, a jump attempt will be made
         /// on the next FixedUpdate and then consumed (one-frame rule applies exactly as
-        /// in production — call again with <c>true</c> to fire a second jump).
+        /// in production - call again with <c>true</c> to fire a second jump).
         /// FixedUpdate will not poll the Input System for jump while this override is active.
         /// Do not call from production code.
         /// </summary>
@@ -110,8 +116,6 @@ namespace PhysicsDrivenMovement.Character
             _jumpPressedThisFrame = pressed;
             _overrideJumpInput = true;
         }
-
-        // ─── Unity Lifecycle ────────────────────────────────────────────────
 
         private void Awake()
         {
@@ -128,7 +132,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 2: Cache CharacterState — needed for jump gate (Standing/Moving only).
+            // STEP 2: Cache CharacterState - needed for jump gate (Standing/Moving only).
             //         CharacterState may be added after PlayerMovement in component order, so
             //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
             TryGetComponent(out _characterState);
@@ -220,11 +224,9 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
-        // ─── Private Helpers ───────────────────────────────────────────────────
-
         /// <summary>
         /// Evaluates the jump gate and, if all conditions are met, applies a single upward
-        /// impulse to the Hips Rigidbody.  The jump input flag is consumed (cleared)
+        /// impulse to the Hips Rigidbody. The jump input flag is consumed (cleared)
         /// unconditionally at the end of this method, enforcing the one-frame consume rule
         /// so the impulse cannot repeat while the button is held.
         ///
@@ -237,7 +239,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private void TryApplyJump()
         {
-            // Always consume the jump flag first — this is the one-frame consume.
+            // Always consume the jump flag first - this is the one-frame consume.
             // Doing it unconditionally ensures that even a rejected jump cannot fire
             // on a later frame from the same button press.
             bool wantsJump = _jumpPressedThisFrame;
@@ -281,7 +283,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // All gates passed — apply impulse.
+            // All gates passed - apply impulse.
             _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
         }
 
@@ -304,28 +306,10 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            Vector3 worldDirection;
-            if (_camera != null)
-            {
-                // Use camera yaw only — extract flat forward from yaw rotation so that
-                // pitching the camera up/down never changes the movement direction.
-                float   cameraYaw     = _camera.transform.eulerAngles.y;
-                Vector3 cameraForward = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.forward;
-                Vector3 cameraRight   = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.right;
-
-                worldDirection = cameraRight * moveInput.x + cameraForward * moveInput.y;
-            }
-            else
-            {
-                worldDirection = new Vector3(moveInput.x, 0f, moveInput.y);
-            }
-
-            if (worldDirection.sqrMagnitude < 0.0001f)
+            if (!TryGetMoveWorldDirection(moveInput, out Vector3 worldDirection))
             {
                 return;
             }
-
-            worldDirection.Normalize();
 
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             if (horizontalVelocity.magnitude < _maxSpeed)
@@ -339,6 +323,32 @@ namespace PhysicsDrivenMovement.Character
                 UpdateFacingDirection(worldDirection, forceImmediateFacing);
                 _hasReceivedMovementInput = true;
             }
+        }
+
+        private bool TryGetMoveWorldDirection(Vector2 moveInput, out Vector3 worldDirection)
+        {
+            worldDirection = Vector3.zero;
+
+            if (_camera != null)
+            {
+                // Use camera yaw only so look pitch never changes the horizontal move direction.
+                float cameraYaw = _camera.transform.eulerAngles.y;
+                Vector3 cameraForward = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.forward;
+                Vector3 cameraRight = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.right;
+                worldDirection = cameraRight * moveInput.x + cameraForward * moveInput.y;
+            }
+            else
+            {
+                worldDirection = new Vector3(moveInput.x, 0f, moveInput.y);
+            }
+
+            if (worldDirection.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            worldDirection.Normalize();
+            return true;
         }
 
         private void UpdateFacingDirection(Vector3 desiredWorldDirection, bool forceImmediateFacing)

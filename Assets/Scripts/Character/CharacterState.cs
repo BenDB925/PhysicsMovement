@@ -39,6 +39,7 @@ namespace PhysicsDrivenMovement.Character
         private float _fallenTimer;
         private float _gettingUpTimer;
         private int _getUpImpulseAppliedCount;
+        private bool _enteredFallenFromCollapse;
 
         /// <summary>
         /// Raised when <see cref="CurrentState"/> changes.
@@ -184,6 +185,10 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Airborne;
                     }
+                    else if (_enteredFallenFromCollapse && !isFallen && !isLocomotionCollapsed)
+                    {
+                        nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                    }
                     else if (_fallenTimer >= _getUpDelay && _fallenTimer >= _knockoutDuration)
                     {
                         nextState = CharacterStateType.GettingUp;
@@ -204,6 +209,11 @@ namespace PhysicsDrivenMovement.Character
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
                     }
                     break;
+            }
+
+            if (nextState != CurrentState && nextState == CharacterStateType.Fallen)
+            {
+                _enteredFallenFromCollapse = !isFallen && isLocomotionCollapsed;
             }
 
             ChangeState(nextState);
@@ -232,6 +242,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Capture previous state and assign CurrentState.
             CharacterStateType previousState = CurrentState;
             CurrentState = newState;
+
+            if (newState != CharacterStateType.Fallen)
+            {
+                _enteredFallenFromCollapse = false;
+            }
 
             // STEP 3: Run state-entry behavior.
             if (newState == CharacterStateType.GettingUp)
