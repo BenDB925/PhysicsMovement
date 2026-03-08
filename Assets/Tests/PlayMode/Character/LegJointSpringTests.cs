@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -23,6 +25,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class LegJointSpringTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+
         // ─── Minimum Thresholds ───────────────────────────────────────────────
 
         /// <summary>
@@ -50,27 +54,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [SetUp]
         public void SetUp()
         {
-            // Build a minimal 5-body ragdoll:
-            // Hips → UpperLeg_L → LowerLeg_L
-            //      → UpperLeg_R → LowerLeg_R
-            // This mirrors the structure RagdollSetup.ApplyLegJointDrives() searches.
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            _hips = new GameObject("Hips");
-            Rigidbody hipsRb = _hips.AddComponent<Rigidbody>();
-            hipsRb.useGravity = false;
+            _hips = Object.Instantiate(prefab, new Vector3(1400f, 1.1f, 1400f), Quaternion.identity);
+            _upperLegLJoint = FindJointByName(_hips, "UpperLeg_L");
+            _upperLegRJoint = FindJointByName(_hips, "UpperLeg_R");
+            _lowerLegLJoint = FindJointByName(_hips, "LowerLeg_L");
+            _lowerLegRJoint = FindJointByName(_hips, "LowerLeg_R");
 
-            // Build the leg hierarchy BEFORE adding RagdollSetup so Awake sees it.
-            _upperLegLJoint = CreateLegJoint(_hips, "UpperLeg_L", hipsRb);
-            _upperLegRJoint = CreateLegJoint(_hips, "UpperLeg_R", hipsRb);
+            Assert.That(_hips.GetComponent<RagdollSetup>(), Is.Not.Null,
+                "PlayerRagdoll prefab must include RagdollSetup.");
 
-            Rigidbody upperLRb = _upperLegLJoint.GetComponent<Rigidbody>();
-            Rigidbody upperRRb = _upperLegRJoint.GetComponent<Rigidbody>();
-
-            _lowerLegLJoint = CreateLegJoint(_upperLegLJoint.gameObject, "LowerLeg_L", upperLRb);
-            _lowerLegRJoint = CreateLegJoint(_upperLegRJoint.gameObject, "LowerLeg_R", upperRRb);
-
-            // Add RagdollSetup last so its Awake() fires with the full hierarchy present.
-            _hips.AddComponent<RagdollSetup>();
+            LegAnimator legAnimator = _hips.GetComponent<LegAnimator>();
+            if (legAnimator != null)
+            {
+                legAnimator.enabled = false;
+            }
         }
 
         [TearDown]
@@ -267,26 +268,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator RagdollSetup_LowerLegSpringIsAppliedToJoint_AfterAwake()
         {
-            // Arrange — build a NEW rig (the SetUp rig already fired Awake)
-            // We need to set the serialized field BEFORE Awake runs.
-            // Build the hierarchy without RagdollSetup, set the field, then add RagdollSetup.
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            GameObject hips2 = new GameObject("Hips2");
-            Rigidbody hipsRb2 = hips2.AddComponent<Rigidbody>();
-            hipsRb2.useGravity = false;
+            GameObject hips2 = Object.Instantiate(prefab, new Vector3(1410f, 1.1f, 1410f), Quaternion.identity);
+            RagdollSetup setup2 = hips2.GetComponent<RagdollSetup>();
+            Assert.That(setup2, Is.Not.Null, "PlayerRagdoll prefab must include RagdollSetup.");
 
-            ConfigurableJoint upperLL2 = CreateLegJoint(hips2, "UpperLeg_L", hipsRb2);
-            ConfigurableJoint upperRR2 = CreateLegJoint(hips2, "UpperLeg_R", hipsRb2);
-            ConfigurableJoint lowerLL2 = CreateLegJoint(upperLL2.gameObject, "LowerLeg_L",
-                upperLL2.GetComponent<Rigidbody>());
-            ConfigurableJoint lowerLR2 = CreateLegJoint(upperRR2.gameObject, "LowerLeg_R",
-                upperRR2.GetComponent<Rigidbody>());
+            LegAnimator legAnimator2 = hips2.GetComponent<LegAnimator>();
+            if (legAnimator2 != null)
+            {
+                legAnimator2.enabled = false;
+            }
 
-            // Add RagdollSetup and then use SerializedObject to set spring before Awake
-            // NOTE: In PlayMode tests AddComponent fires Awake immediately on an active GO.
-            // To set the field before Awake, we add to an inactive GO.
-            hips2.SetActive(false);
-            RagdollSetup setup2 = hips2.AddComponent<RagdollSetup>();
+            ConfigurableJoint lowerLL2 = FindJointByName(hips2, "LowerLeg_L");
 
             const float customSpring = 999f;
             using (var so = new UnityEditor.SerializedObject(setup2))
@@ -295,8 +291,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
-            // Activate to trigger Awake
-            hips2.SetActive(true);
+            InvokeApplyLegJointDrives(setup2);
 
             // Act
             yield return null;
@@ -308,6 +303,31 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Expected {customSpring}, got {actualSpring}.");
 
             Object.Destroy(hips2);
+        }
+
+        private static ConfigurableJoint FindJointByName(GameObject root, string name)
+        {
+            ConfigurableJoint[] joints = root.GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
+            for (int i = 0; i < joints.Length; i++)
+            {
+                if (joints[i].gameObject.name == name)
+                {
+                    return joints[i];
+                }
+            }
+
+            throw new System.InvalidOperationException($"Required joint '{name}' not found under '{root.name}'.");
+        }
+
+        private static void InvokeApplyLegJointDrives(RagdollSetup setup)
+        {
+            MethodInfo method = typeof(RagdollSetup).GetMethod("ApplyLegJointDrives",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(method, Is.Not.Null,
+                "RagdollSetup must have a private ApplyLegJointDrives method so runtime joint drives can be refreshed from serialized values.");
+
+            method.Invoke(setup, null);
         }
 
         // ─── Helper ───────────────────────────────────────────────────────────

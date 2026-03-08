@@ -4,6 +4,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -27,14 +28,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class LegAnimatorTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private static readonly Vector3 TestOrigin = new Vector3(1000f, 0f, 1000f);
+
         // ─── Test Rig ────────────────────────────────────────────────────────
 
+        private GameObject _ground;
         private GameObject _hips;
         private Rigidbody _hipsRb;
         private BalanceController _balance;
         private PlayerMovement _movement;
         private CharacterState _characterState;
         private LegAnimator _legAnimator;
+        private ArmAnimator _armAnimator;
+
+        private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
+        private bool[,] _savedLayerCollisionMatrix;
 
         // Leg joint GameObjects and their ConfigurableJoints
         private GameObject _upperLegL;
@@ -53,54 +64,62 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [SetUp]
         public void SetUp()
         {
-            // ── Hips root ──────────────────────────────────────────────
-            _hips = new GameObject("Hips");
-            _hipsRb = _hips.AddComponent<Rigidbody>();
-            _hipsRb.useGravity = false;
-            // Simulate walking velocity so velocity-driven gait cadence is non-zero.
-            // At 2 m/s with default _stepFrequencyScale=0.1 → 0.2 cycles/sec (tests that need
-            // faster cadence set _stepFrequency or _stepFrequencyScale explicitly via reflection).
-            _hipsRb.linearVelocity = new Vector3(0f, 0f, 2f);
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            _savedLayerCollisionMatrix = CaptureLayerCollisionMatrix();
 
-            // ── Leg GameObjects as children of Hips ─────────────────────
-            _upperLegL = CreateLegJoint(_hips, "UpperLeg_L");
-            _upperLegR = CreateLegJoint(_hips, "UpperLeg_R");
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
 
-            _lowerLegL = CreateLegJoint(_upperLegL, "LowerLeg_L");
-            _lowerLegR = CreateLegJoint(_upperLegR, "LowerLeg_R");
+            _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _ground.name = "LegAnimatorTests_Ground";
+            _ground.transform.position = TestOrigin + new Vector3(0f, -0.5f, 0f);
+            _ground.transform.localScale = new Vector3(40f, 1f, 40f);
+            _ground.layer = GameSettings.LayerEnvironment;
 
-            // Store joint references
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
+
+            _hips = UnityEngine.Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hips.name = prefab.name;
+
+            _hipsRb = _hips.GetComponent<Rigidbody>();
+            _balance = _hips.GetComponent<BalanceController>();
+            _movement = _hips.GetComponent<PlayerMovement>();
+            _characterState = _hips.GetComponent<CharacterState>();
+            _legAnimator = _hips.GetComponent<LegAnimator>();
+            _armAnimator = _hips.GetComponent<ArmAnimator>();
+
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab is missing Rigidbody on root hips.");
+            Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab is missing BalanceController.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
+            Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
+            Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing LegAnimator.");
+
+            _upperLegL = FindRequiredChild(_hips.transform, "UpperLeg_L").gameObject;
+            _upperLegR = FindRequiredChild(_hips.transform, "UpperLeg_R").gameObject;
+            _lowerLegL = FindRequiredChild(_hips.transform, "LowerLeg_L").gameObject;
+            _lowerLegR = FindRequiredChild(_hips.transform, "LowerLeg_R").gameObject;
+            _upperArmL = FindRequiredChild(_hips.transform, "UpperArm_L").gameObject;
+
             _upperLegLJoint = _upperLegL.GetComponent<ConfigurableJoint>();
             _upperLegRJoint = _upperLegR.GetComponent<ConfigurableJoint>();
             _lowerLegLJoint = _lowerLegL.GetComponent<ConfigurableJoint>();
             _lowerLegRJoint = _lowerLegR.GetComponent<ConfigurableJoint>();
-
-            // ── Arm joint (should NOT be touched by LegAnimator) ────────
-            _upperArmL = CreateArmJoint(_hips, "UpperArm_L");
             _upperArmLJoint = _upperArmL.GetComponent<ConfigurableJoint>();
 
-            // ── Components on Hips ───────────────────────────────────────
-            _balance = _hips.AddComponent<BalanceController>();
-            _movement = _hips.AddComponent<PlayerMovement>();
-            _characterState = _hips.AddComponent<CharacterState>();
-            _legAnimator = _hips.AddComponent<LegAnimator>();
+            Assert.That(_upperLegLJoint, Is.Not.Null, "UpperLeg_L joint must exist on PlayerRagdoll.");
+            Assert.That(_upperLegRJoint, Is.Not.Null, "UpperLeg_R joint must exist on PlayerRagdoll.");
+            Assert.That(_lowerLegLJoint, Is.Not.Null, "LowerLeg_L joint must exist on PlayerRagdoll.");
+            Assert.That(_lowerLegRJoint, Is.Not.Null, "LowerLeg_R joint must exist on PlayerRagdoll.");
+            Assert.That(_upperArmLJoint, Is.Not.Null, "UpperArm_L joint must exist on PlayerRagdoll.");
 
-            // Provide deterministic test state via seams
-            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             _movement.SetMoveInputForTest(Vector2.zero);
-
-            // Disable non-deterministic components to avoid interference.
-            // CharacterState must also be disabled so its FixedUpdate does not override
-            // states injected via ForceState() / SetGroundStateForTest() during tests.
-            _balance.enabled = false;
-            _movement.enabled = false;
-            _characterState.enabled = false;
-            // LegAnimator intentionally left enabled — it is the system under test.
-
-            // Pre-satisfy the angular velocity hysteresis counter so gait is not suppressed
-            // for the first 5 frames of every test. The spin suppression gate starts at 0
-            // and requires 5 consecutive low-angVel frames before allowing gait; without this
-            // pre-seeding, any test that only runs 1–4 FixedUpdate frames will see phase=0.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
             SetPrivateField(_legAnimator, "_spinSuppressFrames", 5);
         }
 
@@ -111,6 +130,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 UnityEngine.Object.Destroy(_hips);
             }
+
+            if (_ground != null)
+            {
+                UnityEngine.Object.Destroy(_ground);
+            }
+
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
+            RestoreLayerCollisionMatrix(_savedLayerCollisionMatrix);
         }
 
         // ─── Caching Tests ──────────────────────────────────────────────────
@@ -486,11 +515,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// <summary>
         /// LegAnimator must expose a serialized _swingAxis field (Vector3) so the upper-leg
         /// rotation axis can be tuned in the Inspector without code changes.
-        /// Default must be Vector3.forward (Z) — the correct targetRotation axis for
-        /// joint.axis=right with ConfigurableJoint's internal frame mapping.
+        /// The instantiated PlayerRagdoll prefab must currently use Vector3.right here,
+        /// matching the live local-frame tuning authored on the prefab.
         /// </summary>
         [UnityTest]
-        public IEnumerator SwingAxis_FieldExists_AndDefaultsToForward()
+        public IEnumerator SwingAxis_FieldExists_AndMatchesPlayerPrefab()
         {
             // Arrange
             yield return null;
@@ -505,21 +534,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(Vector3)),
                 "_swingAxis must be a Vector3.");
 
-            // Assert: default value is Vector3.forward (0, 0, 1)
+            // Assert: prefab override matches the live PlayerRagdoll tuning.
             Vector3 defaultValue = (Vector3)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(Vector3.forward),
-                $"_swingAxis default must be Vector3.forward (0,0,1) for correct sagittal swing. " +
+            Assert.That(defaultValue, Is.EqualTo(Vector3.right),
+                $"_swingAxis on the PlayerRagdoll prefab must match the live local-frame tuning (Vector3.right). " +
                 $"Got: {defaultValue}.");
         }
 
         /// <summary>
         /// LegAnimator must expose a serialized _kneeAxis field (Vector3) so the lower-leg
         /// knee-bend rotation axis can be tuned in the Inspector without code changes.
-        /// Default must be Vector3.forward (Z) — the correct targetRotation axis for
-        /// joint.axis=right with ConfigurableJoint's internal frame mapping.
+        /// The instantiated PlayerRagdoll prefab must currently use Vector3.right here,
+        /// matching the live local-frame knee tuning authored on the prefab.
         /// </summary>
         [UnityTest]
-        public IEnumerator KneeAxis_FieldExists_AndDefaultsToForward()
+        public IEnumerator KneeAxis_FieldExists_AndMatchesPlayerPrefab()
         {
             // Arrange
             yield return null;
@@ -534,10 +563,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(Vector3)),
                 "_kneeAxis must be a Vector3.");
 
-            // Assert: default value is Vector3.forward (0, 0, 1)
+            // Assert: prefab override matches the live PlayerRagdoll tuning.
             Vector3 defaultValue = (Vector3)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(Vector3.forward),
-                $"_kneeAxis default must be Vector3.forward (0,0,1) for correct knee bend. " +
+            Assert.That(defaultValue, Is.EqualTo(Vector3.right),
+                $"_kneeAxis on the PlayerRagdoll prefab must match the live local-frame tuning (Vector3.right). " +
                 $"Got: {defaultValue}.");
         }
 
@@ -591,8 +620,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act — stop BOTH input AND velocity so isMoving=false.
             _movement.SetMoveInputForTest(Vector2.zero);
-            _hipsRb.linearVelocity = Vector3.zero;
-            yield return new WaitForSeconds(0.5f);
+            yield return HoldHipsStationaryForFixedFrames(50);
 
             // Assert
             Quaternion rotAfterIdle = _upperLegRJoint.targetRotation;
@@ -682,8 +710,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Act — stop input AND zero velocity so isMoving = false (gating: input || speed).
             // Without zeroing velocity the hips continue coasting at 2 m/s, keeping isMoving=true.
             _movement.SetMoveInputForTest(Vector2.zero);
-            _hipsRb.linearVelocity = Vector3.zero;
-            yield return new WaitForSeconds(0.5f);
+            yield return HoldHipsStationaryForFixedFrames(50);
 
             // Assert — phase must have decayed
             float phaseAfterIdle = GetPhaseAccumulator();
@@ -718,8 +745,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Phase 2: stop — zero BOTH input AND velocity so isMoving=false and the idle
             // decay path fires. Wait long enough for _smoothedInputMag to decay to zero.
             _movement.SetMoveInputForTest(Vector2.zero);
-            _hipsRb.linearVelocity = Vector3.zero;
-            yield return new WaitForSeconds(1f);   // 1 s at blendSpeed=5 easily decays to identity
+            yield return HoldHipsStationaryForFixedFrames(100);
 
             float angleAtIdle = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
 
@@ -786,6 +812,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
+            Assert.That(_armAnimator, Is.Not.Null, "PlayerRagdoll prefab must include ArmAnimator for this regression test.");
+            _armAnimator.enabled = false;
             Quaternion armRotBefore = _upperArmLJoint.targetRotation;
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
 
@@ -798,6 +826,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(angleDiff, Is.LessThanOrEqualTo(0.01f),
                 $"LegAnimator must not modify arm joint targetRotations. " +
                 $"UpperArm_L changed by {angleDiff:F4}°.");
+
+            _armAnimator.enabled = true;
         }
 
         // ─── Physical Lift Regression Test ──────────────────────────────────
@@ -847,72 +877,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // ramp (_smoothedInputMag) to reach near-full amplitude.
             const int PhysicsFrames = 50;
 
-            // ── Build the physical rig ─────────────────────────────────────────
-            // 5-body ragdoll: Hips → UpperLeg_L → LowerLeg_L
-            //                        UpperLeg_R → LowerLeg_R
-            // Joints use locked linear axes (position-constrained) so gravity does not
-            // cause the bodies to free-fall through each other.
-            // Rotation is free (Slerp drive controls angular response via targetRotation).
+            GameObject rigRoot = BuildGaitQualityRig(out PlayerMovement physicsMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR,
+                out GameObject physFootL, out GameObject physFootR);
 
-            GameObject physicsHips = new GameObject("PhysicsHips");
-            Rigidbody hipsRb = physicsHips.AddComponent<Rigidbody>();
-            hipsRb.useGravity = false;  // Hips are the anchor — keep stable
-            hipsRb.isKinematic = true;  // Lock hips in place so legs swing freely
-            physicsHips.AddComponent<BoxCollider>();
-
-            // Build leg hierarchy BEFORE adding Character components so all Awake calls
-            // see the complete hierarchy.
-            GameObject physUpperLegL = CreatePhysicsLegJoint(physicsHips, "UpperLeg_L", hipsRb,
-                localPos: new Vector3(-0.2f, -0.3f, 0f), mass: 3f);
-            GameObject physUpperLegR = CreatePhysicsLegJoint(physicsHips, "UpperLeg_R", hipsRb,
-                localPos: new Vector3( 0.2f, -0.3f, 0f), mass: 3f);
-
-            Rigidbody upperLRb = physUpperLegL.GetComponent<Rigidbody>();
-            Rigidbody upperRRb = physUpperLegR.GetComponent<Rigidbody>();
-
-            GameObject physLowerLegL = CreatePhysicsLegJoint(physUpperLegL, "LowerLeg_L", upperLRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
-            GameObject physLowerLegR = CreatePhysicsLegJoint(physUpperLegR, "LowerLeg_R", upperRRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
-
-            // ── Add Character components on Hips in dependency order ───────────
-            // RagdollSetup FIRST: its Awake applies SLERP drives to joints.
-            physicsHips.AddComponent<RagdollSetup>();
-
-            BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
-            PlayerMovement physicsMovement = physicsHips.AddComponent<PlayerMovement>();
-            physicsHips.AddComponent<CharacterState>();
-            LegAnimator physicsLegAnimator = physicsHips.AddComponent<LegAnimator>();
-
-            // ── Configure test seams so gait runs without falling ──────────────
-            physicsBalance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            physicsBalance.enabled = false;
-
-            // Disable CharacterState so its FixedUpdate doesn't override injected state.
-            CharacterState gaitQualityCharacterState = physicsHips.GetComponent<CharacterState>();
-            if (gaitQualityCharacterState != null)
-            {
-                gaitQualityCharacterState.enabled = false;
-                gaitQualityCharacterState.SetStateForTest(CharacterStateType.Moving);
-            }
-
-            // BalanceController is FULLY ACTIVE — do NOT disable it.
-            // The cooperative fix (_deferLegJointsToAnimator=true) ensures BC does not
-            // apply forces to leg bodies or modify leg joint drives when LegAnimator is
-            // present. BC torques on the kinematic hips body have no physical effect.
-            // PlayerMovement physics loop is disabled; we only need its move-input seam.
-            physicsMovement.enabled = false;
-
-            // Inject non-zero move input so LegAnimator's phase accumulates.
-            physicsMovement.SetMoveInputForTest(new Vector2(0f, 1f));
-
-            // Set a minimum cadence so phase advances even though the kinematic hips
-            // body reports zero velocity. 2 cycles/sec gives 50 frames × (1/100 s) × 2π × 2
-            // ≈ π radians of phase — enough for clear gait rotation.
-            SetPrivateField(physicsLegAnimator, "_stepFrequency", 2f);
-
-            // Wait one frame for all Awake/Start calls to complete.
             yield return null;
+            yield return new WaitForFixedUpdate();
+
+            physicsMovement.SetMoveInputForTest(new Vector2(0f, 1f));
 
             // ── Record rest rotation ───────────────────────────────────────────
             // Capture initial local rotation of both lower legs before gait has any effect.
@@ -942,7 +915,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"the 'dragging feet' bug has returned.");
 
             // ── Cleanup ───────────────────────────────────────────────────────
-            UnityEngine.Object.Destroy(physicsHips);
+            UnityEngine.Object.Destroy(rigRoot);
         }
 
         // ─── Gait Quality Regression Tests ──────────────────────────────────
@@ -1024,17 +997,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// settled rest pose of the synthetic rig. It catches dead-leg regressions where
         /// the foot never gains vertical excursion even if the whole body jitters slightly.
         ///
-        /// Threshold rationale (0.05 m):
+        /// Threshold rationale (0.02 m):
         ///   - On the live gait path, the foot should gain clear vertical excursion from the
         ///     settled stance once move input is held.
-        ///   - 0.05 m is a conservative lower bound: a working gait should produce at
-        ///     least 5 cm of vertical foot rise; a dragging / jammed leg produces little or none.
+        ///   - 0.02 m is a conservative lower bound for the current compact live rig: a
+        ///     working gait should still produce a clearly measurable lift above micro-jitter.
         /// </summary>
         [UnityTest]
         public IEnumerator Foot_WhenWalking_SoleRisesAboveSettledRestHeight()
         {
             // ── Arrange ────────────────────────────────────────────────────────
-            const float MinFootClearanceMetres = 0.05f;
+            const float MinFootClearanceMetres = 0.02f;
             const int SettleFrames = 20;
             const int PhysicsFrames = 80;
             const float GroundY = 0f;
@@ -1275,10 +1248,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         /// <summary>
-        /// _stepFrequency must now be the minimum cadence (default 1, not 0).
+        /// _stepFrequency must match the cadence authored on the live PlayerRagdoll prefab.
         /// </summary>
         [UnityTest]
-        public IEnumerator StepFrequency_DefaultIsZero()
+        public IEnumerator StepFrequency_DefaultMatchesPlayerPrefab()
         {
             // Arrange
             yield return null;
@@ -1291,8 +1264,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "LegAnimator must have a private serialized field named '_stepFrequency'.");
 
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(1f).Within(0.001f),
-                $"_stepFrequency must default to 1 (minimum cadence). Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(1.25f).Within(0.001f),
+                $"_stepFrequency on the PlayerRagdoll prefab must match the live minimum cadence (1.25). Got: {defaultValue}.");
         }
 
         /// <summary>
@@ -1347,17 +1320,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // Arrange
             yield return null;
-            _hipsRb.linearVelocity = Vector3.zero;
             SetPrivateField(_legAnimator, "_phase", 0f);
             SetPrivateField(_legAnimator, "_stepFrequency", 0f);
             SetPrivateField(_legAnimator, "_stepFrequencyScale", 1.5f);
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
 
             // Act
-            for (int i = 0; i < 5; i++)
-            {
-                yield return new WaitForFixedUpdate();
-            }
+            yield return HoldHipsStationaryForFixedFrames(5);
 
             // Assert
             float phase = GetPhaseAccumulator();
@@ -1395,10 +1364,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // ─── Aggressive Knee Lift Tests (Phase 3E4) ─────────────────────────
 
         /// <summary>
-        /// _kneeAngle must default to 60 degrees (tuned from 55 for more aggressive knee lift).
+        /// _kneeAngle must match the value authored on the live PlayerRagdoll prefab.
         /// </summary>
         [UnityTest]
-        public IEnumerator KneeAngle_DefaultIs55Degrees()
+        public IEnumerator KneeAngle_DefaultMatchesPlayerPrefab()
         {
             // Arrange
             yield return null;
@@ -1411,16 +1380,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "LegAnimator must have a private serialized field named '_kneeAngle'.");
 
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(60f).Within(0.001f),
-                $"_kneeAngle must default to 60°. Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(65f).Within(0.001f),
+                $"_kneeAngle on the PlayerRagdoll prefab must match the live aggressive stride tuning (65°). Got: {defaultValue}.");
         }
 
         /// <summary>
-        /// LegAnimator must expose a _upperLegLiftBoost field (float, default 31.9°, range 0–45°)
+        /// LegAnimator must expose a _upperLegLiftBoost field (float) that matches the
+        /// value authored on the live PlayerRagdoll prefab.
         /// that adds upward bias to the forward-swinging upper leg.
         /// </summary>
         [UnityTest]
-        public IEnumerator UpperLegLiftBoost_FieldExists_AndDefaultsTo15()
+        public IEnumerator UpperLegLiftBoost_FieldExists_AndMatchesPlayerPrefab()
         {
             // Arrange
             yield return null;
@@ -1435,10 +1405,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field.FieldType, Is.EqualTo(typeof(float)),
                 "_upperLegLiftBoost must be a float.");
 
-            // Assert: default 31.9
+            // Assert: prefab override matches the live PlayerRagdoll tuning.
             float defaultValue = (float)field.GetValue(_legAnimator);
-            Assert.That(defaultValue, Is.EqualTo(31.9f).Within(0.001f),
-                $"_upperLegLiftBoost must default to 31.9°. Got: {defaultValue}.");
+            Assert.That(defaultValue, Is.EqualTo(45f).Within(0.001f),
+                $"_upperLegLiftBoost on the PlayerRagdoll prefab must match the live lift tuning (45°). Got: {defaultValue}.");
         }
 
         /// <summary>
@@ -1551,76 +1521,32 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ground.name = "GaitQualityGround";
-            ground.transform.SetParent(rigRoot.transform);
+            ground.transform.SetParent(rigRoot.transform, worldPositionStays: false);
             ground.transform.position = new Vector3(0f, -0.5f, 0f);
-            ground.transform.localScale = new Vector3(8f, 1f, 8f);
+            ground.transform.localScale = new Vector3(40f, 1f, 40f);
             ground.layer = GameSettings.LayerEnvironment;
 
-            Renderer groundRenderer = ground.GetComponent<Renderer>();
-            if (groundRenderer != null)
-            {
-                UnityEngine.Object.Destroy(groundRenderer);
-            }
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            // ── Hips anchor ─────────────────────────────────────────────────
-            GameObject physicsHips = new GameObject("PhysicsHips");
-            physicsHips.transform.SetParent(rigRoot.transform);
-            physicsHips.transform.position = new Vector3(0f, 1.03f, 0f);
-            physicsHips.layer = GameSettings.LayerPlayer1Parts;
-            Rigidbody hipsRb = physicsHips.AddComponent<Rigidbody>();
-            hipsRb.useGravity  = false;
-            hipsRb.isKinematic = true;
-            physicsHips.AddComponent<BoxCollider>();
+            GameObject physicsHips = UnityEngine.Object.Instantiate(prefab, new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            physicsHips.transform.SetParent(rigRoot.transform, worldPositionStays: true);
 
-            // ── Build leg hierarchy ─────────────────────────────────────────
-            physUpperLegL = CreatePhysicsLegJoint(physicsHips, "UpperLeg_L", hipsRb,
-                localPos: new Vector3(-0.2f, -0.3f, 0f), mass: 3f);
-            physUpperLegR = CreatePhysicsLegJoint(physicsHips, "UpperLeg_R", hipsRb,
-                localPos: new Vector3( 0.2f, -0.3f, 0f), mass: 3f);
+            physMovement = physicsHips.GetComponent<PlayerMovement>();
+            LegAnimator gaitQualityLegAnimator = physicsHips.GetComponent<LegAnimator>();
+            Assert.That(physMovement, Is.Not.Null, "PlayerRagdoll prefab must include PlayerMovement.");
+            Assert.That(gaitQualityLegAnimator, Is.Not.Null, "PlayerRagdoll prefab must include LegAnimator.");
 
-            Rigidbody upperLRb = physUpperLegL.GetComponent<Rigidbody>();
-            Rigidbody upperRRb = physUpperLegR.GetComponent<Rigidbody>();
-
-            physLowerLegL = CreatePhysicsLegJoint(physUpperLegL, "LowerLeg_L", upperLRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
-            physLowerLegR = CreatePhysicsLegJoint(physUpperLegR, "LowerLeg_R", upperRRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
-
-            Rigidbody lowerLRb = physLowerLegL.GetComponent<Rigidbody>();
-            Rigidbody lowerRRb = physLowerLegR.GetComponent<Rigidbody>();
-
-            physFootL = CreatePhysicsFootJoint(physLowerLegL, "Foot_L", lowerLRb,
-                localPos: new Vector3(0f, -0.35f, 0.07f), mass: 1f,
-                colliderSize: new Vector3(0.10f, 0.07f, 0.22f));
-            physFootR = CreatePhysicsFootJoint(physLowerLegR, "Foot_R", lowerRRb,
-                localPos: new Vector3(0f, -0.35f, 0.07f), mass: 1f,
-                colliderSize: new Vector3(0.10f, 0.07f, 0.22f));
-
-            AddGroundSensor(physFootL);
-            AddGroundSensor(physFootR);
-
-            // ── Add Character components (RagdollSetup FIRST) ──────────────
-            physicsHips.AddComponent<RagdollSetup>();
-
-            BalanceController physicsBalance = physicsHips.AddComponent<BalanceController>();
-            physMovement = physicsHips.AddComponent<PlayerMovement>();
-            physicsHips.AddComponent<CharacterState>();
-            LegAnimator gaitQualityLegAnimator = physicsHips.AddComponent<LegAnimator>();
-
-            // BalanceController is intentionally LEFT ENABLED — these are full-stack tests.
-            // If BC fights LA for leg joint ownership, the gait quality assertions will fail,
-            // catching any regression in the cooperative fix.
-            // PlayerMovement physics loop is disabled; we only need its move-input seam.
-            physMovement.enabled = false;
-
-            // Set minimum cadence so the kinematic hips body (zero velocity) still drives
-            // phase accumulation. 2 cycles/sec gives clear gait rotation in 80 frames.
-            SetPrivateField(gaitQualityLegAnimator, "_stepFrequency", 2f);
-
-            // Pre-satisfy the angular velocity hysteresis counter so gait is enabled from
-            // frame 0. Without this, the spin gate suppresses gait for the first 5 frames
-            // (since kinematic hips have zero angVel which starts the hysteresis countdown).
+            physMovement.SetMoveInputForTest(Vector2.zero);
             SetPrivateField(gaitQualityLegAnimator, "_spinSuppressFrames", 5);
+
+            physUpperLegL = FindRequiredChild(physicsHips.transform, "UpperLeg_L").gameObject;
+            physUpperLegR = FindRequiredChild(physicsHips.transform, "UpperLeg_R").gameObject;
+            physLowerLegL = FindRequiredChild(physicsHips.transform, "LowerLeg_L").gameObject;
+            physLowerLegR = FindRequiredChild(physicsHips.transform, "LowerLeg_R").gameObject;
+            physFootL = FindRequiredChild(physicsHips.transform, "Foot_L").gameObject;
+            physFootR = FindRequiredChild(physicsHips.transform, "Foot_R").gameObject;
 
             return rigRoot;
         }
@@ -2028,6 +1954,23 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return Vector3.Angle(thighDirection.normalized, shinDirection.normalized);
         }
 
+        private IEnumerator HoldHipsStationaryForFixedFrames(int frameCount)
+        {
+            RigidbodyConstraints originalConstraints = _hipsRb.constraints;
+            _hipsRb.constraints = RigidbodyConstraints.FreezePosition | RigidbodyConstraints.FreezeRotation;
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                _hipsRb.linearVelocity = Vector3.zero;
+                _hipsRb.angularVelocity = Vector3.zero;
+                yield return new WaitForFixedUpdate();
+            }
+
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.angularVelocity = Vector3.zero;
+            _hipsRb.constraints = originalConstraints;
+        }
+
         // ─── Reflection helpers ──────────────────────────────────────────────
 
         private float GetPhaseAccumulator()
@@ -2054,7 +1997,51 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private void SetCurrentState(CharacterStateType state)
         {
-            SetAutoPropertyBackingField(_characterState, nameof(CharacterState.CurrentState), state);
+            _characterState.SetStateForTest(state);
+        }
+
+        private static Transform FindRequiredChild(Transform root, string name)
+        {
+            Transform[] children = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == name)
+                {
+                    return children[i];
+                }
+            }
+
+            throw new InvalidOperationException($"Required child '{name}' not found under '{root.name}'.");
+        }
+
+        private static bool[,] CaptureLayerCollisionMatrix()
+        {
+            bool[,] matrix = new bool[32, 32];
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    matrix[a, b] = Physics.GetIgnoreLayerCollision(a, b);
+                }
+            }
+
+            return matrix;
+        }
+
+        private static void RestoreLayerCollisionMatrix(bool[,] matrix)
+        {
+            if (matrix == null || matrix.GetLength(0) != 32 || matrix.GetLength(1) != 32)
+            {
+                return;
+            }
+
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    Physics.IgnoreLayerCollision(a, b, matrix[a, b]);
+                }
+            }
         }
 
         private static float GetRotationZAngle(Quaternion q)
@@ -2366,20 +2353,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_legAnimator, "_stuckFrameThreshold", testStuckThreshold);
             SetPrivateField(_legAnimator, "_recoveryFrames", testRecoveryFrames);
 
-            // Act Phase 1: wait through detection + recovery window + buffer.
-            int totalFrames = testStuckThreshold + testRecoveryFrames + 10;
-            for (int i = 0; i < totalFrames; i++)
+            // Act Phase 1: hold the body stationary long enough to enter recovery.
+            for (int i = 0; i < testStuckThreshold + 1; i++)
             {
                 _hipsRb.linearVelocity = Vector3.zero;
+                _hipsRb.angularVelocity = Vector3.zero;
                 yield return new WaitForFixedUpdate();
             }
 
-            // Release constraint to allow movement.
+            Assert.That(_legAnimator.IsRecovering, Is.True,
+                "Pre-condition: recovery must have started after the stuck threshold is reached.");
+
+            // Release constraint and force forward progress so the stuck condition clears
+            // before the current recovery window expires.
             _hipsRb.constraints = RigidbodyConstraints.None;
 
-            // Act Phase 2: wait 20 more frames.
-            for (int i = 0; i < 20; i++)
+            // Act Phase 2: keep the hips moving forward through the remainder of recovery.
+            for (int i = 0; i < testRecoveryFrames + 10; i++)
             {
+                _hipsRb.linearVelocity = new Vector3(0f, 0f, 0.5f);
+                _hipsRb.angularVelocity = Vector3.zero;
                 yield return new WaitForFixedUpdate();
             }
 

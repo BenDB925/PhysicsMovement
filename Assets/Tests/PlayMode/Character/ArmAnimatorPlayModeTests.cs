@@ -3,6 +3,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -22,6 +23,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class ArmAnimatorPlayModeTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+
         // ── Constants ─────────────────────────────────────────────────────────
 
         private const int SettleFrames    = 100;
@@ -60,14 +63,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             BuildGroundPlane();
             BuildRig();
 
-            // ── Inject stable grounded state and disable controllers so their
-            //    FixedUpdate loops do not override injected state each frame.
-            _balance        = _hipsGO.GetComponent<BalanceController>();
+            // ── Inject stable grounded state through the existing test seam while
+            //    keeping the normal runtime components present on the prefab.
+            _balance = _hipsGO.GetComponent<BalanceController>();
             _characterState = _hipsGO.GetComponent<CharacterState>();
 
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            _balance.enabled        = false;
-            _characterState.enabled = false;
 
             // Freeze hips rotation so the physics rig never accumulates yaw angular
             // velocity during the settle phase. Without this, collision bounces on the
@@ -176,29 +177,29 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             _characterState.SetStateForTest(CharacterStateType.Moving);
             _movement.SetMoveInputForTest(new Vector2(0f, 1f));
-            // DEBUG: yield mid-walk to sample SmoothedInputMag
             LegAnimator legAnim = _hipsGO.GetComponent<LegAnimator>();
             float midMag = 0f;
+            float maxAngleBefore = 0f;
             for (int dbgFrame = 0; dbgFrame < WalkFrames; dbgFrame++)
             {
                 yield return new WaitForFixedUpdate();
                 if (dbgFrame == 30) midMag = legAnim != null ? legAnim.SmoothedInputMag : -1f;
+
+                float leftAngle = _upperArmLJoint != null
+                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                    : 0f;
+                float rightAngle = _upperArmRJoint != null
+                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                    : 0f;
+
+                maxAngleBefore = Mathf.Max(maxAngleBefore, leftAngle, rightAngle);
             }
             UnityEngine.Debug.Log($"[AtIdle_DEBUG] SmoothedInputMag@frame30={midMag:F4}  LegPhase={legAnim?.Phase:F4}  CharState={_characterState.CurrentState}");
 
-            // Verify arms are not at identity (i.e., swing is active before stopping).
-            float leftAngleBefore  = _upperArmLJoint != null
-                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
-                : 0f;
-            float rightAngleBefore = _upperArmRJoint != null
-                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
-                : 0f;
-
-            // Precondition: at least one arm should be non-identity after walking.
-            float maxAngleBefore = Mathf.Max(leftAngleBefore, rightAngleBefore);
+            // Precondition: at least one arm should leave identity during the walk window.
             Assert.That(maxAngleBefore, Is.GreaterThan(1f),
-                $"Pre-condition: at least one arm should be non-identity after walking. " +
-                $"Max angle from identity = {maxAngleBefore:F2}°. " +
+                $"Pre-condition: at least one arm should leave identity during walking. " +
+                $"Max angle from identity during walk = {maxAngleBefore:F2}°. " +
                 "ArmAnimator may not be applying swing — check LegAnimator gait is running.");
 
             // Act — stop input.
@@ -264,55 +265,35 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private void BuildRig()
         {
-            _hipsGO = new GameObject("Hips");
-            _hipsGO.transform.position = TestOrigin + new Vector3(0f, 1.2f, 0f);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            _hipsRb                        = _hipsGO.AddComponent<Rigidbody>();
-            _hipsRb.mass                   = 10f;
-            _hipsRb.interpolation          = RigidbodyInterpolation.Interpolate;
-            _hipsRb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            _hipsGO = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hipsRb = _hipsGO.GetComponent<Rigidbody>();
+            _movement = _hipsGO.GetComponent<PlayerMovement>();
 
-            _hipsGO.AddComponent<BoxCollider>().size = new Vector3(0.26f, 0.20f, 0.15f);
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab must include Rigidbody on root hips.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab must include PlayerMovement.");
 
-            // ── Left Leg ─────────────────────────────────────────────────────
-            var upperLegL = CreateCapsule("UpperLeg_L", _hipsGO, new Vector3(-0.10f, -0.22f, 0f), 4f);
-            ConfigureJoint(upperLegL, _hipsRb, 1200f, 120f);
-            var lowerLegL = CreateCapsule("LowerLeg_L", upperLegL, new Vector3(0f, -0.38f, 0f), 2.5f);
-            ConfigureJoint(lowerLegL, upperLegL.GetComponent<Rigidbody>(), 1200f, 120f);
-            var footL = CreateBox("Foot_L", lowerLegL, new Vector3(0f, -0.35f, 0.07f), 1f, new Vector3(0.10f, 0.07f, 0.22f));
-            ConfigureJoint(footL, lowerLegL.GetComponent<Rigidbody>(), 300f, 30f);
-            AddGroundSensor(footL);
-
-            // ── Right Leg ────────────────────────────────────────────────────
-            var upperLegR = CreateCapsule("UpperLeg_R", _hipsGO, new Vector3(0.10f, -0.22f, 0f), 4f);
-            ConfigureJoint(upperLegR, _hipsRb, 1200f, 120f);
-            var lowerLegR = CreateCapsule("LowerLeg_R", upperLegR, new Vector3(0f, -0.38f, 0f), 2.5f);
-            ConfigureJoint(lowerLegR, upperLegR.GetComponent<Rigidbody>(), 1200f, 120f);
-            var footR = CreateBox("Foot_R", lowerLegR, new Vector3(0f, -0.35f, 0.07f), 1f, new Vector3(0.10f, 0.07f, 0.22f));
-            ConfigureJoint(footR, lowerLegR.GetComponent<Rigidbody>(), 300f, 30f);
-            AddGroundSensor(footR);
-
-            // ── Left Arm ─────────────────────────────────────────────────────
-            var upperArmLGO = CreateCapsule("UpperArm_L", _hipsGO, new Vector3(-0.18f, 0.22f, 0f), 2f);
-            _upperArmLJoint = ConfigureJointReturn(upperArmLGO, _hipsRb, 800f, 80f);
-            var lowerArmLGO = CreateCapsule("LowerArm_L", upperArmLGO, new Vector3(0f, -0.28f, 0f), 1f);
-            ConfigureJoint(lowerArmLGO, upperArmLGO.GetComponent<Rigidbody>(), 300f, 30f);
-
-            // ── Right Arm ────────────────────────────────────────────────────
-            var upperArmRGO = CreateCapsule("UpperArm_R", _hipsGO, new Vector3(0.18f, 0.22f, 0f), 2f);
-            _upperArmRJoint = ConfigureJointReturn(upperArmRGO, _hipsRb, 800f, 80f);
-            var lowerArmRGO = CreateCapsule("LowerArm_R", upperArmRGO, new Vector3(0f, -0.28f, 0f), 1f);
-            ConfigureJoint(lowerArmRGO, upperArmRGO.GetComponent<Rigidbody>(), 300f, 30f);
-
-            // ── Components ───────────────────────────────────────────────────
-            _hipsGO.AddComponent<RagdollSetup>();
-            _hipsGO.AddComponent<BalanceController>();
-            _hipsGO.AddComponent<CharacterState>();
-            _movement = _hipsGO.AddComponent<PlayerMovement>();
-            _hipsGO.AddComponent<LegAnimator>();
-            _hipsGO.AddComponent<ArmAnimator>();
+            _upperArmLJoint = FindRequiredJoint(_hipsGO, "UpperArm_L");
+            _upperArmRJoint = FindRequiredJoint(_hipsGO, "UpperArm_R");
 
             _movement.SetMoveInputForTest(Vector2.zero);
+        }
+
+        private static ConfigurableJoint FindRequiredJoint(GameObject root, string name)
+        {
+            ConfigurableJoint[] joints = root.GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
+            for (int i = 0; i < joints.Length; i++)
+            {
+                if (joints[i].gameObject.name == name)
+                {
+                    return joints[i];
+                }
+            }
+
+            throw new System.InvalidOperationException($"Required joint '{name}' not found under '{root.name}'.");
         }
 
         private static GameObject CreateCapsule(string name, GameObject parent,

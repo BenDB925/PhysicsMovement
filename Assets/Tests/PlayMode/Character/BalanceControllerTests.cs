@@ -1,19 +1,31 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
+using PhysicsDrivenMovement.Character;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
-using PhysicsDrivenMovement.Character;
 
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// PlayMode integration tests for <see cref="BalanceController"/>.
-    /// These tests build a minimal Hips + two Foot setup at runtime and verify that
-    /// the BalanceController correctly tracks ground state, fallen state, and facing direction.
-    /// PlayMode is required because tests rely on Awake, FixedUpdate, and Rigidbody physics.
+    /// PlayMode regression tests for BalanceController using the real PlayerRagdoll prefab.
+    /// These checks keep the original posture and API intent while avoiding hips-only rigs.
     /// </summary>
     public class BalanceControllerTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private static readonly Vector3 TestOrigin = new Vector3(0f, 0f, 2200f);
+
+        private GameObject _instance;
+        private BalanceController _balance;
+        private PlayerMovement _movement;
+        private CharacterState _characterState;
+        private LegAnimator _legAnimator;
+        private ArmAnimator _armAnimator;
+        private RagdollSetup _ragdollSetup;
+        private Rigidbody _hipsRb;
+
         private float _originalFixedDeltaTime;
         private int _originalSolverIterations;
         private int _originalSolverVelocityIterations;
@@ -26,307 +38,209 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _originalSolverIterations = Physics.defaultSolverIterations;
             _originalSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
             _originalLayerCollisionMatrix = CaptureLayerCollisionMatrix();
+
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
         }
 
         [TearDown]
         public void TearDown()
         {
+            if (_instance != null)
+            {
+                Object.Destroy(_instance);
+            }
+
             Time.fixedDeltaTime = _originalFixedDeltaTime;
             Physics.defaultSolverIterations = _originalSolverIterations;
             Physics.defaultSolverVelocityIterations = _originalSolverVelocityIterations;
             RestoreLayerCollisionMatrix(_originalLayerCollisionMatrix);
         }
 
-        // ─── Helpers ─────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Builds a minimal ragdoll Hips GameObject with:
-        ///   - Rigidbody (physics body)
-        ///   - Two child foot GameObjects, each with GroundSensor attached
-        ///   - BalanceController on the Hips
-        /// Returns references to the key components.
-        /// </summary>
-        private static BalanceController CreateMinimalHips(
-            out Rigidbody hipsRb,
-            out GameObject hipsGo)
-        {
-            hipsGo = new GameObject("TestHips");
-            // Place high enough that the feet won't accidentally hit anything.
-            hipsGo.transform.position = new Vector3(0f, 100f, 0f);
-
-            hipsRb = hipsGo.AddComponent<Rigidbody>();
-            hipsRb.isKinematic = true;   // Kinematic during setup so we control pose.
-            hipsGo.AddComponent<BoxCollider>();
-
-            // Add two foot children, each with a GroundSensor.
-            // Sensors will report false (nothing to hit at height 100).
-            for (int i = 0; i < 2; i++)
-            {
-                GameObject foot = new GameObject(i == 0 ? "Foot_L" : "Foot_R");
-                foot.transform.SetParent(hipsGo.transform);
-                foot.transform.localPosition = new Vector3(i == 0 ? -0.1f : 0.1f, -0.4f, 0f);
-                foot.AddComponent<Rigidbody>();
-                foot.AddComponent<BoxCollider>();
-                foot.AddComponent<GroundSensor>();
-            }
-
-            // BalanceController LAST — its Awake searches for GroundSensor children.
-            BalanceController bc = hipsGo.AddComponent<BalanceController>();
-            return bc;
-        }
-
-        // ─── FIX 1: _kP default value test ───────────────────────────────────
-
-        /// <summary>
-        /// Verifies that the default value of the upright proportional gain (_kP) is at
-        /// least 2000. A value of 800 was too weak to counteract the forward lean from
-        /// the move force, causing the character to hunch. Raising to 2000 gives enough
-        /// upright authority.
-        ///
-        /// The field is private+serialized so we read it via reflection. This test will
-        /// fail (and alert us) if someone accidentally reduces _kP below 2000 in future.
-        /// </summary>
         [UnityTest]
         public IEnumerator KP_DefaultValue_IsAtLeast2000()
         {
-            // Arrange — create a fresh BalanceController with no manual field overrides.
-            BalanceController bc = CreateMinimalHips(out _, out GameObject hipsGo);
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(2);
 
-            yield return new WaitForFixedUpdate();
-
-            // Act — read _kP via reflection (it is a private serialized field).
-            System.Reflection.FieldInfo field = typeof(BalanceController)
-                .GetField("_kP",
-                          System.Reflection.BindingFlags.NonPublic |
-                          System.Reflection.BindingFlags.Instance);
+            FieldInfo field = typeof(BalanceController).GetField(
+                "_kP",
+                BindingFlags.NonPublic | BindingFlags.Instance);
 
             Assert.That(field, Is.Not.Null,
-                "_kP field must exist in BalanceController. " +
-                "If it was renamed, update this test.");
+                "_kP field must exist in BalanceController. If it was renamed, update this test.");
 
-            float kP = (float)field.GetValue(bc);
-
-            // Assert
+            float kP = (float)field.GetValue(_balance);
             Assert.That(kP, Is.GreaterThanOrEqualTo(2000f),
-                $"BalanceController._kP default must be >= 2000 to give the character " +
-                $"sufficient upright authority against move-force lean. " +
-                $"Found {kP}. Was it accidentally reset to the old 800 default?");
-
-            Object.Destroy(hipsGo);
+                $"BalanceController._kP default must be >= 2000 for production upright authority. Found {kP}.");
         }
 
-        // ─── IsGrounded ───────────────────────────────────────────────────────
-
-        /// <summary>
-        /// When neither foot sensor detects ground, IsGrounded must be false.
-        /// </summary>
         [UnityTest]
         public IEnumerator IsGrounded_WhenNoFootOnGround_ReturnsFalse()
         {
-            // Arrange — hips at height 100; no ground geometry nearby.
-            BalanceController bc = CreateMinimalHips(out _, out GameObject hipsGo);
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(2);
 
-            // Act — allow at least one FixedUpdate.
-            yield return new WaitForFixedUpdate();
-
-            // Assert
-            Assert.That(bc.IsGrounded, Is.False,
-                "Neither foot can reach a ground surface at height 100; IsGrounded must be false.");
-
-            Object.Destroy(hipsGo);
+            Assert.That(_balance.IsGrounded, Is.False,
+                "The real ragdoll should report not grounded when spawned high above any environment ground.");
         }
 
-        // ─── IsFallen ─────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// When the Hips is upright (no rotation), IsFallen must be false.
-        /// </summary>
         [UnityTest]
         public IEnumerator IsFallen_WhenHipsUpright_ReturnsFalse()
         {
-            // Arrange
-            BalanceController bc = CreateMinimalHips(out Rigidbody _, out GameObject hipsGo);
-            // Set transform.rotation directly so transform.up reflects the pose instantly.
-            hipsGo.transform.rotation = Quaternion.identity;   // Perfectly upright.
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return EvaluateFallenStateAtRotation(Quaternion.identity);
 
-            // Act
-            yield return new WaitForFixedUpdate();
-
-            // Assert
-            Assert.That(bc.IsFallen, Is.False,
-                "Hips aligned with world-up (0° tilt) should not be considered fallen.");
-
-            Object.Destroy(hipsGo);
+            Assert.That(_balance.IsFallen, Is.False,
+                "An upright PlayerRagdoll root should not be considered fallen.");
         }
 
-        /// <summary>
-        /// When the Hips is tilted well beyond the default fallen-enter threshold,
-        /// IsFallen must be true.
-        /// </summary>
         [UnityTest]
         public IEnumerator IsFallen_WhenHipsTiltedBeyondThreshold_ReturnsTrue()
         {
-            // Arrange
-            BalanceController bc = CreateMinimalHips(out Rigidbody _, out GameObject hipsGo);
-            // Set transform.rotation directly so transform.up reflects the pose instantly.
-            // Tilt 80° around world Z — well beyond the 65° default enter threshold.
-            hipsGo.transform.rotation = Quaternion.AngleAxis(80f, Vector3.forward);
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            float enterThreshold = GetPrivateFloat("_fallenEnterAngleThreshold");
+            yield return EvaluateFallenStateAtRotation(Quaternion.AngleAxis(enterThreshold + 5f, Vector3.forward));
 
-            // Act
-            yield return new WaitForFixedUpdate();
-
-            // Assert
-            Assert.That(bc.IsFallen, Is.True,
-                "Hips tilted 80° from world-up (beyond default enter threshold) must be IsFallen = true.");
-
-            Object.Destroy(hipsGo);
+            Assert.That(_balance.IsFallen, Is.True,
+                $"A tilt above the prefab's fallen enter threshold ({enterThreshold:F1} degrees) must enter the fallen state.");
         }
 
-        /// <summary>
-        /// When the Hips is tilted below the fallen-enter threshold (65° by default),
-        /// IsFallen must be false.
-        /// We intentionally avoid testing exactly at threshold because Vector3.Angle can
-        /// return fractional values due to floating-point.
-        /// </summary>
         [UnityTest]
-        public IEnumerator IsFallen_WhenHipsTiltedAtThreshold_ReturnsFalse()
+        public IEnumerator IsFallen_WhenHipsTiltedBelowEnterThreshold_ReturnsFalse()
         {
-            // Arrange
-            BalanceController bc = CreateMinimalHips(out Rigidbody _, out GameObject hipsGo);
-            // Set transform.rotation directly so transform.up reflects the pose instantly.
-            // Tilt 59° — clearly below the 65° default enter threshold with a safe margin.
-            hipsGo.transform.rotation = Quaternion.AngleAxis(59f, Vector3.forward);
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            float enterThreshold = GetPrivateFloat("_fallenEnterAngleThreshold");
+            float belowEnterThreshold = Mathf.Max(0f, enterThreshold - 1f);
+            yield return EvaluateFallenStateAtRotation(Quaternion.AngleAxis(belowEnterThreshold, Vector3.forward));
 
-            // Act
-            yield return new WaitForFixedUpdate();
-
-            // Assert
-            Assert.That(bc.IsFallen, Is.False,
-                "Hips tilted 59° (below default enter threshold) should not be IsFallen.");
-
-            Object.Destroy(hipsGo);
+            Assert.That(_balance.IsFallen, Is.False,
+                $"A tilt below the prefab's fallen enter threshold ({enterThreshold:F1} degrees) should not mark the character as fallen.");
         }
 
-        /// <summary>
-        /// Fallen-state hysteresis must hold the fallen state while tilt remains between
-        /// enter (65°) and exit (55°), then clear only after crossing below exit.
-        /// </summary>
         [UnityTest]
         public IEnumerator IsFallen_Hysteresis_HoldsBetweenEnterAndExitThresholds()
         {
-            BalanceController bc = CreateMinimalHips(out Rigidbody _, out GameObject hipsGo);
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            float enterThreshold = GetPrivateFloat("_fallenEnterAngleThreshold");
+            float exitThreshold = GetPrivateFloat("_fallenExitAngleThreshold");
+            float betweenThresholds = (enterThreshold + exitThreshold) * 0.5f;
+            float belowExitThreshold = Mathf.Max(0f, exitThreshold - 1f);
 
-            hipsGo.transform.rotation = Quaternion.AngleAxis(80f, Vector3.forward);
-            yield return new WaitForFixedUpdate();
-            Assert.That(bc.IsFallen, Is.True,
-                "At 80° tilt, the controller should enter fallen state.");
+            yield return EvaluateFallenStateAtRotation(Quaternion.AngleAxis(enterThreshold + 5f, Vector3.forward));
+            Assert.That(_balance.IsFallen, Is.True,
+                $"Above the prefab's fallen enter threshold ({enterThreshold:F1} degrees), the real controller should enter fallen state.");
 
-            hipsGo.transform.rotation = Quaternion.AngleAxis(60f, Vector3.forward);
-            yield return new WaitForFixedUpdate();
-            Assert.That(bc.IsFallen, Is.True,
-                "At 60° (between enter and exit), fallen state should remain true due to hysteresis.");
+            yield return EvaluateFallenStateAtRotation(Quaternion.AngleAxis(betweenThresholds, Vector3.forward));
+            Assert.That(_balance.IsFallen, Is.True,
+                "Between enter and exit thresholds, fallen hysteresis should hold.");
 
-            hipsGo.transform.rotation = Quaternion.AngleAxis(54f, Vector3.forward);
-            yield return new WaitForFixedUpdate();
-            Assert.That(bc.IsFallen, Is.False,
-                "At 54° (below exit threshold), fallen state should clear.");
-
-            Object.Destroy(hipsGo);
+            yield return EvaluateFallenStateAtRotation(Quaternion.AngleAxis(belowExitThreshold, Vector3.forward));
+            Assert.That(_balance.IsFallen, Is.False,
+                $"Below the prefab's fallen exit threshold ({exitThreshold:F1} degrees), hysteresis should clear.");
         }
 
-        // ─── SetFacingDirection ───────────────────────────────────────────────
-
-        /// <summary>
-        /// Calling SetFacingDirection with a valid horizontal direction must not throw.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_WithValidDirection_DoesNotThrow()
         {
-            // Arrange
-            BalanceController bc = CreateMinimalHips(out _, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
 
-            // Act + Assert — no exception expected.
-            Assert.DoesNotThrow(() => bc.SetFacingDirection(Vector3.forward),
-                "SetFacingDirection(Vector3.forward) must not throw.");
-
-            Object.Destroy(hipsGo);
+            Assert.DoesNotThrow(() => _balance.SetFacingDirection(Vector3.forward),
+                "SetFacingDirection(Vector3.forward) must remain safe on the real prefab instance.");
         }
 
-        /// <summary>
-        /// Calling SetFacingDirection with a zero vector must be silently ignored (no throw,
-        /// no NaN in internal state). This guards against dividing by zero when normalising.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_WithZeroVector_IsIgnoredSafely()
         {
-            // Arrange
-            BalanceController bc = CreateMinimalHips(out _, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
 
-            // Act + Assert — must not throw or corrupt state.
-            Assert.DoesNotThrow(() => bc.SetFacingDirection(Vector3.zero),
-                "SetFacingDirection(Vector3.zero) must be silently ignored — not throw.");
+            Assert.DoesNotThrow(() => _balance.SetFacingDirection(Vector3.zero),
+                "SetFacingDirection(Vector3.zero) must be ignored safely on the real prefab instance.");
 
-            // Verify that subsequent IsFallen / IsGrounded reads don't produce NaN.
-            Assert.That(float.IsNaN(bc.IsGrounded ? 1f : 0f), Is.False);
-            Assert.That(float.IsNaN(bc.IsFallen ? 1f : 0f), Is.False);
-
-            Object.Destroy(hipsGo);
+            Assert.That(float.IsNaN(_balance.IsGrounded ? 1f : 0f), Is.False);
+            Assert.That(float.IsNaN(_balance.IsFallen ? 1f : 0f), Is.False);
         }
 
-        // ─── Torque application ───────────────────────────────────────────────
-
-        /// <summary>
-        /// When the Hips is not fallen and is tilted, the balance controller must apply a
-        /// corrective torque, resulting in a change to angular velocity over fixed steps.
-        /// </summary>
         [UnityTest]
         public IEnumerator FixedUpdate_WhenUprightAndTilted_AppliesCorrectionTorque()
         {
-            // Arrange — dynamic Rigidbody, tilted so a corrective torque is needed.
-            BalanceController bc = CreateMinimalHips(out Rigidbody rb, out GameObject hipsGo);
-            rb.isKinematic = false;
-            rb.rotation = Quaternion.AngleAxis(30f, Vector3.forward);   // 30° tilt, not fallen.
-            Vector3 initialAngularVelocity = rb.angularVelocity;        // Should be ~zero.
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.AngleAxis(30f, Vector3.forward));
+            _hipsRb.angularVelocity = Vector3.zero;
+            Vector3 initialAngularVelocity = _hipsRb.angularVelocity;
 
-            // Act — run a few physics steps so AddTorque has time to accumulate.
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
+            yield return WaitPhysicsFrames(3);
 
-            // Assert — angular velocity must differ from initial (torque was applied).
-            Assert.That(rb.angularVelocity, Is.Not.EqualTo(initialAngularVelocity),
-                "A 30° tilt (below fallen threshold) should cause the balance controller to " +
-                "apply corrective torque, changing the Rigidbody's angular velocity.");
-
-            Object.Destroy(hipsGo);
+            Assert.That(_hipsRb.angularVelocity, Is.Not.EqualTo(initialAngularVelocity),
+                "A 30 degree tilt on the real ragdoll should produce corrective angular motion.");
         }
 
-        /// <summary>
-        /// When the Hips is fallen (tilt >60°), the balance controller must NOT apply torque.
-        /// Angular velocity should remain near zero (within floating-point noise).
-        /// </summary>
         [UnityTest]
-        public IEnumerator FixedUpdate_WhenFallen_DoesNotApplyTorque()
+        public IEnumerator FixedUpdate_WhenFallen_DoesNotChangeKinematicAngularVelocity()
         {
-            // Arrange — kinematic so gravity doesn't change things; fallen pose.
-            BalanceController bc = CreateMinimalHips(out Rigidbody rb, out GameObject hipsGo);
-            rb.isKinematic = true;
-            // Set transform.rotation directly so transform.up reflects the pose instantly.
-            hipsGo.transform.rotation = Quaternion.AngleAxis(80f, Vector3.forward);  // Fallen.
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.AngleAxis(80f, Vector3.forward));
+            _hipsRb.isKinematic = true;
+            Vector3 angularVelocityBefore = _hipsRb.angularVelocity;
 
-            Vector3 angularVelocityBefore = rb.angularVelocity;
+            yield return WaitPhysicsFrames(1);
 
-            // Act
-            yield return new WaitForFixedUpdate();
+            Assert.That(_hipsRb.angularVelocity, Is.EqualTo(angularVelocityBefore),
+                "A kinematic hips body should keep its angular velocity unchanged during fallen-pose updates.");
+        }
 
-            // Assert — a kinematic body's angularVelocity should stay zero because
-            // AddTorque on a kinematic Rigidbody has no effect.
-            Assert.That(rb.angularVelocity, Is.EqualTo(angularVelocityBefore),
-                "IsFallen = true must skip torque application; angular velocity must be unchanged.");
+        private void SpawnCharacter(Vector3 position, Quaternion rotation)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
-            Object.Destroy(hipsGo);
+            _instance = Object.Instantiate(prefab, position, rotation);
+            Assert.That(_instance, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
+
+            _balance = _instance.GetComponent<BalanceController>();
+            _movement = _instance.GetComponent<PlayerMovement>();
+            _characterState = _instance.GetComponent<CharacterState>();
+            _legAnimator = _instance.GetComponent<LegAnimator>();
+            _armAnimator = _instance.GetComponent<ArmAnimator>();
+            _ragdollSetup = _instance.GetComponent<RagdollSetup>();
+            _hipsRb = _instance.GetComponent<Rigidbody>();
+
+            Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab is missing BalanceController.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
+            Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
+            Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing LegAnimator.");
+            Assert.That(_armAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing ArmAnimator.");
+            Assert.That(_ragdollSetup, Is.Not.Null, "PlayerRagdoll prefab is missing RagdollSetup.");
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab is missing the hips Rigidbody.");
+
+            _movement.SetMoveInputForTest(Vector2.zero);
+        }
+
+        private static IEnumerator WaitPhysicsFrames(int frameCount)
+        {
+            for (int i = 0; i < frameCount; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+        }
+
+        private IEnumerator EvaluateFallenStateAtRotation(Quaternion rotation)
+        {
+            _hipsRb.angularVelocity = Vector3.zero;
+            _hipsRb.isKinematic = true;
+            _hipsRb.rotation = rotation;
+            yield return WaitPhysicsFrames(1);
+        }
+
+        private float GetPrivateFloat(string fieldName)
+        {
+            FieldInfo field = typeof(BalanceController).GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(field, Is.Not.Null,
+                $"{fieldName} field must exist in BalanceController. If it was renamed, update this test.");
+
+            return (float)field.GetValue(_balance);
         }
 
         private static bool[,] CaptureLayerCollisionMatrix()

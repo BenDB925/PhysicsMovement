@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
+using UnityEditor;
 
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
@@ -16,6 +17,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class RagdollSetupTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+
         private float _originalFixedDeltaTime;
         private int _originalSolverIterations;
         private int _originalSolverVelocityIterations;
@@ -48,29 +51,19 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// </summary>
         private static RagdollSetup CreateMinimalRagdoll(out Collider hipCollider, out Collider torsoCollider)
         {
-            // ── Hips (root) ──
-            GameObject hips    = new GameObject("TestHips");
-            Rigidbody  hipsRb  = hips.AddComponent<Rigidbody>();
-            hipCollider        = hips.AddComponent<BoxCollider>();
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            // ── Torso (child) — fully wired BEFORE adding RagdollSetup so that
-            //    Awake() sees the complete hierarchy when AddComponent fires it. ──
-            GameObject torso   = new GameObject("TestTorso");
-            torso.transform.SetParent(hips.transform);
-            torso.transform.localPosition = new Vector3(0f, 0.35f, 0f);
+            GameObject hips = Object.Instantiate(prefab, new Vector3(1600f, 1.1f, 1600f), Quaternion.identity);
+            hipCollider = hips.GetComponent<Collider>();
+            torsoCollider = FindRequiredChild(hips.transform, "Torso").GetComponent<Collider>();
 
-            Rigidbody torsoRb  = torso.AddComponent<Rigidbody>();
-            torsoCollider      = torso.AddComponent<BoxCollider>();
+            Assert.That(hipCollider, Is.Not.Null, "PlayerRagdoll root hips must include a collider.");
+            Assert.That(torsoCollider, Is.Not.Null, "PlayerRagdoll torso must include a collider.");
 
-            ConfigurableJoint joint = torso.AddComponent<ConfigurableJoint>();
-            joint.connectedBody = hipsRb;
-            joint.xMotion       = ConfigurableJointMotion.Locked;
-            joint.yMotion       = ConfigurableJointMotion.Locked;
-            joint.zMotion       = ConfigurableJointMotion.Locked;
-
-            // DESIGN: Add RagdollSetup LAST so its Awake() runs against the complete
-            //         hierarchy. AddComponent triggers Awake immediately on an active GO.
-            RagdollSetup setup = hips.AddComponent<RagdollSetup>();
+            RagdollSetup setup = hips.GetComponent<RagdollSetup>();
+            Assert.That(setup, Is.Not.Null, "PlayerRagdoll prefab must include RagdollSetup.");
             return setup;
         }
 
@@ -81,63 +74,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// </summary>
         private static RagdollSetup CreateRagdollWithLowerLegs()
         {
-            // ── Hips (root) ──
-            GameObject hips   = new GameObject("TestHips_LL");
-            Rigidbody  hipsRb = hips.AddComponent<Rigidbody>();
-            hips.AddComponent<BoxCollider>();
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            // ── UpperLeg_L ──
-            GameObject upperLegL  = new GameObject("UpperLeg_L");
-            upperLegL.transform.SetParent(hips.transform);
-            upperLegL.transform.localPosition = new Vector3(-0.1f, -0.22f, 0f);
-            Rigidbody upperLegLRb = upperLegL.AddComponent<Rigidbody>();
-            upperLegL.AddComponent<CapsuleCollider>();
-            ConfigurableJoint ulJointL = upperLegL.AddComponent<ConfigurableJoint>();
-            ulJointL.connectedBody = hipsRb;
-            ulJointL.xMotion = ConfigurableJointMotion.Locked;
-            ulJointL.yMotion = ConfigurableJointMotion.Locked;
-            ulJointL.zMotion = ConfigurableJointMotion.Locked;
-
-            // ── LowerLeg_L — start on Player1Parts (8), RagdollSetup should move to 13 ──
-            GameObject lowerLegL  = new GameObject("LowerLeg_L");
-            lowerLegL.transform.SetParent(upperLegL.transform);
-            lowerLegL.transform.localPosition = new Vector3(0f, -0.38f, 0f);
-            lowerLegL.layer = GameSettings.LayerPlayer1Parts;
-            lowerLegL.AddComponent<Rigidbody>();
-            lowerLegL.AddComponent<CapsuleCollider>();
-            ConfigurableJoint llJointL = lowerLegL.AddComponent<ConfigurableJoint>();
-            llJointL.connectedBody = upperLegLRb;
-            llJointL.xMotion = ConfigurableJointMotion.Locked;
-            llJointL.yMotion = ConfigurableJointMotion.Locked;
-            llJointL.zMotion = ConfigurableJointMotion.Locked;
-
-            // ── UpperLeg_R ──
-            GameObject upperLegR  = new GameObject("UpperLeg_R");
-            upperLegR.transform.SetParent(hips.transform);
-            upperLegR.transform.localPosition = new Vector3(0.1f, -0.22f, 0f);
-            Rigidbody upperLegRRb = upperLegR.AddComponent<Rigidbody>();
-            upperLegR.AddComponent<CapsuleCollider>();
-            ConfigurableJoint ulJointR = upperLegR.AddComponent<ConfigurableJoint>();
-            ulJointR.connectedBody = hipsRb;
-            ulJointR.xMotion = ConfigurableJointMotion.Locked;
-            ulJointR.yMotion = ConfigurableJointMotion.Locked;
-            ulJointR.zMotion = ConfigurableJointMotion.Locked;
-
-            // ── LowerLeg_R — start on Player1Parts (8), RagdollSetup should move to 13 ──
-            GameObject lowerLegR  = new GameObject("LowerLeg_R");
-            lowerLegR.transform.SetParent(upperLegR.transform);
-            lowerLegR.transform.localPosition = new Vector3(0f, -0.38f, 0f);
-            lowerLegR.layer = GameSettings.LayerPlayer1Parts;
-            lowerLegR.AddComponent<Rigidbody>();
-            lowerLegR.AddComponent<CapsuleCollider>();
-            ConfigurableJoint llJointR = lowerLegR.AddComponent<ConfigurableJoint>();
-            llJointR.connectedBody = upperLegRRb;
-            llJointR.xMotion = ConfigurableJointMotion.Locked;
-            llJointR.yMotion = ConfigurableJointMotion.Locked;
-            llJointR.zMotion = ConfigurableJointMotion.Locked;
-
-            // DESIGN: RagdollSetup added LAST so Awake runs against the completed hierarchy.
-            RagdollSetup setup = hips.AddComponent<RagdollSetup>();
+            GameObject hips = Object.Instantiate(prefab, new Vector3(1610f, 1.1f, 1610f), Quaternion.identity);
+            RagdollSetup setup = hips.GetComponent<RagdollSetup>();
+            Assert.That(setup, Is.Not.Null, "PlayerRagdoll prefab must include RagdollSetup.");
             return setup;
         }
 
@@ -159,8 +102,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Assert
             Assert.That(setup.AllBodies, Is.Not.Null,
                 "AllBodies should be populated after Awake.");
-            Assert.That(setup.AllBodies.Count, Is.EqualTo(2),
-                "A two-body ragdoll should report exactly 2 Rigidbodies.");
+            Assert.That(setup.AllBodies.Count, Is.GreaterThan(2),
+                "The real PlayerRagdoll should report multiple rigidbody segments in AllBodies.");
+            Assert.That(ContainsBodyNamed(setup, setup.gameObject.name), Is.True,
+                "AllBodies should include the root hips rigidbody from the real PlayerRagdoll.");
+            Assert.That(ContainsBodyNamed(setup, "Torso"), Is.True,
+                "AllBodies should include the torso rigidbody from the real PlayerRagdoll.");
 
             // Cleanup
             Object.Destroy(setup.gameObject);
@@ -344,6 +291,33 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     Physics.IgnoreLayerCollision(a, b, matrix[a, b]);
                 }
             }
+        }
+
+        private static Transform FindRequiredChild(Transform root, string name)
+        {
+            Transform[] children = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == name)
+                {
+                    return children[i];
+                }
+            }
+
+            throw new System.InvalidOperationException($"Required child '{name}' not found under '{root.name}'.");
+        }
+
+        private static bool ContainsBodyNamed(RagdollSetup setup, string bodyName)
+        {
+            for (int i = 0; i < setup.AllBodies.Count; i++)
+            {
+                if (setup.AllBodies[i] != null && setup.AllBodies[i].gameObject.name == bodyName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

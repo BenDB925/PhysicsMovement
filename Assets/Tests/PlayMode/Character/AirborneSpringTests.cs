@@ -3,6 +3,7 @@ using System.Collections;
 using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -31,14 +32,22 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class AirborneSpringTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private static readonly Vector3 TestOrigin = new Vector3(1200f, 0f, 1200f);
+
         // ── Test Rig ────────────────────────────────────────────────────────
 
+        private GameObject _ground;
         private GameObject _hips;
         private Rigidbody _hipsRb;
         private BalanceController _balance;
         private PlayerMovement _movement;
         private CharacterState _characterState;
         private LegAnimator _legAnimator;
+        private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
+        private bool[,] _savedLayerCollisionMatrix;
 
         // Leg joints (created as children of Hips in the same topology used by runtime)
         private GameObject _upperLegL;
@@ -53,53 +62,52 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [SetUp]
         public void SetUp()
         {
-            // ── Hips anchor ──────────────────────────────────────────────
-            _hips = new GameObject("Hips");
-            _hipsRb = _hips.AddComponent<Rigidbody>();
-            _hipsRb.useGravity  = false;
-            _hipsRb.isKinematic = true;
-            _hips.AddComponent<BoxCollider>();
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            _savedLayerCollisionMatrix = CaptureLayerCollisionMatrix();
 
-            // ── Leg hierarchy (physics joints with gravity so RagdollSetup applies
-            //    its authoritative spring values, mirroring the runtime setup) ──────
-            _upperLegL = CreatePhysicsLegJoint(_hips, "UpperLeg_L", _hipsRb,
-                localPos: new Vector3(-0.2f, -0.3f, 0f), mass: 3f);
-            _upperLegR = CreatePhysicsLegJoint(_hips, "UpperLeg_R", _hipsRb,
-                localPos: new Vector3( 0.2f, -0.3f, 0f), mass: 3f);
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
 
-            Rigidbody upperLRb = _upperLegL.GetComponent<Rigidbody>();
-            Rigidbody upperRRb = _upperLegR.GetComponent<Rigidbody>();
+            _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _ground.name = "AirborneSpringTests_Ground";
+            _ground.transform.position = TestOrigin + new Vector3(0f, -0.5f, 0f);
+            _ground.transform.localScale = new Vector3(40f, 1f, 40f);
+            _ground.layer = PhysicsDrivenMovement.Core.GameSettings.LayerEnvironment;
 
-            _lowerLegL = CreatePhysicsLegJoint(_upperLegL, "LowerLeg_L", upperLRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
-            _lowerLegR = CreatePhysicsLegJoint(_upperLegR, "LowerLeg_R", upperRRb,
-                localPos: new Vector3(0f, -0.35f, 0f), mass: 2.5f);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
+
+            _hips = UnityEngine.Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hipsRb = _hips.GetComponent<Rigidbody>();
+            _balance = _hips.GetComponent<BalanceController>();
+            _movement = _hips.GetComponent<PlayerMovement>();
+            _characterState = _hips.GetComponent<CharacterState>();
+            _legAnimator = _hips.GetComponent<LegAnimator>();
+
+            _upperLegL = FindRequiredChild(_hips.transform, "UpperLeg_L").gameObject;
+            _upperLegR = FindRequiredChild(_hips.transform, "UpperLeg_R").gameObject;
+            _lowerLegL = FindRequiredChild(_hips.transform, "LowerLeg_L").gameObject;
+            _lowerLegR = FindRequiredChild(_hips.transform, "LowerLeg_R").gameObject;
 
             _upperLegLJoint = _upperLegL.GetComponent<ConfigurableJoint>();
             _upperLegRJoint = _upperLegR.GetComponent<ConfigurableJoint>();
             _lowerLegLJoint = _lowerLegL.GetComponent<ConfigurableJoint>();
             _lowerLegRJoint = _lowerLegR.GetComponent<ConfigurableJoint>();
 
-            // ── Character components (RagdollSetup FIRST — applies spring values
-            //    in Awake before LegAnimator.Start captures the baseline) ────────────
-            _hips.AddComponent<RagdollSetup>();
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab must include a root Rigidbody.");
+            Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab must include BalanceController.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab must include PlayerMovement.");
+            Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab must include CharacterState.");
+            Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab must include LegAnimator.");
 
-            _balance       = _hips.AddComponent<BalanceController>();
-            _movement      = _hips.AddComponent<PlayerMovement>();
-            _characterState = _hips.AddComponent<CharacterState>();
-            _legAnimator   = _hips.AddComponent<LegAnimator>();
-
-            // ── Inject stable initial state BEFORE any physics tick ──────────────
-            // Start grounded so CharacterState initialises to Standing.
-            // CharacterState.Awake sets CurrentState = Standing; this seam ensures
-            // BalanceController.IsGrounded returns true from frame 0 onward.
+            _movement.SetMoveInputForTest(Vector2.zero);
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
-
-            // Disable BalanceController, PlayerMovement, and CharacterState so their
-            // FixedUpdate loops do not override injected state. LegAnimator stays enabled.
-            _balance.enabled = false;
-            _movement.enabled = false;
-            _characterState.enabled = false;
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            SetPrivateField(_legAnimator, "_spinSuppressFrames", 5);
         }
 
         [TearDown]
@@ -109,6 +117,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 UnityEngine.Object.Destroy(_hips);
             }
+
+            if (_ground != null)
+            {
+                UnityEngine.Object.Destroy(_ground);
+            }
+
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
+            RestoreLayerCollisionMatrix(_savedLayerCollisionMatrix);
         }
 
         // ── Test 1: Airborne reduces leg spring ──────────────────────────────
@@ -364,6 +382,50 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     $"Missing expected private field '{fieldName}' on {instance.GetType().Name}.");
             }
             field.SetValue(instance, value);
+        }
+
+        private static Transform FindRequiredChild(Transform root, string name)
+        {
+            Transform[] children = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == name)
+                {
+                    return children[i];
+                }
+            }
+
+            throw new InvalidOperationException($"Required child '{name}' not found under '{root.name}'.");
+        }
+
+        private static bool[,] CaptureLayerCollisionMatrix()
+        {
+            bool[,] matrix = new bool[32, 32];
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    matrix[a, b] = Physics.GetIgnoreLayerCollision(a, b);
+                }
+            }
+
+            return matrix;
+        }
+
+        private static void RestoreLayerCollisionMatrix(bool[,] matrix)
+        {
+            if (matrix == null || matrix.GetLength(0) != 32 || matrix.GetLength(1) != 32)
+            {
+                return;
+            }
+
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    Physics.IgnoreLayerCollision(a, b, matrix[a, b]);
+                }
+            }
         }
 
         // ── GAP-3: Multi-cycle spring restoration ────────────────────────────

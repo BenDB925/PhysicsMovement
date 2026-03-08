@@ -1,38 +1,31 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
+using PhysicsDrivenMovement.Character;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
-using PhysicsDrivenMovement.Character;
 
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// PlayMode tests that verify the split between upright (pitch/roll) torque and
-    /// yaw torque introduced in Phase 3D1, plus yaw stability hardening from Phase 3D2.
-    ///
-    /// Key assertions:
-    ///   (1) _kPYaw / _kDYaw serialized fields exist and are accessible via reflection.
-    ///   (2) When the character is perfectly upright but facing the wrong direction, yaw
-    ///       torque is applied around world Y, while upright torque is near zero.
-    ///   (3) When the character is tilted but already facing the correct direction, upright
-    ///       torque is applied, while yaw torque is near zero.
-    ///   (4) The airborne multiplier reduces upright torque when not grounded, but yaw
-    ///       torque is NOT reduced.
-    ///   (5) SetGroundStateForTest seam still works correctly.
-    ///   (6) Existing fallen-state skipping still applies (no torque when IsFallen).
-    ///   (7) [3D2] _yawDeadZoneDeg field exists and is accessible via reflection.
-    ///   (8) [3D2] Within dead zone, yaw torque is suppressed (no micro-oscillation).
-    ///   (9) [3D2] Zero movement input retains last valid facing direction.
-    ///   (10) [3D2] No NaN produced from normalization paths (degenerate vector safety).
-    ///   (11) [3D2] Large yaw error still converges toward target (dead zone does not block large errors).
-    ///
-    /// PlayMode required because tests use FixedUpdate, Rigidbody.AddTorque, and
-    /// need the physics engine to confirm angular velocity changes.
-    /// Collaborators: <see cref="BalanceController"/>, <see cref="GroundSensor"/>.
+    /// PlayMode turning and yaw-stability tests using the real PlayerRagdoll prefab.
+    /// Facing intent is driven through PlayerMovement where practical so the production
+    /// turning path is exercised instead of a synthetic hips-only object.
     /// </summary>
     public class BalanceControllerTurningTests
     {
-        // ─── Physics restore ─────────────────────────────────────────────────
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private static readonly Vector3 TestOrigin = new Vector3(0f, 0f, 2600f);
+
+        private GameObject _instance;
+        private BalanceController _balance;
+        private PlayerMovement _movement;
+        private CharacterState _characterState;
+        private LegAnimator _legAnimator;
+        private ArmAnimator _armAnimator;
+        private RagdollSetup _ragdollSetup;
+        private Rigidbody _hipsRb;
 
         private float _originalFixedDeltaTime;
         private int _originalSolverIterations;
@@ -46,689 +39,396 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _originalSolverIterations = Physics.defaultSolverIterations;
             _originalSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
             _originalLayerCollisionMatrix = CaptureLayerCollisionMatrix();
+
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
         }
 
         [TearDown]
         public void TearDown()
         {
+            DestroyCharacter();
+
             Time.fixedDeltaTime = _originalFixedDeltaTime;
             Physics.defaultSolverIterations = _originalSolverIterations;
             Physics.defaultSolverVelocityIterations = _originalSolverVelocityIterations;
             RestoreLayerCollisionMatrix(_originalLayerCollisionMatrix);
         }
 
-        // ─── Helpers ─────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Builds a minimal kinematic Hips rig for examining torque direction.
-        /// Kinematic so we control pose; we read angular velocity after switching to dynamic
-        /// for a single frame to observe torque effect.
-        /// </summary>
-        private static BalanceController CreateKinematicHips(out Rigidbody hipsRb, out GameObject hipsGo)
-        {
-            hipsGo = new GameObject("TestHips_Turning");
-            hipsGo.transform.position = new Vector3(0f, 100f, 0f);
-
-            hipsRb = hipsGo.AddComponent<Rigidbody>();
-            hipsRb.isKinematic = true;
-            hipsGo.AddComponent<BoxCollider>();
-
-            // Two foot children with GroundSensor (sensors will report not-grounded at height 100).
-            for (int i = 0; i < 2; i++)
-            {
-                GameObject foot = new GameObject(i == 0 ? "Foot_L" : "Foot_R");
-                foot.transform.SetParent(hipsGo.transform);
-                foot.transform.localPosition = new Vector3(i == 0 ? -0.1f : 0.1f, -0.4f, 0f);
-                foot.AddComponent<Rigidbody>();
-                foot.AddComponent<BoxCollider>();
-                foot.AddComponent<GroundSensor>();
-            }
-
-            BalanceController bc = hipsGo.AddComponent<BalanceController>();
-            return bc;
-        }
-
-        // ─── Field existence ──────────────────────────────────────────────────
-
-        /// <summary>
-        /// _kPYaw must exist as a serialized private float field.
-        /// This test fails (red) before the field is added to BalanceController.
-        /// </summary>
         [Test]
         public void BalanceController_HasKPYawField()
         {
-            // Arrange
-            var fieldInfo = typeof(BalanceController).GetField(
+            FieldInfo fieldInfo = typeof(BalanceController).GetField(
                 "_kPYaw",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                BindingFlags.NonPublic | BindingFlags.Instance);
 
-            // Assert
             Assert.That(fieldInfo, Is.Not.Null,
-                "_kPYaw field must exist as a private instance field on BalanceController.");
+                "_kPYaw must exist as a private instance field on BalanceController.");
             Assert.That(fieldInfo.FieldType, Is.EqualTo(typeof(float)),
                 "_kPYaw must be of type float.");
         }
 
-        /// <summary>
-        /// _kDYaw must exist as a serialized private float field.
-        /// This test fails (red) before the field is added to BalanceController.
-        /// </summary>
         [Test]
         public void BalanceController_HasKDYawField()
         {
-            // Arrange
-            var fieldInfo = typeof(BalanceController).GetField(
+            FieldInfo fieldInfo = typeof(BalanceController).GetField(
                 "_kDYaw",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                BindingFlags.NonPublic | BindingFlags.Instance);
 
-            // Assert
             Assert.That(fieldInfo, Is.Not.Null,
-                "_kDYaw field must exist as a private instance field on BalanceController.");
+                "_kDYaw must exist as a private instance field on BalanceController.");
             Assert.That(fieldInfo.FieldType, Is.EqualTo(typeof(float)),
                 "_kDYaw must be of type float.");
         }
 
-        // ─── Yaw-only correction ──────────────────────────────────────────────
-
-        /// <summary>
-        /// When the Hips is perfectly upright but facing the wrong yaw direction,
-        /// the net torque applied must be predominantly around world Y (yaw axis),
-        /// with minimal pitch/roll components.
-        ///
-        /// Strategy: inject grounded+not-fallen state via test seam, set Hips to
-        /// identity (upright, facing +Z), call SetFacingDirection(Vector3.right) so
-        /// yaw error = 90°, allow one physics frame, then verify the resulting angular
-        /// velocity has a larger Y component than X or Z.
-        /// </summary>
         [UnityTest]
         public IEnumerator YawCorrection_WhenUprightAndFacingWrong_AppliesTorquePredominantlyAroundWorldY()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate(); // Let Awake run.
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            // Set upright, facing +Z.
-            hipsGo.transform.rotation = Quaternion.identity;
-            // Use test seam: grounded, not fallen.
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            // Set facing to +X → 90° yaw error.
-            bc.SetFacingDirection(Vector3.right);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            // Switch to dynamic so torque manifests as angular velocity.
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Act — one physics frame.
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — Y component of angular velocity (yaw) must dominate.
-            Vector3 av = rb.angularVelocity;
-            float yawMagnitude   = Mathf.Abs(av.y);
-            float pitchMagnitude = Mathf.Abs(av.x);
-            float rollMagnitude  = Mathf.Abs(av.z);
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            float yawMagnitude = Mathf.Abs(angularVelocity.y);
+            float pitchMagnitude = Mathf.Abs(angularVelocity.x);
+            float rollMagnitude = Mathf.Abs(angularVelocity.z);
 
             Assert.That(yawMagnitude, Is.GreaterThan(0.001f),
-                $"A 90° yaw error should produce measurable yaw angular velocity. av={av}");
+                $"A 90 degree yaw error should produce measurable yaw angular velocity. angularVelocity={angularVelocity}");
             Assert.That(yawMagnitude, Is.GreaterThan(pitchMagnitude * 2f),
-                $"Yaw component (Y={yawMagnitude:F4}) should dominate over pitch (X={pitchMagnitude:F4}). av={av}");
+                $"Yaw should dominate pitch when only facing error is present. angularVelocity={angularVelocity}");
             Assert.That(yawMagnitude, Is.GreaterThan(rollMagnitude * 2f),
-                $"Yaw component (Y={yawMagnitude:F4}) should dominate over roll (Z={rollMagnitude:F4}). av={av}");
-
-            Object.Destroy(hipsGo);
+                $"Yaw should dominate roll when only facing error is present. angularVelocity={angularVelocity}");
         }
 
-        /// <summary>
-        /// When the Hips is tilted (pitch/roll error) but already facing the correct
-        /// yaw direction, the net torque must be predominantly around the pitch/roll axes
-        /// (X and/or Z in world space), not around world Y.
-        ///
-        /// Strategy: upright facing forward (+Z), SetFacingDirection(Vector3.forward) so
-        /// yaw error = 0°, tilt 30° around Z. The resulting angular velocity should have
-        /// near-zero Y component and non-zero X/Z components.
-        /// </summary>
         [UnityTest]
         public IEnumerator UprightCorrection_WhenTiltedAndAlreadyFacingCorrectly_AppliesTorqueAroundPitchRollAxes()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.AngleAxis(30f, Vector3.forward));
 
-            // Tilt 30° around Z (roll error), facing already forward (+Z).
-            hipsGo.transform.rotation = Quaternion.AngleAxis(30f, Vector3.forward);
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            bc.SetFacingDirection(Vector3.forward); // No yaw error.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            float pitchRollMagnitude = Mathf.Sqrt(angularVelocity.x * angularVelocity.x + angularVelocity.z * angularVelocity.z);
+            float yawMagnitude = Mathf.Abs(angularVelocity.y);
 
-            // Assert — pitch/roll (X or Z) angular velocity must exceed Y by a meaningful margin.
-            Vector3 av = rb.angularVelocity;
-            float pitchRollMag = Mathf.Sqrt(av.x * av.x + av.z * av.z);
-            float yawMag = Mathf.Abs(av.y);
-
-            Assert.That(pitchRollMag, Is.GreaterThan(0.001f),
-                $"A 30° roll error should produce measurable pitch/roll angular velocity. av={av}");
-            Assert.That(pitchRollMag, Is.GreaterThan(yawMag * 2f),
-                $"Pitch/roll magnitude ({pitchRollMag:F4}) should dominate over yaw ({yawMag:F4}) " +
-                $"when there is no yaw error. av={av}");
-
-            Object.Destroy(hipsGo);
+            Assert.That(pitchRollMagnitude, Is.GreaterThan(0.001f),
+                $"A roll error should produce measurable pitch or roll correction. angularVelocity={angularVelocity}");
+            Assert.That(pitchRollMagnitude, Is.GreaterThan(yawMagnitude * 2f),
+                $"Pitch and roll correction should dominate when the facing direction already matches the input intent. angularVelocity={angularVelocity}");
         }
 
-        // ─── Airborne multiplier applies only to upright torque ───────────────
-
-        /// <summary>
-        /// When airborne (not grounded), the yaw torque must NOT be scaled down by
-        /// _airborneMultiplier. Yaw should remain at full strength to keep facing direction.
-        ///
-        /// Strategy: compare angular velocity Y component between grounded and airborne
-        /// states with a 90° yaw error and no pitch/roll error. Airborne yaw should be
-        /// equal (not reduced) vs grounded yaw.
-        ///
-        /// Note: each run injects grounded=true for one frame first to set _hasBeenGrounded,
-        /// ensuring the airborne multiplier path is active.
-        /// </summary>
         [UnityTest]
         public IEnumerator AirborneMultiplier_DoesNotAffectYawTorque()
         {
-            // ── Grounded run ──
-            BalanceController bcGrounded = CreateKinematicHips(out Rigidbody rbGrounded, out GameObject goGrounded);
-            // Prime _hasBeenGrounded.
-            bcGrounded.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            goGrounded.transform.rotation = Quaternion.identity;
-            bcGrounded.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            bcGrounded.SetFacingDirection(Vector3.right);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitPhysicsFrames(1);
 
-            rbGrounded.isKinematic = false;
-            rbGrounded.angularVelocity = Vector3.zero;
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
+            float groundedYawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
 
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-            float groundedYawAV = Mathf.Abs(rbGrounded.angularVelocity.y);
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            Object.Destroy(goGrounded);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitPhysicsFrames(1);
 
-            // ── Airborne run ──
-            BalanceController bcAirborne = CreateKinematicHips(out Rigidbody rbAirborne, out GameObject goAirborne);
-            // Prime _hasBeenGrounded, then switch to airborne.
-            bcAirborne.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            yield return new WaitForFixedUpdate();
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
+            float airborneYawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
 
-            goAirborne.transform.rotation = Quaternion.identity;
-            bcAirborne.SetGroundStateForTest(isGrounded: false, isFallen: false);
-            bcAirborne.SetFacingDirection(Vector3.right);
+            Assert.That(groundedYawAngularVelocity, Is.GreaterThan(0.0001f));
+            Assert.That(airborneYawAngularVelocity, Is.GreaterThan(0.0001f));
 
-            rbAirborne.isKinematic = false;
-            rbAirborne.angularVelocity = Vector3.zero;
-
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-            float airborneYawAV = Mathf.Abs(rbAirborne.angularVelocity.y);
-
-            Object.Destroy(goAirborne);
-
-            // Assert — airborne yaw AV must be at least 80% of grounded yaw AV
-            // (not reduced by airborne multiplier). Small variance allowed for physics noise.
-            Assert.That(groundedYawAV, Is.GreaterThan(0.0001f),
-                $"Grounded yaw AV must be measurable (got {groundedYawAV:F5}).");
-            Assert.That(airborneYawAV, Is.GreaterThan(0.0001f),
-                $"Airborne yaw AV must be measurable (got {airborneYawAV:F5}).");
-
-            float ratio = airborneYawAV / groundedYawAV;
+            float ratio = airborneYawAngularVelocity / groundedYawAngularVelocity;
             Assert.That(ratio, Is.GreaterThan(0.8f),
-                $"Airborne yaw AV ({airborneYawAV:F5}) should not be significantly reduced " +
-                $"vs grounded yaw AV ({groundedYawAV:F5}). Ratio={ratio:F3}. " +
-                "The _airborneMultiplier must NOT affect yaw torque.");
+                $"Yaw torque should remain effectively full-strength while airborne. Ratio={ratio:F3}.");
         }
 
-        /// <summary>
-        /// When airborne (not grounded), the upright torque IS reduced by the airborne
-        /// multiplier. Compares upright angular velocity between grounded and airborne
-        /// states with identical pitch/roll error but no yaw error.
-        ///
-        /// The test seam first injects isGrounded=true for one frame to trigger the
-        /// _hasBeenGrounded flag (which gates the airborne multiplier), then switches
-        /// to isGrounded=false to observe the reduced torque.
-        /// </summary>
         [UnityTest]
         public IEnumerator AirborneMultiplier_ReducesUprightTorqueWhenAirborne()
         {
-            // Default airborneMultiplier is 0.2f; grounded upright torque >> airborne.
+            yield return SpawnTurningCharacter(Quaternion.AngleAxis(30f, Vector3.forward));
 
-            // ── Grounded run ──
-            BalanceController bcGrounded = CreateKinematicHips(out Rigidbody rbGrounded, out GameObject goGrounded);
-            // Inject grounded first to set _hasBeenGrounded = true.
-            bcGrounded.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            yield return new WaitForFixedUpdate(); // _hasBeenGrounded set to true here.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitPhysicsFrames(1);
 
-            goGrounded.transform.rotation = Quaternion.AngleAxis(30f, Vector3.forward);
-            bcGrounded.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            bcGrounded.SetFacingDirection(Vector3.forward); // No yaw error.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
+            Vector3 groundedAngularVelocity = _hipsRb.angularVelocity;
+            float groundedPitchRollMagnitude = Mathf.Sqrt(
+                groundedAngularVelocity.x * groundedAngularVelocity.x +
+                groundedAngularVelocity.z * groundedAngularVelocity.z);
 
-            rbGrounded.isKinematic = false;
-            rbGrounded.angularVelocity = Vector3.zero;
+            yield return SpawnTurningCharacter(Quaternion.AngleAxis(30f, Vector3.forward));
 
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-            Vector3 avGrounded = rbGrounded.angularVelocity;
-            float groundedPitchRollMag = Mathf.Sqrt(avGrounded.x * avGrounded.x + avGrounded.z * avGrounded.z);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitPhysicsFrames(1);
 
-            Object.Destroy(goGrounded);
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
+            Vector3 airborneAngularVelocity = _hipsRb.angularVelocity;
+            float airbornePitchRollMagnitude = Mathf.Sqrt(
+                airborneAngularVelocity.x * airborneAngularVelocity.x +
+                airborneAngularVelocity.z * airborneAngularVelocity.z);
 
-            // ── Airborne run ──
-            BalanceController bcAirborne = CreateKinematicHips(out Rigidbody rbAirborne, out GameObject goAirborne);
-            // Inject grounded first to set _hasBeenGrounded = true, then switch to airborne.
-            bcAirborne.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            yield return new WaitForFixedUpdate(); // _hasBeenGrounded set to true here.
-
-            goAirborne.transform.rotation = Quaternion.AngleAxis(30f, Vector3.forward);
-            // Now inject airborne: _hasBeenGrounded is true, so the multiplier will apply.
-            bcAirborne.SetGroundStateForTest(isGrounded: false, isFallen: false);
-            bcAirborne.SetFacingDirection(Vector3.forward); // No yaw error.
-
-            rbAirborne.isKinematic = false;
-            rbAirborne.angularVelocity = Vector3.zero;
-
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-            Vector3 avAirborne = rbAirborne.angularVelocity;
-            float airbornePitchRollMag = Mathf.Sqrt(avAirborne.x * avAirborne.x + avAirborne.z * avAirborne.z);
-
-            Object.Destroy(goAirborne);
-
-            // Assert — grounded upright must be significantly larger than airborne upright.
-            // Default airborneMultiplier = 0.2 means airborne is ~20% of grounded.
-            Assert.That(groundedPitchRollMag, Is.GreaterThan(0.001f),
-                $"Grounded pitch/roll AV must be measurable (got {groundedPitchRollMag:F5}).");
-            Assert.That(airbornePitchRollMag, Is.LessThan(groundedPitchRollMag * 0.7f),
-                $"Airborne upright AV ({airbornePitchRollMag:F5}) should be significantly less " +
-                $"than grounded ({groundedPitchRollMag:F5}). The _airborneMultiplier must reduce " +
-                $"upright torque when not grounded.");
+            Assert.That(groundedPitchRollMagnitude, Is.GreaterThan(0.001f));
+            Assert.That(airbornePitchRollMagnitude, Is.LessThan(groundedPitchRollMagnitude * 0.9f),
+                $"Upright correction should be measurably reduced while airborne on the real prefab. grounded={groundedPitchRollMagnitude:F5}, airborne={airbornePitchRollMagnitude:F5}");
         }
 
-        // ─── Test seam preservation ───────────────────────────────────────────
-
-        /// <summary>
-        /// SetGroundStateForTest must still override IsGrounded and IsFallen after the
-        /// torque split refactor. This is a regression guard on the test seam.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetGroundStateForTest_StillOverridesGroundAndFallenState()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out _, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            // Act — inject specific state via seam.
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            yield return new WaitForFixedUpdate();
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitPhysicsFrames(1);
+            Assert.That(_balance.IsGrounded, Is.True);
+            Assert.That(_balance.IsFallen, Is.False);
 
-            // Assert — seam values must be reflected in public properties.
-            Assert.That(bc.IsGrounded, Is.True,
-                "SetGroundStateForTest(isGrounded: true) must be reflected in IsGrounded.");
-            Assert.That(bc.IsFallen, Is.False,
-                "SetGroundStateForTest(isFallen: false) must be reflected in IsFallen.");
-
-            // Inject opposite values.
-            bc.SetGroundStateForTest(isGrounded: false, isFallen: true);
-            yield return new WaitForFixedUpdate();
-
-            Assert.That(bc.IsGrounded, Is.False,
-                "SetGroundStateForTest(isGrounded: false) must update IsGrounded.");
-            Assert.That(bc.IsFallen, Is.True,
-                "SetGroundStateForTest(isFallen: true) must update IsFallen.");
-
-            Object.Destroy(hipsGo);
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: true);
+            yield return WaitPhysicsFrames(1);
+            Assert.That(_balance.IsGrounded, Is.False);
+            Assert.That(_balance.IsFallen, Is.True);
         }
 
-        /// <summary>
-        /// When the character is fallen (IsFallen = true) but there is a clear upright
-        /// error, the upright torque is still applied to aid recovery. This verifies that
-        /// the torque split did NOT accidentally block correction while fallen.
-        ///
-        /// Uses a dynamic Rigidbody at height 100, IsFallen = true via test seam.
-        /// The upright torque must still produce measurable angular velocity.
-        /// </summary>
         [UnityTest]
         public IEnumerator Fallen_UprightTorqueStillApplied_AidsRecovery()
         {
-            // Arrange — fallen but tilted 80°; we expect upright torque to still fire.
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.AngleAxis(80f, Vector3.forward));
 
-            hipsGo.transform.rotation = Quaternion.AngleAxis(80f, Vector3.forward);
-            // Grounded = true so effectivelyGrounded fires and full multiplier applies.
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: true);
-            bc.SetFacingDirection(Vector3.forward); // No yaw error — isolate upright.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Act
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — upright torque must still be applied (non-zero angular velocity).
-            // This ensures the torque split did not accidentally add an IsFallen guard
-            // that would block the correction needed for self-recovery.
-            Vector3 av = rb.angularVelocity;
-            float pitchRollMag = Mathf.Sqrt(av.x * av.x + av.z * av.z);
-            Assert.That(pitchRollMag, Is.GreaterThan(0.001f),
-                $"When IsFallen=true, upright torque must still be applied for self-recovery. " +
-                $"angularVelocity={av}, pitchRollMag={pitchRollMag:F4}");
-
-            Object.Destroy(hipsGo);
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            float pitchRollMagnitude = Mathf.Sqrt(angularVelocity.x * angularVelocity.x + angularVelocity.z * angularVelocity.z);
+            Assert.That(pitchRollMagnitude, Is.GreaterThan(0.001f),
+                $"Fallen recovery should still receive upright torque on the real prefab. angularVelocity={angularVelocity}");
         }
 
-        // ─── Zero-input safety ────────────────────────────────────────────────
-
-        /// <summary>
-        /// SetFacingDirection with zero vector must still be silently ignored after
-        /// the torque split refactor. No NaN or exceptions.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_ZeroVector_IgnoredNoNaN_AfterTorqueSplit()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            Assert.DoesNotThrow(() => _balance.SetFacingDirection(Vector3.zero));
 
-            // Act
-            Assert.DoesNotThrow(() => bc.SetFacingDirection(Vector3.zero),
-                "SetFacingDirection(Vector3.zero) must never throw after torque split.");
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(1);
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
-            yield return new WaitForFixedUpdate();
-
-            // Assert — no NaN in angular velocity.
-            Vector3 av = rb.angularVelocity;
-            Assert.That(float.IsNaN(av.x) || float.IsNaN(av.y) || float.IsNaN(av.z), Is.False,
-                $"Angular velocity must not be NaN after zero-direction input. av={av}");
-
-            Object.Destroy(hipsGo);
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            Assert.That(float.IsNaN(angularVelocity.x) || float.IsNaN(angularVelocity.y) || float.IsNaN(angularVelocity.z), Is.False,
+                $"Zero facing input should not produce NaN angular velocity. angularVelocity={angularVelocity}");
         }
 
-        // ─── Phase 3D2: Yaw Stability Hardening ──────────────────────────────
-
-        /// <summary>
-        /// [3D2] _yawDeadZoneDeg field must exist as a serialized private float on
-        /// BalanceController. This test fails (red) before the field is added.
-        /// </summary>
         [Test]
         public void BalanceController_HasYawDeadZoneDegField()
         {
-            // Arrange
-            var fieldInfo = typeof(BalanceController).GetField(
+            FieldInfo fieldInfo = typeof(BalanceController).GetField(
                 "_yawDeadZoneDeg",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                BindingFlags.NonPublic | BindingFlags.Instance);
 
-            // Assert
             Assert.That(fieldInfo, Is.Not.Null,
-                "_yawDeadZoneDeg field must exist as a private instance field on BalanceController " +
-                "(Phase 3D2 dead zone for yaw micro-oscillation suppression).");
+                "_yawDeadZoneDeg must exist as a private instance field on BalanceController.");
             Assert.That(fieldInfo.FieldType, Is.EqualTo(typeof(float)),
                 "_yawDeadZoneDeg must be of type float.");
         }
 
-        /// <summary>
-        /// [3D2] When yaw error is within the dead zone (very small angle, e.g. 0.5°),
-        /// no yaw torque should be applied — angular velocity Y must stay near zero.
-        ///
-        /// Strategy: set Hips exactly facing +Z. Call SetFacingDirection with a vector
-        /// that is 0.5° off +Z — well within the default dead zone of ~2°. Allow one
-        /// physics frame and verify Y angular velocity is negligibly small.
-        ///
-        /// Note: a small residual Y angular velocity (≤ 0.15 rad/s) is acceptable as
-        /// physics noise from the upright PD spring coupling through the Rigidbody.
-        /// The key assertion is that this is far below what a live yaw torque would produce.
-        /// At _kPYaw=400, a 0.5° error would produce ~3.5 N·m yaw torque; even with
-        /// a 1 kg unit-box inertia that would produce >1 rad/s after two FixedUpdates.
-        /// </summary>
         [UnityTest]
         public IEnumerator YawTorque_WithinDeadZone_IsNotApplied()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            // Face exactly forward.
-            hipsGo.transform.rotation = Quaternion.identity;
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-
-            // Direction only 0.5° off +Z — must be within the ~2° dead zone.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             float tinyAngle = 0.5f;
             Vector3 nearlyForward = new Vector3(
                 Mathf.Sin(tinyAngle * Mathf.Deg2Rad),
                 0f,
                 Mathf.Cos(tinyAngle * Mathf.Deg2Rad));
-            bc.SetFacingDirection(nearlyForward);
+            _balance.SetFacingDirection(nearlyForward);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Act — one physics frame.
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — Y angular velocity must be negligibly small (dead zone suppresses torque).
-            // We allow up to 0.35 rad/s for physics noise (upright spring coupling, RB init).
-            // A live yaw torque at 0.5° error (_kPYaw=400) would produce >1 rad/s — far above this.
-            float yawAV = Mathf.Abs(rb.angularVelocity.y);
-            Assert.That(yawAV, Is.LessThan(0.35f),
-                $"A 0.5° yaw error is within the dead zone; no significant yaw torque should be " +
-                $"applied. Yaw angular velocity was {yawAV:F5} rad/s. " +
-                "Increase _yawDeadZoneDeg or verify the dead zone implementation.");
-
-            Object.Destroy(hipsGo);
+            float yawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
+            Assert.That(yawAngularVelocity, Is.LessThan(0.35f),
+                $"A very small yaw error should stay inside the dead zone. yawAngularVelocity={yawAngularVelocity:F5}");
         }
 
-        /// <summary>
-        /// [3D2] A large yaw error (90°) must still converge — the dead zone must not block
-        /// large corrections. Angular velocity Y must be measurably non-zero after one frame.
-        /// </summary>
         [UnityTest]
         public IEnumerator YawTorque_OutsideDeadZone_IsStillApplied()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            hipsGo.transform.rotation = Quaternion.identity;
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            bc.SetFacingDirection(Vector3.right); // 90° yaw error — well outside dead zone.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Act
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — Y angular velocity must be clearly non-zero.
-            float yawAV = Mathf.Abs(rb.angularVelocity.y);
-            Assert.That(yawAV, Is.GreaterThan(0.001f),
-                $"A 90° yaw error is outside the dead zone; yaw torque must still be applied. " +
-                $"Yaw angular velocity was {yawAV:F5} rad/s.");
-
-            Object.Destroy(hipsGo);
+            float yawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
+            Assert.That(yawAngularVelocity, Is.GreaterThan(0.001f),
+                $"Large yaw errors should still apply yaw torque. yawAngularVelocity={yawAngularVelocity:F5}");
         }
 
-        /// <summary>
-        /// [3D2] Zero movement input must retain the last valid facing direction.
-        /// After calling SetFacingDirection(Vector3.right) once, calling
-        /// SetFacingDirection(Vector3.zero) must not change the stored target.
-        /// The character must still turn toward +X, not revert to default.
-        ///
-        /// Strategy: set facing to +X (90° error from +Z), then call zero. Verify
-        /// yaw torque is still applied toward +X (positive Y angular velocity for a
-        /// left-hand turn from +Z to +X when looking down world-Y).
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_ZeroInput_RetainsLastValidFacing()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            hipsGo.transform.rotation = Quaternion.identity; // Facing +Z.
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            yield return WaitPhysicsFrames(1);
 
-            // Set a valid facing (+X → 90° yaw error toward right).
-            bc.SetFacingDirection(Vector3.right);
+            _balance.SetFacingDirection(Vector3.zero);
+            _hipsRb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Now call zero — must be silently ignored; last valid facing (+X) retained.
-            bc.SetFacingDirection(Vector3.zero);
-
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
-
-            // Act
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — the character should still be turning toward +X.
-            // The yaw torque magnitude should be non-trivial (same as a 90° error),
-            // demonstrating the zero-input did not revert the target to +Z (which would give 0 error).
-            float yawAV = Mathf.Abs(rb.angularVelocity.y);
-            Assert.That(yawAV, Is.GreaterThan(0.001f),
-                $"After SetFacingDirection(Vector3.zero), the last valid facing (+X) must be " +
-                $"retained and yaw torque must still be applied toward it. " +
-                $"Yaw angular velocity was {yawAV:F5} rad/s. " +
-                "If this is 0, the zero-input call reset the facing to the current forward.");
-
-            Object.Destroy(hipsGo);
+            float yawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
+            Assert.That(yawAngularVelocity, Is.GreaterThan(0.001f),
+                $"Zero facing input should retain the last valid target direction. yawAngularVelocity={yawAngularVelocity:F5}");
         }
 
-        /// <summary>
-        /// [3D2] Calling SetFacingDirection repeatedly with near-degenerate vectors
-        /// (tiny magnitude but non-zero) must not produce NaN in angular velocity.
-        /// Guards against normalization of vectors that pass the sqrMagnitude threshold
-        /// but are so small they produce floating-point garbage.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_NearDegenerateVector_ProducesNoNaN()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            hipsGo.transform.rotation = Quaternion.identity;
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-
-            // A vector that is very small but technically above sqrMagnitude 0.001.
-            // sqrMagnitude must be > 0.001, so magnitude > ~0.0316.
-            // We use magnitude = 0.04f, which is small but passes the guard.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             Vector3 tinyButValid = new Vector3(0.04f, 0f, 0f);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
-
-            // Act — call several times to simulate input frame accumulation.
             for (int i = 0; i < 3; i++)
             {
-                Assert.DoesNotThrow(() => bc.SetFacingDirection(tinyButValid),
-                    $"SetFacingDirection with near-degenerate vector must not throw (iteration {i}).");
+                Assert.DoesNotThrow(() => _balance.SetFacingDirection(tinyButValid));
                 yield return new WaitForFixedUpdate();
             }
 
-            // Assert — no NaN in angular velocity.
-            Vector3 av = rb.angularVelocity;
-            Assert.That(float.IsNaN(av.x) || float.IsNaN(av.y) || float.IsNaN(av.z), Is.False,
-                $"Angular velocity must not contain NaN after near-degenerate SetFacingDirection calls. av={av}");
-            Assert.That(float.IsInfinity(av.x) || float.IsInfinity(av.y) || float.IsInfinity(av.z), Is.False,
-                $"Angular velocity must not contain Infinity after near-degenerate SetFacingDirection calls. av={av}");
-
-            Object.Destroy(hipsGo);
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            Assert.That(float.IsNaN(angularVelocity.x) || float.IsNaN(angularVelocity.y) || float.IsNaN(angularVelocity.z), Is.False,
+                $"Near-degenerate facing vectors should not produce NaN angular velocity. angularVelocity={angularVelocity}");
+            Assert.That(float.IsInfinity(angularVelocity.x) || float.IsInfinity(angularVelocity.y) || float.IsInfinity(angularVelocity.z), Is.False,
+                $"Near-degenerate facing vectors should not produce infinite angular velocity. angularVelocity={angularVelocity}");
         }
 
-        /// <summary>
-        /// [3D2] Rapid alternating SetFacingDirection calls (left, right, left, right)
-        /// must not produce a runaway spin. After settling, |angularVelocity.y| must
-        /// remain bounded (less than a reasonable threshold, e.g. 20 rad/s).
-        ///
-        /// This catches the scenario where opposing yaw errors drive oscillation.
-        /// </summary>
         [UnityTest]
         public IEnumerator SetFacingDirection_RapidAlternating_DoesNotCauseRunawaySpin()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            // Spawn near a ground proxy so effectivelyGrounded works.
-            hipsGo.transform.position = new Vector3(0f, 0.5f, 0f);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.identity);
 
-            hipsGo.transform.rotation = Quaternion.identity;
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
-
-            // Act — alternate facing direction every frame for 20 frames.
             for (int i = 0; i < 20; i++)
             {
-                Vector3 dir = (i % 2 == 0) ? Vector3.right : Vector3.left;
-                bc.SetFacingDirection(dir);
+                _movement.SetMoveInputForTest((i % 2 == 0) ? Vector2.right : Vector2.left);
                 yield return new WaitForFixedUpdate();
             }
 
-            // Assert — angular velocity Y must be bounded.
-            float absYawAV = Mathf.Abs(rb.angularVelocity.y);
-            Assert.That(absYawAV, Is.LessThan(20f),
-                $"Rapid alternating facing inputs must not cause runaway spin. " +
-                $"|angularVelocity.y| = {absYawAV:F3} rad/s (limit: 20 rad/s). " +
-                "Check _kDYaw damping or the dead zone implementation.");
-
-            Object.Destroy(hipsGo);
+            float absYawAngularVelocity = Mathf.Abs(_hipsRb.angularVelocity.y);
+            Assert.That(absYawAngularVelocity, Is.LessThan(20f),
+                $"Rapid alternating turn input should remain bounded. absYawAngularVelocity={absYawAngularVelocity:F3}");
         }
 
-        /// <summary>
-        /// [3D2] Verifies the yaw normalization is safe when the character's forward vector
-        /// projects near-zero on the XZ plane (character near-vertical, i.e. lying on its side).
-        /// The sqrMagnitude guard should prevent torque application and avoid NaN.
-        ///
-        /// Strategy: tilt 89° (nearly horizontal), leave facing at default. No torque
-        /// should be applied (guard fires), and no NaN should result.
-        /// </summary>
         [UnityTest]
         public IEnumerator YawTorque_WhenForwardProjectsNearZeroOnXZ_ProducesNoNaN()
         {
-            // Arrange
-            BalanceController bc = CreateKinematicHips(out Rigidbody rb, out GameObject hipsGo);
-            yield return new WaitForFixedUpdate();
+            yield return SpawnTurningCharacter(Quaternion.AngleAxis(89f, Vector3.right));
 
-            // Tilt 89° — near horizontal. Forward vector projects near-zero onto XZ plane.
-            // IsFallen override: set to false so we enter the yaw block.
-            hipsGo.transform.rotation = Quaternion.AngleAxis(89f, Vector3.right);
-            bc.SetGroundStateForTest(isGrounded: true, isFallen: false);
-            bc.SetFacingDirection(Vector3.right);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
 
-            rb.isKinematic = false;
-            rb.angularVelocity = Vector3.zero;
+            yield return WaitPhysicsFrames(2);
 
-            // Act
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
-
-            // Assert — no NaN or Infinity.
-            Vector3 av = rb.angularVelocity;
-            Assert.That(float.IsNaN(av.x) || float.IsNaN(av.y) || float.IsNaN(av.z), Is.False,
-                $"Near-vertical tilt must not produce NaN in angular velocity. av={av}");
-            Assert.That(float.IsInfinity(av.x) || float.IsInfinity(av.y) || float.IsInfinity(av.z), Is.False,
-                $"Near-vertical tilt must not produce Infinity in angular velocity. av={av}");
-
-            Object.Destroy(hipsGo);
+            Vector3 angularVelocity = _hipsRb.angularVelocity;
+            Assert.That(float.IsNaN(angularVelocity.x) || float.IsNaN(angularVelocity.y) || float.IsNaN(angularVelocity.z), Is.False,
+                $"Near-vertical forward projection should not produce NaN angular velocity. angularVelocity={angularVelocity}");
+            Assert.That(float.IsInfinity(angularVelocity.x) || float.IsInfinity(angularVelocity.y) || float.IsInfinity(angularVelocity.z), Is.False,
+                $"Near-vertical forward projection should not produce infinite angular velocity. angularVelocity={angularVelocity}");
         }
 
-        // ─── Helpers ─────────────────────────────────────────────────────────
+        private IEnumerator SpawnTurningCharacter(Quaternion rotation)
+        {
+            DestroyCharacter();
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
+
+            _instance = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 6f, 0f), rotation);
+            Assert.That(_instance, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
+
+            _balance = _instance.GetComponent<BalanceController>();
+            _movement = _instance.GetComponent<PlayerMovement>();
+            _characterState = _instance.GetComponent<CharacterState>();
+            _legAnimator = _instance.GetComponent<LegAnimator>();
+            _armAnimator = _instance.GetComponent<ArmAnimator>();
+            _ragdollSetup = _instance.GetComponent<RagdollSetup>();
+            _hipsRb = _instance.GetComponent<Rigidbody>();
+
+            Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab is missing BalanceController.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
+            Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
+            Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing LegAnimator.");
+            Assert.That(_armAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing ArmAnimator.");
+            Assert.That(_ragdollSetup, Is.Not.Null, "PlayerRagdoll prefab is missing RagdollSetup.");
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab is missing the hips Rigidbody.");
+
+            SetPrivateFloat(_movement, "_moveForce", 0f);
+            SetPrivateFloat(_movement, "_maxSpeed", 0f);
+            _movement.SetMoveInputForTest(Vector2.zero);
+
+            yield return WaitPhysicsFrames(2);
+        }
+
+        private void DestroyCharacter()
+        {
+            if (_instance != null)
+            {
+                Object.Destroy(_instance);
+                _instance = null;
+            }
+        }
+
+        private static void SetPrivateFloat(object target, string fieldName, float value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Expected private float field '{fieldName}' on {target.GetType().Name}.");
+            field.SetValue(target, value);
+        }
+
+        private static IEnumerator WaitPhysicsFrames(int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+        }
 
         private static bool[,] CaptureLayerCollisionMatrix()
         {

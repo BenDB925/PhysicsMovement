@@ -3,52 +3,70 @@ using System.Collections;
 using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
+using PhysicsDrivenMovement.Core;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
-    /// <summary>
-    /// PlayMode tests for <see cref="PlayerMovement"/> covering locomotion force gating,
-    /// camera-relative direction, and horizontal speed limiting.
-    /// </summary>
     public class PlayerMovementTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const int SettleFrames = 80;
         private const float TestEpsilon = 0.001f;
 
-        private GameObject _root;
-        private Rigidbody _rb;
+        private static readonly int[] CardinalYaws = { 0, 90, 180, 270 };
+        private static readonly Vector3 TestOrigin = new Vector3(1500f, 0f, 0f);
+
+        private GameObject _ground;
+        private GameObject _player;
+        private Camera _camera;
+        private Rigidbody _hipsBody;
         private BalanceController _balance;
         private PlayerMovement _movement;
-        private Camera _camera;
-        private MethodInfo _applyMovementMethod;
+        private CharacterState _characterState;
+        private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
 
         [SetUp]
         public void SetUp()
         {
-            // Arrange
-            _root = new GameObject("TestHips");
-            _rb = _root.AddComponent<Rigidbody>();
-            _rb.useGravity = false;
-            _rb.linearDamping = 0f;
-            _rb.angularDamping = 0f;
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
 
-            _balance = _root.AddComponent<BalanceController>();
-            _movement = _root.AddComponent<PlayerMovement>();
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
 
-            GameObject cameraGo = new GameObject("TestCamera");
-            _camera = cameraGo.AddComponent<Camera>();
+            _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _ground.name = "PlayerMovementTests_Ground";
+            _ground.transform.position = TestOrigin + new Vector3(0f, -0.5f, 0f);
+            _ground.transform.localScale = new Vector3(40f, 1f, 40f);
+            _ground.layer = GameSettings.LayerEnvironment;
 
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
+
+            _player = UnityEngine.Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hipsBody = _player.GetComponent<Rigidbody>();
+            _balance = _player.GetComponent<BalanceController>();
+            _movement = _player.GetComponent<PlayerMovement>();
+            _characterState = _player.GetComponent<CharacterState>();
+
+            Assert.That(_hipsBody, Is.Not.Null);
+            Assert.That(_balance, Is.Not.Null);
+            Assert.That(_movement, Is.Not.Null);
+            Assert.That(_characterState, Is.Not.Null);
+
+            GameObject cameraObject = new GameObject("PlayerMovementTests_Camera");
+            _camera = cameraObject.AddComponent<Camera>();
+            _camera.transform.position = TestOrigin + new Vector3(0f, 4f, -6f);
+            _camera.transform.rotation = Quaternion.identity;
             SetPrivateField(_movement, "_camera", _camera);
-
-            _applyMovementMethod = typeof(PlayerMovement).GetMethod(
-                "ApplyMovementForces",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-
-            if (_applyMovementMethod == null)
-            {
-                throw new InvalidOperationException("PlayerMovement.ApplyMovementForces must exist for tests.");
-            }
+            _movement.SetMoveInputForTest(Vector2.zero);
         }
 
         [TearDown]
@@ -59,232 +77,184 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 UnityEngine.Object.Destroy(_camera.gameObject);
             }
 
-            if (_root != null)
+            if (_player != null)
             {
-                UnityEngine.Object.Destroy(_root);
+                UnityEngine.Object.Destroy(_player);
             }
+
+            if (_ground != null)
+            {
+                UnityEngine.Object.Destroy(_ground);
+            }
+
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
         [UnityTest]
         public IEnumerator ApplyMovementForces_WhenFallen_DoesNotApplyHorizontalForce()
         {
-            // Arrange
-            yield return null;
-            SetAutoPropertyBackingField(_balance, "IsFallen", true);
-            Vector3 velocityBefore = _rb.linearVelocity;
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
 
-            // Act
-            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
-            yield return new WaitForFixedUpdate();
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            _characterState.SetStateForTest(CharacterStateType.Fallen);
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsBody.linearVelocity = Vector3.zero;
+            Vector3 startPosition = _player.transform.position;
 
-            // Assert
-            Vector3 horizontalBefore = new Vector3(velocityBefore.x, 0f, velocityBefore.z);
-            Vector3 horizontalAfter = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            Assert.That((horizontalAfter - horizontalBefore).sqrMagnitude, Is.LessThanOrEqualTo(TestEpsilon),
-                $"Fallen locomotion must be blocked. Horizontal delta sqrMagnitude={((horizontalAfter - horizontalBefore).sqrMagnitude):F6}.");
+            yield return WaitForPhysicsFrames(12);
+
+            Vector3 horizontalVelocity = Horizontal(_hipsBody.linearVelocity);
+            Vector3 horizontalDisplacement = Horizontal(_player.transform.position - startPosition);
+            Assert.That(horizontalVelocity.sqrMagnitude, Is.LessThanOrEqualTo(TestEpsilon));
+            Assert.That(horizontalDisplacement.magnitude, Is.LessThan(0.2f));
         }
 
         [UnityTest]
         public IEnumerator ApplyMovementForces_WithForwardInput_UsesCameraRelativeDirection()
         {
-            // Arrange
-            yield return null;
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", 8f);
             _camera.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
 
-            // Act
-            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
-            yield return new WaitForFixedUpdate();
+            Vector3 startPosition = _player.transform.position;
+            _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitForPhysicsFrames(80);
 
-            // Assert
-            Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            Assert.That(horizontalVelocity.magnitude, Is.GreaterThan(0.01f),
-                "Movement input should produce measurable horizontal velocity.");
-
-            float xContribution = Mathf.Abs(horizontalVelocity.normalized.x);
-            float zContribution = Mathf.Abs(horizontalVelocity.normalized.z);
-            Assert.That(xContribution, Is.GreaterThan(zContribution),
-                $"With camera yaw=90°, forward input should resolve mostly to world +X. x={xContribution:F3}, z={zContribution:F3}.");
+            Vector3 displacement = Horizontal(_player.transform.position - startPosition);
+            Assert.That(displacement.magnitude, Is.GreaterThan(1f));
+            Assert.That(Mathf.Abs(displacement.normalized.x), Is.GreaterThan(Mathf.Abs(displacement.normalized.z)));
         }
 
         [UnityTest]
         public IEnumerator ApplyMovementForces_WhenAtOrAboveSpeedCap_DoesNotIncreaseHorizontalSpeed()
         {
-            // Arrange
-            yield return null;
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
             SetPrivateField(_movement, "_maxSpeed", 5f);
-            _rb.linearVelocity = new Vector3(8f, 0f, 0f);
-            float speedBefore = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z).magnitude;
+            _hipsBody.linearVelocity = new Vector3(8f, 0f, 0f);
+            float speedBefore = Horizontal(_hipsBody.linearVelocity).magnitude;
+            _movement.SetMoveInputForTest(Vector2.right);
+            yield return WaitForPhysicsFrames(8);
 
-            // Act
-            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(1f, 0f) });
-            yield return new WaitForFixedUpdate();
-
-            // Assert
-            float speedAfter = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z).magnitude;
-            Assert.That(speedAfter, Is.LessThanOrEqualTo(speedBefore + 0.05f),
-                $"Speed cap should block additional acceleration above max speed. before={speedBefore:F3}, after={speedAfter:F3}.");
+            float speedAfter = Horizontal(_hipsBody.linearVelocity).magnitude;
+            Assert.That(speedAfter, Is.LessThanOrEqualTo(speedBefore + 0.05f));
         }
 
         [UnityTest]
         public IEnumerator ApplyMovementForces_WithFacingTurnRateLimit_SlewsFacingTargetAcrossFrames()
         {
-            // Arrange
-            yield return null;
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
-            SetPrivateField(_movement, "_maxFacingTurnRateDegPerSecond", 90f);
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
 
+            SetPrivateField(_movement, "_maxFacingTurnRateDegPerSecond", 90f);
             _camera.transform.rotation = Quaternion.identity;
-            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
+            _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitForPhysicsFrames(2);
+
+            _camera.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
             yield return new WaitForFixedUpdate();
 
-            // Act — snap the desired direction from +Z to +X in one frame.
-            _camera.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
-            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
-
             Vector3 immediateFacing = GetTargetFacingForward();
+            Assert.That(Vector3.Angle(immediateFacing, Vector3.forward), Is.GreaterThan(0.5f));
+            Assert.That(Vector3.Angle(immediateFacing, Vector3.right), Is.GreaterThan(45f));
 
-            // Assert 1: the target should start rotating toward +X, but not jump there immediately.
-            Assert.That(Vector3.Angle(immediateFacing, Vector3.forward), Is.GreaterThan(0.5f),
-                $"Facing target should begin rotating away from the old heading immediately. facing={immediateFacing}");
-            Assert.That(Vector3.Angle(immediateFacing, Vector3.right), Is.GreaterThan(45f),
-                $"Facing slew limit should prevent a one-frame 90° snap to +X. facing={immediateFacing}");
-
-            // Act 2 — continue holding the new direction until the limited target catches up.
             int settleFrames = Mathf.CeilToInt(90f / (90f * Time.fixedDeltaTime)) + 10;
-            for (int i = 0; i < settleFrames; i++)
-            {
-                yield return new WaitForFixedUpdate();
-                _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
-            }
+            yield return WaitForPhysicsFrames(settleFrames);
 
-            // Assert 2: the target should converge to the requested heading within a reasonable window.
             Vector3 settledFacing = GetTargetFacingForward();
-            Assert.That(Vector3.Angle(settledFacing, Vector3.right), Is.LessThan(5f),
-                $"Facing target should converge to the requested heading after repeated physics steps. facing={settledFacing}");
+            Assert.That(Vector3.Angle(settledFacing, Vector3.right), Is.LessThan(5f));
         }
 
-        // ─── GAP-1: Camera-relative movement at steep pitch (−60°) ─────────
-
-        /// <summary>
-        /// GAP-1a: With the camera pitched -60° (looking sharply downward at the character),
-        /// forward input must still produce measurable horizontal displacement.
-        ///
-        /// Bug guarded against: PlayerMovement previously used ProjectOnPlane(camera.forward, up)
-        /// and then Normalize(). At steep downward pitch the projected horizontal component of
-        /// camera.forward approaches zero → Normalize() of a near-zero vector → NaN velocity.
-        ///
-        /// The current implementation extracts yaw only (eulerAngles.y) so pitch has no
-        /// effect on movement direction. This test confirms that protection is in place.
-        /// </summary>
         [UnityTest]
         public IEnumerator CameraRelativeMovement_AtSteepPitchMinus60_CharacterStillMovesForward()
         {
-            // Arrange
-            yield return null;
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
 
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
-            SetPrivateField(_movement, "_maxSpeed", 20f); // generous cap so displacement can build
-
-            // Camera pitched 60° downward (common isometric-style follow angle), yaw = 0.
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", 20f);
             _camera.transform.rotation = Quaternion.Euler(60f, 0f, 0f);
 
-            Vector3 startPos = _root.transform.position;
-
-            // Act — apply forward input for 200 fixed frames.
+            Vector3 startPosition = _player.transform.position;
             _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitForPhysicsFrames(200);
 
-            for (int i = 0; i < 200; i++)
-            {
-                _applyMovementMethod.Invoke(_movement, new object[] { _movement.CurrentMoveInput });
-                yield return new WaitForFixedUpdate();
-            }
-
-            // Assert 1: horizontal displacement ≥ 1.5 m.
-            Vector3 displacement = _root.transform.position - startPos;
-            float horizontalDisplacement = new Vector3(displacement.x, 0f, displacement.z).magnitude;
-            Assert.That(horizontalDisplacement, Is.GreaterThanOrEqualTo(1.5f),
-                $"Camera at pitch=-60° must not freeze movement. Horizontal displacement = {horizontalDisplacement:F3} m " +
-                "(expected ≥ 1.5 m). Likely cause: yaw extraction from camera eulerAngles failed.");
-
-            // Assert 2: no NaN in position or velocity.
-            Assert.That(float.IsNaN(_rb.position.x), Is.False,
-                $"Hips position.x is NaN after steep-pitch camera movement. " +
-                "Likely cause: Normalize() on near-zero ProjectOnPlane result.");
-            Assert.That(float.IsNaN(_rb.linearVelocity.x), Is.False,
-                "Hips linearVelocity.x is NaN after steep-pitch camera movement.");
+            Vector3 displacement = Horizontal(_player.transform.position - startPosition);
+            Assert.That(displacement.magnitude, Is.GreaterThanOrEqualTo(1.5f));
+            Assert.That(float.IsNaN(_hipsBody.position.x), Is.False);
+            Assert.That(float.IsNaN(_hipsBody.linearVelocity.x), Is.False);
         }
 
-        // ─── GAP-1: Camera-relative movement at all cardinal yaw angles ──────
-
-        private static readonly int[] CardinalYaws = { 0, 90, 180, 270 };
-
-        /// <summary>
-        /// GAP-1b: For each cardinal camera yaw (0°, 90°, 180°, 270°), pressing
-        /// forward (Vector2.up) must produce displacement aligned with the camera's
-        /// yaw direction, not world +Z. This confirms the full camera-relative
-        /// direction logic for all orientations.
-        ///
-        /// Parameterised: runs once per yaw value via TestCaseSource.
-        /// </summary>
         [UnityTest]
         public IEnumerator CameraRelativeMovement_AtAllCardinalYawAngles_CharacterMovesInCorrectDirection(
             [ValueSource(nameof(CardinalYaws))] int yawDeg)
         {
-            // Arrange
-            yield return null;
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
 
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
+            SetPrivateField(_movement, "_moveForce", 1500f);
             SetPrivateField(_movement, "_maxSpeed", 20f);
-
-            // Set camera yaw, zero pitch.
             _camera.transform.rotation = Quaternion.Euler(0f, yawDeg, 0f);
 
-            // Camera forward (yaw only) in world XZ.
             Vector3 expectedForward = Quaternion.Euler(0f, yawDeg, 0f) * Vector3.forward;
             expectedForward.y = 0f;
             expectedForward.Normalize();
 
-            Vector3 startPos = _root.transform.position;
-
-            // Act — 200 frames of forward input.
+            Vector3 startPosition = _player.transform.position;
             _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitForPhysicsFrames(180);
 
-            for (int i = 0; i < 200; i++)
-            {
-                _applyMovementMethod.Invoke(_movement, new object[] { _movement.CurrentMoveInput });
-                yield return new WaitForFixedUpdate();
-            }
-
-            // Assert 1: measurable displacement.
-            Vector3 displacement = _root.transform.position - startPos;
-            Vector3 horizontalDisp = new Vector3(displacement.x, 0f, displacement.z);
-            Assert.That(horizontalDisp.magnitude, Is.GreaterThanOrEqualTo(1.0f),
-                $"yaw={yawDeg}°: forward input must produce ≥ 1.0 m displacement. " +
-                $"Got {horizontalDisp.magnitude:F3} m.");
-
-            // Assert 2: displacement direction aligns with expected camera-relative forward
-            // (dot product ≥ 0.7 ≈ within 45° of expected direction).
-            float dot = Vector3.Dot(horizontalDisp.normalized, expectedForward);
-            Assert.That(dot, Is.GreaterThanOrEqualTo(0.7f),
-                $"yaw={yawDeg}°: displacement direction {horizontalDisp.normalized:F2} should align with " +
-                $"camera forward {expectedForward:F2} (dot ≥ 0.7, got {dot:F3}).");
-
-            // Assert 3: no NaN.
-            Assert.That(float.IsNaN(_rb.position.x), Is.False,
-                $"yaw={yawDeg}°: position.x must not be NaN after camera-relative movement.");
+            Vector3 horizontalDisplacement = Horizontal(_player.transform.position - startPosition);
+            Assert.That(horizontalDisplacement.magnitude, Is.GreaterThanOrEqualTo(1f));
+            Assert.That(Vector3.Dot(horizontalDisplacement.normalized, expectedForward), Is.GreaterThanOrEqualTo(0.7f));
+            Assert.That(float.IsNaN(_hipsBody.position.x), Is.False);
         }
 
-        private static void SetPrivateField(object instance, string fieldName, object value)
+        [UnityTest]
+        public IEnumerator UnderSustainedInput_HorizontalSpeedDoesNotExceedMaxSpeed()
         {
-            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-            if (field == null)
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            const float maxSpeed = 5f;
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", maxSpeed);
+            _movement.SetMoveInputForTest(Vector2.up);
+
+            float maxObservedHorizontalSpeed = 0f;
+            for (int frame = 0; frame < 600; frame++)
             {
-                throw new InvalidOperationException($"Missing private field '{fieldName}' on {instance.GetType().Name}.");
+                yield return new WaitForFixedUpdate();
+
+                if (frame % 5 == 0)
+                {
+                    float horizontalSpeed = Horizontal(_hipsBody.linearVelocity).magnitude;
+                    if (horizontalSpeed > maxObservedHorizontalSpeed)
+                    {
+                        maxObservedHorizontalSpeed = horizontalSpeed;
+                    }
+                }
             }
 
-            field.SetValue(instance, value);
+            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 1.2f));
+            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 2f));
+        }
+
+        private IEnumerator PrepareStandingBaseline()
+        {
+            _movement.SetMoveInputForTest(Vector2.zero);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+            yield return new WaitForFixedUpdate();
         }
 
         private Vector3 GetTargetFacingForward()
@@ -292,6 +262,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             FieldInfo field = typeof(BalanceController).GetField(
                 "_targetFacingRotation",
                 BindingFlags.Instance | BindingFlags.NonPublic);
+
             if (field == null)
             {
                 throw new InvalidOperationException("BalanceController._targetFacingRotation must exist for tests.");
@@ -307,68 +278,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return forward.normalized;
         }
 
-        private static void SetAutoPropertyBackingField(object instance, string propertyName, object value)
+        private static IEnumerator WaitForPhysicsFrames(int count)
         {
-            string backingFieldName = $"<{propertyName}>k__BackingField";
-            FieldInfo field = instance.GetType().GetField(backingFieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            for (int i = 0; i < count; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+        }
+
+        private static Vector3 Horizontal(Vector3 value)
+        {
+            return new Vector3(value.x, 0f, value.z);
+        }
+
+        private static void SetPrivateField(object instance, string fieldName, object value)
+        {
+            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             if (field == null)
             {
-                throw new InvalidOperationException(
-                    $"Could not locate auto-property backing field '{backingFieldName}' on {instance.GetType().Name}.");
+                throw new InvalidOperationException($"Missing private field '{fieldName}' on {instance.GetType().Name}.");
             }
 
             field.SetValue(instance, value);
-        }
-
-        // ─── GAP-4: Speed cap — horizontal magnitude check ───────────────────
-
-        /// <summary>
-        /// GAP-4: Under 600 frames of sustained forward input, the character's horizontal
-        /// speed (XZ magnitude only) must not exceed _maxSpeed × 1.2 (20% physics overshoot
-        /// tolerance). Specifically guards against: speed cap check using 3D velocity
-        /// magnitude (including vertical) instead of horizontal-only magnitude, which would
-        /// allow horizontal speed to exceed the intended cap.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator UnderSustainedInput_HorizontalSpeedDoesNotExceedMaxSpeed()
-        {
-            // Arrange
-            yield return null;
-
-            SetAutoPropertyBackingField(_balance, "IsFallen", false);
-            const float maxSpeed = 5f;
-            SetPrivateField(_movement, "_maxSpeed", maxSpeed);
-
-            _movement.SetMoveInputForTest(Vector2.up);
-
-            float maxObservedHorizontalSpeed = 0f;
-
-            // Act — 600 frames of sustained forward input; sample speed every 5 frames.
-            for (int frame = 0; frame < 600; frame++)
-            {
-                _applyMovementMethod.Invoke(_movement, new object[] { _movement.CurrentMoveInput });
-                yield return new WaitForFixedUpdate();
-
-                if (frame % 5 == 0)
-                {
-                    float hSpeed = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z).magnitude;
-                    if (hSpeed > maxObservedHorizontalSpeed)
-                    {
-                        maxObservedHorizontalSpeed = hSpeed;
-                    }
-                }
-            }
-
-            // Assert 1: max observed horizontal speed within 20% tolerance.
-            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 1.2f),
-                $"Horizontal speed must not exceed _maxSpeed × 1.2 = {maxSpeed * 1.2f:F2} m/s. " +
-                $"Observed max: {maxObservedHorizontalSpeed:F3} m/s. " +
-                "Likely cause: speed gate using 3D magnitude (incl. vertical) instead of horizontal.");
-
-            // Assert 2: no sample exceeds 2× max speed (catastrophic failure check).
-            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 2f),
-                $"Horizontal speed exceeded 2× _maxSpeed = {maxSpeed * 2f:F2} m/s. " +
-                $"Got {maxObservedHorizontalSpeed:F3} m/s. Speed cap is completely broken.");
         }
     }
 }

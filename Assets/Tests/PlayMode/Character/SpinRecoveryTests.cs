@@ -3,6 +3,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -29,6 +30,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class SpinRecoveryTests
     {
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+
         // ── Constants ─────────────────────────────────────────────────────────
 
         private const int SettleFrames      = 100;
@@ -214,46 +217,42 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private void BuildRig()
         {
-            _hipsGO = new GameObject("Hips");
-            _hipsGO.transform.position = TestOrigin + new Vector3(0f, 1.2f, 0f);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            Assert.That(prefab, Is.Not.Null,
+                $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            _hipsRb                        = _hipsGO.AddComponent<Rigidbody>();
-            _hipsRb.mass                   = 10f;
-            _hipsRb.interpolation          = RigidbodyInterpolation.Interpolate;
-            _hipsRb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            _hipsGO = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hipsRb = _hipsGO.GetComponent<Rigidbody>();
+            _balance = _hipsGO.GetComponent<BalanceController>();
+            _movement = _hipsGO.GetComponent<PlayerMovement>();
 
-            _hipsGO.AddComponent<BoxCollider>().size = new Vector3(0.26f, 0.20f, 0.15f);
+            Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab must include Rigidbody on root hips.");
+            Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab must include BalanceController.");
+            Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab must include PlayerMovement.");
 
-            // ── Left Leg ─────────────────────────────────────────────────────
-            _upperLegLGO = CreateCapsule("UpperLeg_L", _hipsGO, new Vector3(-0.10f, -0.22f, 0f), 4f);
-            _upperLegLJoint = ConfigureJoint(_upperLegLGO, _hipsRb, 1200f, 120f);
+            _upperLegLGO = FindRequiredChild(_hipsGO.transform, "UpperLeg_L").gameObject;
+            _upperLegRGO = FindRequiredChild(_hipsGO.transform, "UpperLeg_R").gameObject;
+            _upperLegLJoint = _upperLegLGO.GetComponent<ConfigurableJoint>();
+            _upperLegRJoint = _upperLegRGO.GetComponent<ConfigurableJoint>();
 
-            var lowerLegLGO = CreateCapsule("LowerLeg_L", _upperLegLGO, new Vector3(0f, -0.38f, 0f), 2.5f);
-            ConfigureJoint(lowerLegLGO, _upperLegLGO.GetComponent<Rigidbody>(), 1200f, 120f);
-
-            var footLGO = CreateBox("Foot_L", lowerLegLGO, new Vector3(0f, -0.35f, 0.07f), 1f);
-            ConfigureJoint(footLGO, lowerLegLGO.GetComponent<Rigidbody>(), 300f, 30f);
-            AddGroundSensor(footLGO);
-
-            // ── Right Leg ────────────────────────────────────────────────────
-            _upperLegRGO = CreateCapsule("UpperLeg_R", _hipsGO, new Vector3(0.10f, -0.22f, 0f), 4f);
-            _upperLegRJoint = ConfigureJoint(_upperLegRGO, _hipsRb, 1200f, 120f);
-
-            var lowerLegRGO = CreateCapsule("LowerLeg_R", _upperLegRGO, new Vector3(0f, -0.38f, 0f), 2.5f);
-            ConfigureJoint(lowerLegRGO, _upperLegRGO.GetComponent<Rigidbody>(), 1200f, 120f);
-
-            var footRGO = CreateBox("Foot_R", lowerLegRGO, new Vector3(0f, -0.35f, 0.07f), 1f);
-            ConfigureJoint(footRGO, lowerLegRGO.GetComponent<Rigidbody>(), 300f, 30f);
-            AddGroundSensor(footRGO);
-
-            // ── Components ───────────────────────────────────────────────────
-            _hipsGO.AddComponent<RagdollSetup>();
-            _balance = _hipsGO.AddComponent<BalanceController>();
-            _hipsGO.AddComponent<CharacterState>();
-            _movement = _hipsGO.AddComponent<PlayerMovement>();
-            _hipsGO.AddComponent<LegAnimator>();
+            Assert.That(_upperLegLJoint, Is.Not.Null, "UpperLeg_L joint must exist on PlayerRagdoll.");
+            Assert.That(_upperLegRJoint, Is.Not.Null, "UpperLeg_R joint must exist on PlayerRagdoll.");
 
             _movement.SetMoveInputForTest(Vector2.zero);
+        }
+
+        private static Transform FindRequiredChild(Transform root, string name)
+        {
+            Transform[] children = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == name)
+                {
+                    return children[i];
+                }
+            }
+
+            throw new System.InvalidOperationException($"Required child '{name}' not found under '{root.name}'.");
         }
 
         private static GameObject CreateCapsule(string name, GameObject parent, Vector3 localPos, float mass)
