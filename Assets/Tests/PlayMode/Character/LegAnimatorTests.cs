@@ -2389,5 +2389,178 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "IsRecovering must be false after the recovery window expires. " +
                 "Recovery must self-terminate after _recoveryFrames frames.");
         }
+
+        // ─── Stranded-Foot Forward Bias Tests ──────────────────────────────
+
+        /// <summary>
+        /// When both feet are behind the hips (horizontal dot with hip forward &lt; 0)
+        /// and the player has active movement input, <see cref="LegAnimator.IsGaitBiasedForward"/>
+        /// must be true: the gait swing targets are biased forward to prevent the backward
+        /// phase from reinforcing the stranded-foot stuck loop.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WhenBothFeetBehindHipsWithInput_GaitBiasIsActive()
+        {
+            // Arrange
+            yield return null;
+
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            // Freeze hips to prevent physics from repositioning foot objects.
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezeAll;
+
+            // Create foot objects behind the hips (hips face +Z by default).
+            var footL = new GameObject("Foot_L");
+            footL.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footL.transform.position = _hips.transform.position + new Vector3(-0.1f, -0.8f, -0.5f);
+
+            var footR = new GameObject("Foot_R");
+            footR.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footR.transform.position = _hips.transform.position + new Vector3(0.1f, -0.8f, -0.5f);
+
+            // Inject foot transforms via reflection (Awake already ran without them).
+            SetPrivateField(_legAnimator, "_footL", footL.transform);
+            SetPrivateField(_legAnimator, "_footR", footR.transform);
+
+            // Pre-seed smoothedInputMag so the gait is at full amplitude.
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_legAnimator.IsGaitBiasedForward, Is.True,
+                "IsGaitBiasedForward must be true when both feet are behind the hips " +
+                "and the player has active movement input. The stranded-foot bias should " +
+                "activate to shift gait targets forward.");
+        }
+
+        /// <summary>
+        /// When only one foot is behind the hips (the other is in front), the stranded-foot
+        /// bias must NOT activate — this is normal alternating gait, not a stuck state.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WhenOneFootInFront_GaitBiasIsNotActive()
+        {
+            // Arrange
+            yield return null;
+
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezeAll;
+
+            // Left foot behind, right foot in front.
+            var footL = new GameObject("Foot_L");
+            footL.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footL.transform.position = _hips.transform.position + new Vector3(-0.1f, -0.8f, -0.5f);
+
+            var footR = new GameObject("Foot_R");
+            footR.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footR.transform.position = _hips.transform.position + new Vector3(0.1f, -0.8f, 0.5f);
+
+            SetPrivateField(_legAnimator, "_footL", footL.transform);
+            SetPrivateField(_legAnimator, "_footR", footR.transform);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_legAnimator.IsGaitBiasedForward, Is.False,
+                "IsGaitBiasedForward must be false when only one foot is behind " +
+                "the hips — this is normal alternating gait, not a stuck state.");
+        }
+
+        /// <summary>
+        /// When both feet are behind the hips but the player has no movement input,
+        /// the bias must NOT activate — there is no forward intent to assist.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WhenBothFeetBehindButNoInput_GaitBiasIsNotActive()
+        {
+            // Arrange
+            yield return null;
+
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(Vector2.zero);
+
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezeAll;
+
+            // Both feet behind hips.
+            var footL = new GameObject("Foot_L");
+            footL.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footL.transform.position = _hips.transform.position + new Vector3(-0.1f, -0.8f, -0.5f);
+
+            var footR = new GameObject("Foot_R");
+            footR.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footR.transform.position = _hips.transform.position + new Vector3(0.1f, -0.8f, -0.5f);
+
+            SetPrivateField(_legAnimator, "_footL", footL.transform);
+            SetPrivateField(_legAnimator, "_footR", footR.transform);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_legAnimator.IsGaitBiasedForward, Is.False,
+                "IsGaitBiasedForward must be false when there is no movement input, " +
+                "even if both feet are behind the hips. Bias requires active forward intent.");
+        }
+
+        /// <summary>
+        /// Outcome test: when the stranded-foot bias is active and the left leg is at peak
+        /// backward phase (sin(3π/2) = −1), the upper-leg target rotation should be near
+        /// identity (neutral 0°) rather than the normal −50.3°. The bias shifts the backward
+        /// phase from −stepAngle to 0°, which is the core recovery mechanism that breaks
+        /// the self-reinforcing stuck loop.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WhenBiasActive_BackwardPhaseSwingIsNeutral()
+        {
+            // Arrange
+            yield return null;
+
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+
+            _hipsRb.linearVelocity = Vector3.zero;
+            _hipsRb.constraints = RigidbodyConstraints.FreezeAll;
+
+            // Both feet behind hips.
+            var footL = new GameObject("Foot_L");
+            footL.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footL.transform.position = _hips.transform.position + new Vector3(-0.1f, -0.8f, -0.5f);
+
+            var footR = new GameObject("Foot_R");
+            footR.transform.SetParent(_hips.transform, worldPositionStays: false);
+            footR.transform.position = _hips.transform.position + new Vector3(0.1f, -0.8f, -0.5f);
+
+            SetPrivateField(_legAnimator, "_footL", footL.transform);
+            SetPrivateField(_legAnimator, "_footR", footR.transform);
+
+            // Set phase to 3π/2 so left leg is at peak backward swing (sin = −1).
+            // With bias: leftSwingDeg = (−1 × stepAngle × 1.0) + (stepAngle × 1.0) = 0°.
+            SetPrivateField(_legAnimator, "_phase", Mathf.PI * 1.5f);
+            SetPrivateField(_legAnimator, "_smoothedInputMag", 1.0f);
+
+            // Prevent phase from advancing by zeroing step frequency (velocity is already 0).
+            SetPrivateField(_legAnimator, "_stepFrequency", 0f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert: left upper-leg target should be near identity (bias neutralised backward swing).
+            float angleL = Quaternion.Angle(_upperLegLJoint.targetRotation, Quaternion.identity);
+            Assert.That(angleL, Is.LessThan(5f),
+                $"With stranded-foot bias at peak backward phase (sin=−1), left upper-leg target " +
+                $"should be near identity (0°). Actual: {angleL:F2}°. Without bias it would be " +
+                "~50° from identity. The bias shifts backward swing from −stepAngle to neutral.");
+        }
     }
 }

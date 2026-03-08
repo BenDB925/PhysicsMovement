@@ -27,6 +27,7 @@
 │  GroundSensor           ─── foot ground detection                 │
 │  PlayerMovement         ─── input → AddForce on Hips              │
 │  CharacterState         ─── FSM (Standing/Moving/Airborne/...)    │
+│  LocomotionCollapseDetector ─ root stalled-collapse fall trigger   │
 │  LegAnimator            ─── procedural walk cycle (sinusoidal)    │
 │  ArmAnimator            ─── counter-swing arm gait                │
 │  FallPoseRecorder       ─── rolling fall pose NDJSON diagnostics  │
@@ -131,6 +132,16 @@
 | **Public Surface** | `CurrentState: CharacterStateType`, `OnStateChanged` event, `SetStateForTest(CharacterStateType)` — test seam. |
 | **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
 | **Phase** | 3C |
+
+### `Character.LocomotionCollapseDetector` — `Assets/Scripts/Character/LocomotionCollapseDetector.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; detects the bounded strong-intent/no-progress/rear-support collapse regime that posture-only fallen thresholds miss during sharp-turn locomotion failures. |
+| **Why** | Prevents the sustained hover-kick loop where feet trail behind the hips, progress collapses, and the FSM never enters `Fallen` because upright angle alone stays below the global fallen threshold. |
+| **Public Surface** | `IsCollapseConfirmed: bool` — consumed by `CharacterState`, `PlayerMovement`, and `BalanceController`. |
+| **Collaborators** | Reads `BalanceController.IsGrounded`, `PlayerMovement.CurrentMoveInput`, `PlayerMovement.CurrentFacingDirection`, and foot transforms on the ragdoll root. |
+| **Phase** | 3C / locomotion recovery hardening |
 
 ### `Character.LegAnimator` — `Assets/Scripts/Character/LegAnimator.cs`
 

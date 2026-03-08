@@ -193,6 +193,18 @@ namespace PhysicsDrivenMovement.Character
                  "Gait re-enables with hysteresis at threshold × 0.5 held for 5 consecutive frames.")]
         private float _angularVelocityGaitThreshold = 8f;
 
+        // ── Stranded-Foot Forward Bias ────────────────────────────────────
+        //   Detects the pathological state where BOTH feet are simultaneously behind
+        //   the hips while the player has active movement intent. During this state the
+        //   normal sinusoidal gait's backward phase pushes already-stranded feet further
+        //   back, creating a self-reinforcing stuck loop. The fix biases swing targets
+        //   forward by exactly the current gait amplitude (stepAngle × smoothedInputMag)
+        //   so the backward phase bottoms out at 0° (neutral) instead of -stepAngle.
+        //   This uses actual foot positions (body-aware) and existing gait parameters
+        //   (no magic numbers). Recovery looks like a brief stumble: within 1–2 gait
+        //   cycles at least one foot replants in front, the condition clears, and normal
+        //   alternating gait resumes.
+
         // ── Stuck-Leg Recovery (Option D) ────────────────────────────────
 
         [SerializeField]
@@ -301,6 +313,21 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Counts FixedUpdate frames remaining in the current recovery window.</summary>
         private int _recoveryFrameCounter;
 
+        // ── Stranded-Foot Forward Bias ──────────────────────────────────
+
+        /// <summary>Left foot Transform, found by name ("Foot_L") in Awake. May be null if the hierarchy lacks it.</summary>
+        private Transform _footL;
+
+        /// <summary>Right foot Transform, found by name ("Foot_R") in Awake. May be null if the hierarchy lacks it.</summary>
+        private Transform _footR;
+
+        /// <summary>
+        /// True when the stranded-foot forward bias is active this frame: both feet are
+        /// behind the hips and the player has active movement input. Exposed for test
+        /// verification; read-only at runtime.
+        /// </summary>
+        private bool _isGaitBiasedForward;
+
         // ── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -322,6 +349,16 @@ namespace PhysicsDrivenMovement.Character
         /// Exposed for test verification; read-only at runtime.
         /// </summary>
         public bool IsRecovering => _isRecovering;
+
+        /// <summary>
+        /// True when the stranded-foot forward bias is active this frame: both feet are
+        /// behind the hips while the player has active movement input. The gait swing
+        /// targets are biased forward by <see cref="_stepAngle"/> × <see cref="_smoothedInputMag"/>
+        /// so the backward phase bottoms out at neutral (0°) instead of driving the
+        /// already-stranded legs further behind.
+        /// Exposed for test verification; read-only at runtime.
+        /// </summary>
+        public bool IsGaitBiasedForward => _isGaitBiasedForward;
 
         /// <summary>
         /// Last world-space swing axis computed by <see cref="ApplyWorldSpaceSwing"/> this frame.
@@ -411,6 +448,11 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[LegAnimator] 'LowerLeg_R' ConfigurableJoint not found in children.", this);
             }
 
+            // STEP 4: Cache foot Transforms by name ("Foot_L", "Foot_R") for stranded-foot
+            //         bias detection. These are children of the lower leg segments. If the
+            //         hierarchy lacks them (e.g. minimal test rigs) the bias feature degrades
+            //         gracefully — IsFootBehindHips returns false when the transform is null.
+            CacheFootTransforms();
         }
 
         private void Start()
@@ -469,6 +511,7 @@ namespace PhysicsDrivenMovement.Character
             //         causing the debug log to show a frozen non-zero axis while gaitFwd
             //         shows zero — the "stale axis" bug seen in the runtime debug log.
             _worldSwingAxis = Vector3.zero;
+            _isGaitBiasedForward = false;
 
             // STEP 1: Gate on missing dependencies — skip gracefully.
             if (_playerMovement == null || _characterState == null)
@@ -690,6 +733,31 @@ namespace PhysicsDrivenMovement.Character
                 float leftSwingDeg  = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
                 float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
 
+                // STEP 5b: Stranded-foot forward bias.
+                //   When BOTH feet are simultaneously behind the hips (dot with hip forward < 0)
+                //   and the player has active movement input, the normal alternating gait's
+                //   backward phase pushes already-stranded feet further back — a self-reinforcing
+                //   stuck loop. Bias both swing targets forward by the current gait amplitude
+                //   (stepAngle × smoothedInputMag) so the backward phase bottoms out at 0° (neutral)
+                //   instead of -stepAngle. This is the minimum shift needed to stop reinforcing
+                //   the stuck state: the forward phase is enhanced while the backward phase
+                //   becomes neutral. Within 1–2 gait cycles at least one foot replants in front,
+                //   the condition clears, and normal gait resumes (visible as a brief stumble).
+                //   Detection uses actual foot world positions (body-aware). The bias magnitude
+                //   uses the existing stepAngle and smoothedInputMag (no new magic numbers).
+                if (inputMagnitude > 0.01f && _footL != null && _footR != null)
+                {
+                    bool leftBehind = IsFootBehindHips(_footL);
+                    bool rightBehind = IsFootBehindHips(_footR);
+                    if (leftBehind && rightBehind)
+                    {
+                        float strandedBias = _stepAngle * _smoothedInputMag;
+                        leftSwingDeg += strandedBias;
+                        rightSwingDeg += strandedBias;
+                        _isGaitBiasedForward = true;
+                    }
+                }
+
                 // STEP 6: Compute lower-leg knee-bend angle.
                 //         The knee holds a constant positive bend during gait so the character
                 //         looks dynamically flexed rather than stiff-legged.
@@ -761,6 +829,53 @@ namespace PhysicsDrivenMovement.Character
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Caches <see cref="_footL"/> and <see cref="_footR"/> by searching all descendant
+        /// Transforms for objects named "Foot_L" and "Foot_R". Called from Awake.
+        /// Mirrors the same lookup pattern used by <see cref="LocomotionCollapseDetector"/>.
+        /// If the hierarchy lacks foot objects (e.g. minimal test rigs), the fields stay null
+        /// and <see cref="IsFootBehindHips"/> degrades gracefully (returns false).
+        /// </summary>
+        private void CacheFootTransforms()
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Transform child = children[i];
+                if (_footL == null && child.name == "Foot_L")
+                {
+                    _footL = child;
+                }
+                else if (_footR == null && child.name == "Foot_R")
+                {
+                    _footR = child;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true when the given foot Transform is behind the hips in the horizontal
+        /// plane, measured against the hips' physical forward direction. "Behind" means
+        /// the horizontal dot product of (foot − hips) with hips forward is negative.
+        /// Returns false if the transform is null or hips forward is degenerate (near-vertical).
+        /// </summary>
+        private bool IsFootBehindHips(Transform footTransform)
+        {
+            if (footTransform == null) return false;
+
+            Vector3 hipToFoot = footTransform.position - transform.position;
+            Vector3 hipForwardFlat = new Vector3(transform.forward.x, 0f, transform.forward.z);
+
+            if (hipForwardFlat.sqrMagnitude < 0.0001f) return false;
+
+            hipForwardFlat.Normalize();
+            float forwardDot = Vector3.Dot(
+                new Vector3(hipToFoot.x, 0f, hipToFoot.z),
+                hipForwardFlat);
+
+            return forwardDot < 0f;
+        }
 
         /// <summary>
         /// Applies world-space swing targets to the four leg ConfigurableJoints.

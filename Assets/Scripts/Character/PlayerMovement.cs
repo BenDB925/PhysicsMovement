@@ -42,6 +42,7 @@ namespace PhysicsDrivenMovement.Character
         private Rigidbody _rb;
         private BalanceController _balance;
         private CharacterState _characterState;
+        private LocomotionCollapseDetector _collapseDetector;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
         private Vector3 _currentFacingDirection = Vector3.forward;
@@ -72,6 +73,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
         public Vector2 CurrentMoveInput => _currentMoveInput;
+
+        /// <summary>
+        /// Latest world-space facing direction requested by movement input.
+        /// Exposed so root-level locomotion systems can reason about intended travel direction.
+        /// </summary>
+        public Vector3 CurrentFacingDirection => _hasFacingDirection ? _currentFacingDirection : transform.forward;
 
         // ─── Test Seams ────────────────────────────────────────────────────
 
@@ -125,11 +132,17 @@ namespace PhysicsDrivenMovement.Character
             //         CharacterState may be added after PlayerMovement in component order, so
             //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
             TryGetComponent(out _characterState);
+            TryGetComponent(out _collapseDetector);
 
             // STEP 3: Resolve a camera reference (serialized value preferred, main camera fallback).
             if (_camera == null)
             {
                 _camera = Camera.main;
+            }
+
+            if (_collapseDetector == null)
+            {
+                TryGetComponent(out _collapseDetector);
             }
 
             // STEP 4: Create and enable PlayerInputActions for the local movement map.
@@ -190,8 +203,8 @@ namespace PhysicsDrivenMovement.Character
             //         jump succeeded, enforcing the one-frame consume rule.
             TryApplyJump();
 
-            // STEP 4: Movement forces. Skip when character is fallen.
-            if (!_balance.IsFallen)
+            // STEP 4: Movement forces. Skip when the character is in a confirmed fall/collapse path.
+            if (!ShouldSuppressLocomotion())
             {
                 ApplyMovementForces(_currentMoveInput);
             }
@@ -281,7 +294,7 @@ namespace PhysicsDrivenMovement.Character
             //         forward regardless of how far up or down the camera is pitched.
             // STEP 2: Skip force application when input is near zero or speed is capped.
             // STEP 3: Apply force using ForceMode.Force and update facing direction.
-            if (_rb == null || _balance == null || _balance.IsFallen)
+            if (_rb == null || _balance == null || ShouldSuppressLocomotion())
             {
                 return;
             }
@@ -363,6 +376,37 @@ namespace PhysicsDrivenMovement.Character
             }
 
             _balance.SetFacingDirection(_currentFacingDirection);
+        }
+
+        private bool ShouldSuppressLocomotion()
+        {
+            if (_balance != null && _balance.IsFallen)
+            {
+                return true;
+            }
+
+            if (_characterState == null)
+            {
+                TryGetComponent(out _characterState);
+            }
+
+            if (_collapseDetector == null)
+            {
+                TryGetComponent(out _collapseDetector);
+            }
+
+            if (_collapseDetector != null && _collapseDetector.IsCollapseConfirmed)
+            {
+                return true;
+            }
+
+            if (_characterState == null)
+            {
+                return false;
+            }
+
+            return _characterState.CurrentState == CharacterStateType.Fallen ||
+                   _characterState.CurrentState == CharacterStateType.GettingUp;
         }
     }
 }

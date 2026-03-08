@@ -33,6 +33,7 @@ namespace PhysicsDrivenMovement.Character
         private float _getUpTimeout = 3f;
 
         private BalanceController _balanceController;
+        private LocomotionCollapseDetector _collapseDetector;
         private PlayerMovement _playerMovement;
         private Rigidbody _rb;
         private float _fallenTimer;
@@ -54,10 +55,16 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Cache BalanceController, PlayerMovement, and Rigidbody dependencies.
+            // STEP 1: Cache BalanceController, collapse detection, PlayerMovement, and Rigidbody dependencies.
             TryGetComponent(out _balanceController);
+            TryGetComponent(out _collapseDetector);
             TryGetComponent(out _playerMovement);
             TryGetComponent(out _rb);
+
+            if (_collapseDetector == null)
+            {
+                _collapseDetector = gameObject.AddComponent<LocomotionCollapseDetector>();
+            }
 
             // STEP 2: Validate required components and log errors when missing.
             if (_balanceController == null)
@@ -89,6 +96,11 @@ namespace PhysicsDrivenMovement.Character
                 TryGetComponent(out _playerMovement);
             }
 
+            if (_collapseDetector == null)
+            {
+                TryGetComponent(out _collapseDetector);
+            }
+
             if (_playerMovement == null)
             {
                 return;
@@ -97,6 +109,7 @@ namespace PhysicsDrivenMovement.Character
             float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
             bool isGrounded = _balanceController.IsGrounded;
             bool isFallen = _balanceController.IsFallen;
+            bool isLocomotionCollapsed = _collapseDetector != null && _collapseDetector.IsCollapseConfirmed;
             bool wantsMove = moveMagnitude >= _moveEnterThreshold;
             bool stoppedMove = moveMagnitude <= _moveExitThreshold;
 
@@ -126,7 +139,7 @@ namespace PhysicsDrivenMovement.Character
             switch (CurrentState)
             {
                 case CharacterStateType.Standing:
-                    if (isFallen)
+                    if (isFallen || isLocomotionCollapsed)
                     {
                         nextState = CharacterStateType.Fallen;
                     }
@@ -141,7 +154,7 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.Moving:
-                    if (isFallen)
+                    if (isFallen || isLocomotionCollapsed)
                     {
                         nextState = CharacterStateType.Fallen;
                     }
@@ -156,7 +169,7 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.Airborne:
-                    if (isFallen)
+                    if (isFallen || isLocomotionCollapsed)
                     {
                         nextState = CharacterStateType.Fallen;
                     }

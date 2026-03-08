@@ -196,6 +196,8 @@ namespace PhysicsDrivenMovement.Character
         // ─── Private Fields ──────────────────────────────────────────────────
 
         private Rigidbody _rb;
+        private CharacterState _characterState;
+        private LocomotionCollapseDetector _collapseDetector;
 
         /// <summary>Left-foot GroundSensor, located in Awake via component search.</summary>
         private GroundSensor _footL;
@@ -364,6 +366,9 @@ namespace PhysicsDrivenMovement.Character
             // _deferLegJointsToAnimator is enabled), we skip all direct forces/drive
             // modifications on the four leg joints so LegAnimator owns them exclusively.
             _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
+
+            TryGetComponent(out _characterState);
+            TryGetComponent(out _collapseDetector);
         }
 
         private void OnValidate()
@@ -614,11 +619,28 @@ namespace PhysicsDrivenMovement.Character
             // Yaw torque is only applied when NOT fallen: when the character is severely
             // tilted or upside-down, the horizontal projection of the forward vector is
             // unreliable and can produce a spurious 180° yaw error that fights recovery.
-            // While fallen, we rely solely on the upright torque to assist self-recovery.
+            // While fallen or in a confirmed locomotion collapse, we rely solely on the
+            // upright torque to assist self-recovery.
             //
             // Airborne multiplier does NOT apply to yaw — the character should always
             // be able to turn in air.
-            if (!IsFallen)
+            if (_collapseDetector == null)
+            {
+                TryGetComponent(out _collapseDetector);
+            }
+
+            if (_characterState == null)
+            {
+                TryGetComponent(out _characterState);
+            }
+
+            bool suppressTurnDrive = IsFallen ||
+                                     (_collapseDetector != null && _collapseDetector.IsCollapseConfirmed) ||
+                                     (_characterState != null &&
+                                      (_characterState.CurrentState == CharacterStateType.Fallen ||
+                                       _characterState.CurrentState == CharacterStateType.GettingUp));
+
+            if (!suppressTurnDrive)
             {
                 Vector3 currentForwardXZ = Vector3.ProjectOnPlane(currentRot * Vector3.forward, Vector3.up);
                 Vector3 targetForwardXZ  = Vector3.ProjectOnPlane(_targetFacingRotation * Vector3.forward, Vector3.up);

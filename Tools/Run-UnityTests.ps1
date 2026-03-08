@@ -2,6 +2,7 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [ValidateSet("All", "EditMode", "PlayMode")]
     [string]$Platform = "All",
+    [string]$TestFilter,
     [switch]$NoGraphicsForEditMode,
     [int]$MaxAttemptsPerPlatform = 2,
     [switch]$Unattended
@@ -81,6 +82,7 @@ function Invoke-UnityTestPlatform {
         [string]$ResolvedProjectPath,
         [ValidateSet("EditMode", "PlayMode")]
         [string]$SinglePlatform,
+        [string]$RequestedTestFilter,
         [bool]$UseNoGraphics,
         [bool]$RunHidden
     )
@@ -118,6 +120,10 @@ function Invoke-UnityTestPlatform {
         "-logFile", $logPath,
         "-forgetProjectPath"
     )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedTestFilter)) {
+        $arguments += @("-testFilter", $RequestedTestFilter)
+    }
 
     $procStartParams = @{
         FilePath     = $UnityExe
@@ -240,6 +246,7 @@ foreach ($singlePlatform in $platformsToRun) {
             -UnityExe $unityExe `
             -ResolvedProjectPath $resolvedProjectPath `
             -SinglePlatform $singlePlatform `
+            -RequestedTestFilter $TestFilter `
             -UseNoGraphics:$useNoGraphics `
             -RunHidden:$runHidden
 
