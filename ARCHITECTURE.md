@@ -12,6 +12,8 @@
 │                           EDITOR TOOLS                             │
 │  RagdollBuilder ──► PlayerRagdoll.prefab                          │
 │  SceneBuilder   ──► Arena_01.unity                                │
+│  ArenaBuilder   ──► Museum_01.unity                               │
+│  PropBuilder / SkinnedRagdollBuilder ──► generated support assets │
 └──────────────────────────────┬─────────────────────────────────────┘
                                │ (prefab / scene produced by)
                                ▼
@@ -27,6 +29,7 @@
 │  CharacterState         ─── FSM (Standing/Moving/Airborne/...)    │
 │  LegAnimator            ─── procedural walk cycle (sinusoidal)    │
 │  ArmAnimator            ─── counter-swing arm gait                │
+│  FallPoseRecorder       ─── rolling fall pose NDJSON diagnostics  │
 │  CameraFollow           ─── orbital third-person camera           │
 │  HandGrabber ★          ─── FixedJoint grab mechanic              │
 │  HitReceiver ★          ─── knockout on head collision            │
@@ -49,6 +52,8 @@
 |----------|------|------------|-------|
 | `PhysicsDrivenMovement.Core` | `Assets/Scripts/Core/` | *(none)* | `GameSettings` singleton |
 | `PhysicsDrivenMovement.Character` | `Assets/Scripts/Character/` | `Core` | Ragdoll physics scripts |
+| `PhysicsDrivenMovement.Input` | `Assets/Scripts/Input/` | `Character` | Generated input wrapper |
+| `PhysicsDrivenMovement.Environment` | `Assets/Scripts/Environment/` | *(none)* | Runtime room metadata for generated scenes |
 | `PhysicsDrivenMovement.Editor` | `Assets/Scripts/Editor/` | `Core`, `Character` | Editor-only build tools |
 | `PhysicsDrivenMovement.Tests.EditMode` | `Assets/Tests/EditMode/` | `Core`, `Character` | NUnit EditMode tests |
 | `PhysicsDrivenMovement.Tests.PlayMode` | `Assets/Tests/PlayMode/` | `Core`, `Character` | NUnit PlayMode tests |
@@ -135,7 +140,7 @@
 | **Why** | Ragdoll characters need procedural leg animation — no keyframe rigs, just physics-driven joint targets. |
 | **Public Surface** | `Phase: float`, `SmoothedInputMag: float` — read by `ArmAnimator` for counter-swing. |
 | **Collaborators** | `PlayerMovement` (input), `CharacterState` (state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`). |
-| **Key design** | Local-space swing only (`_useWorldSpaceSwing = false`). Angular velocity spin gate at 8 rad/s. Phase resets on restart/sharp turn to prevent leg snap. |
+| **Key design** | Supports both legacy local-frame swing and a world-space swing path. Current field default in code is `_useWorldSpaceSwing = false`. Angular velocity spin gate at 8 rad/s. Phase resets on restart/sharp turn to prevent leg snap. |
 | **Phase** | 3E |
 
 ### `Character.ArmAnimator` — `Assets/Scripts/Character/ArmAnimator.cs`
@@ -158,6 +163,16 @@
 | **Collaborators** | Reads Hips transform position. `PlayerMovement` reads camera yaw for camera-relative movement. |
 | **Phase** | 3G (delivered by Jermie) |
 
+### `Character.FallPoseRecorder` — `Assets/Scripts/Character/FallPoseRecorder.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Optional MonoBehaviour on Hips that records line-delimited JSON pose samples around falls or manual investigator triggers. |
+| **Why** | Corner and recovery regressions need exact knee/foot placement relative to the hips basis before and after a topple, without building a bespoke harness each time. |
+| **Public Surface** | `TriggerRollingCapture(string)`, `IsCaptureActive`, `CompletedSessionCount`, `BufferedSampleCount`, `LogFilePath` |
+| **Collaborators** | Reads `CharacterState` transitions, `BalanceController` grounded/fallen state, `PlayerMovement` input, and lower-leg / foot transforms. `MovementQualityTests` attaches and configures it automatically. |
+| **Phase** | Diagnostics support |
+
 ---
 
 ### `Editor.SceneBuilder` — `Assets/Scripts/Editor/SceneBuilder.cs`
@@ -168,6 +183,46 @@
 | **Phase** | 0 |
 
 ---
+
+### `Environment.ArenaRoom` — `Assets/Scripts/Environment/ArenaRoom.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Lightweight runtime room metadata component attached to generated museum room GameObjects. |
+| **Why** | Allows gameplay systems to query room membership from world-space positions without hardcoding scene geometry. |
+| **Public Surface** | `RoomName`, `RoomBounds`, `ContainsPoint(Vector3)`, `Initialise(string, Bounds)` |
+| **Collaborators** | Authored by `ArenaBuilder`; intended for future room-aware hazards, scoring, and AI logic. |
+| **Phase** | Concept/prototype support |
+
+### `Editor.ArenaBuilder` — `Assets/Scripts/Editor/ArenaBuilder.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Static editor class that procedurally builds the museum concept scene `Museum_01.unity`. |
+| **Why** | Keeps the museum layout reproducible and data-driven instead of hand-editing scene geometry. |
+| **Public Surface** | `BuildMuseumArena()` (MenuItem). |
+| **Collaborators** | Creates `ArenaRoom` components, `GameSettings`, room geometry, and spawn points. |
+| **Phase** | Concept/prototype support |
+
+### `Editor.PropBuilder` — `Assets/Scripts/Editor/PropBuilder.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Editor helper for generating environment props used by builder workflows. |
+| **Why** | Centralises repeatable prop creation instead of embedding prop geometry directly in scene code. |
+| **Public Surface** | Builder helpers consumed by editor-time scene generation. |
+| **Collaborators** | Used alongside `ArenaBuilder` and other editor tools. |
+| **Phase** | Concept/prototype support |
+
+### `Editor.SkinnedRagdollBuilder` — `Assets/Scripts/Editor/SkinnedRagdollBuilder.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Editor helper for producing skinned/visual ragdoll variants on top of the physics rig. |
+| **Why** | Separates visual-rig generation from the base primitive ragdoll builder. |
+| **Public Surface** | Editor-only build entry points/helpers. |
+| **Collaborators** | Works with `RagdollBuilder` and `RagdollMeshFollower` workflows. |
+| **Phase** | Visual pipeline support |
 
 ## 4 — Data Flow: Ragdoll Initialisation
 

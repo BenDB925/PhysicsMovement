@@ -4,6 +4,8 @@
 
 A multiplayer online brawler featuring **Gang Beasts–style active ragdoll movement**. Players control wobbly physics-driven characters that grab, punch, and throw each other. The game uses **Unity (Built-in 3D)** with **Netcode for GameObjects (NGO)** for networking, supports **2–4 players** in **peer-to-peer (host/client)** matches.
 
+Current implementation is still centered on the physics-movement prototype. `Assets/Scenes/Arena_01.unity` is the main validation scene, while `Assets/Scenes/Museum_01.unity` and `CONCEPT.md` represent the broader museum-game direction rather than a completed Phase 5/6 game loop.
+
 ---
 
 ## Tech Stack

@@ -582,6 +582,29 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "GroundSensor must detect the ground when it's on the Environment layer.");
         }
 
+        [UnityTest]
+        public IEnumerator GroundSensor_SingleFrameContactLoss_DoesNotClearGrounded()
+        {
+            // Arrange
+            CreateGroundPlane();
+            CreateMinimalStandingRagdoll();
+            yield return WaitPhysicsFrames(SettleFrameCount);
+
+            Assert.That(_balance.IsGrounded, Is.True,
+                "Precondition failed: expected the character to be grounded before testing contact flicker.");
+
+            // Act — remove the ground for one physics step, then restore it.
+            Vector3 originalGroundPosition = _groundGO.transform.position;
+            _groundGO.transform.position = new Vector3(originalGroundPosition.x, -5f, originalGroundPosition.z);
+            yield return new WaitForFixedUpdate();
+            _groundGO.transform.position = originalGroundPosition;
+            yield return new WaitForFixedUpdate();
+
+            // Assert
+            Assert.That(_balance.IsGrounded, Is.True,
+                "A single missed contact frame should be absorbed by GroundSensor hysteresis instead of clearing IsGrounded.");
+        }
+
         /// <summary>
         /// Verifies that when the ground is on the Default layer (wrong layer),
         /// GroundSensor does NOT report IsGrounded.
@@ -599,6 +622,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Assert
             Assert.That(_balance.IsGrounded, Is.False,
                 "GroundSensor must NOT detect ground on the wrong layer (Default instead of Environment).");
+        }
+
+        [UnityTest]
+        public IEnumerator GroundSensor_SustainedContactLoss_ClearsGrounded()
+        {
+            // Arrange
+            CreateGroundPlane();
+            CreateMinimalStandingRagdoll();
+            yield return WaitPhysicsFrames(SettleFrameCount);
+
+            Assert.That(_balance.IsGrounded, Is.True,
+                "Precondition failed: expected the character to be grounded before testing sustained contact loss.");
+
+            // Act — keep the ground out of range long enough to exceed the sensor grace window.
+            Vector3 originalGroundPosition = _groundGO.transform.position;
+            _groundGO.transform.position = new Vector3(originalGroundPosition.x, -5f, originalGroundPosition.z);
+            yield return WaitPhysicsFrames(4);
+
+            // Assert
+            Assert.That(_balance.IsGrounded, Is.False,
+                "Sustained contact loss must still clear IsGrounded after the hysteresis window elapses.");
         }
 
         // =====================================================================

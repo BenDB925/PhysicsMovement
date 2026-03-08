@@ -23,6 +23,11 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum distance the cast travels below the foot origin to check for ground.")]
         private float _castDistance = 0.25f;
 
+        [SerializeField, Range(0f, 0.2f)]
+        [Tooltip("How long a grounded foot may temporarily miss the floor before the sensor reports ungrounded. " +
+             "Suppresses single-frame contact flicker during fast turns and steps.")]
+        private float _groundedExitDelay = 0.03f;
+
         [SerializeField]
         [Tooltip("Layer mask for surfaces that count as ground. Assign the Environment layer.")]
         private LayerMask _groundLayers;
@@ -31,6 +36,7 @@ namespace PhysicsDrivenMovement.Character
 
         private bool _isGrounded;
         private Collider _footCollider;
+        private float _ungroundedTimer;
 
         // ─── Public Properties ────────────────────────────────────────────────
 
@@ -57,7 +63,7 @@ namespace PhysicsDrivenMovement.Character
             // exactly at the bottom of the collider.
             Vector3 origin = GetCastOrigin();
 
-            _isGrounded = Physics.SphereCast(
+            bool detectedGround = Physics.SphereCast(
                 origin: origin,
                 radius:    _castRadius,
                 direction: Vector3.down,
@@ -65,6 +71,25 @@ namespace PhysicsDrivenMovement.Character
                 maxDistance: _castDistance + _castRadius,
                 layerMask:   _groundLayers,
                 queryTriggerInteraction: QueryTriggerInteraction.Ignore);
+
+            if (detectedGround)
+            {
+                _isGrounded = true;
+                _ungroundedTimer = 0f;
+                return;
+            }
+
+            if (!_isGrounded)
+            {
+                return;
+            }
+
+            _ungroundedTimer += Time.fixedDeltaTime;
+            if (_ungroundedTimer >= _groundedExitDelay)
+            {
+                _isGrounded = false;
+                _ungroundedTimer = 0f;
+            }
         }
 
         // ─── Editor Visualisation ─────────────────────────────────────────────

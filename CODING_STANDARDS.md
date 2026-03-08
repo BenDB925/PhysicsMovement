@@ -79,8 +79,9 @@ Common penalties: spins detected, fallen at end, waypoints missed.
 
 1. Write the minimum code required to make all tests from Phase C pass.
 2. Do not add untested behaviour in this phase.
-3. Run all tests (not just new ones) — zero failures required before proceeding. Use the terminal commands in [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §4 to run EditMode + PlayMode, then parse the XML to confirm `result = "Passed"`.
-4. If results XML is missing on a run, rerun sequentially (EditMode then PlayMode) with retries before marking the test gate as failed.
+3. Run the **smallest relevant regression slice** that covers the changed behaviour and its closest neighbours. Use the task map in `TASK_ROUTING.md` to choose the relevant suites and the focused commands in [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §4.
+4. Escalate to broader coverage only when the change is cross-cutting: shared infrastructure, multiple systems, scene/bootstrap code, assembly-definition changes, or anything that makes the impact uncertain.
+5. If results XML is missing on a run, rerun sequentially with retries before marking the test gate as failed.
 
 ### Phase E: Verify Feature / Fix
 
@@ -103,7 +104,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 | F7 | **No warnings** — Does the project compile with zero warnings? | Fix warnings. |
 | F8 | **DESIGN comments** — Are `// STEP n:` comments from Phase B still accurate post-implementation? Were they converted to meaningful inline comments or removed if redundant? | Update or clean up. |
 | F9 | **Agent context files** — If new systems/classes were added, was `.copilot-instructions.md` or `ARCHITECTURE.md` updated to reference them? | Update those files. |
-| F10 | **Regression** — Do ALL existing tests still pass? Run all tests via [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §6 and parse XML results. | Fix regressions before committing. |
+| F10 | **Regression** — Did you run the focused regression tests that match the touched system, and were they all green? If the change was cross-cutting, did you escalate to the wider suite? Use [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) to pick the right scope and parse XML results. | Fix regressions before committing. |
 
 **Output format for the self-review:** Present a table of F1–F10 with PASS/FAIL and a brief note. If any FAIL, describe the fix applied. The user should see the review results before they're committed.
 
@@ -130,6 +131,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 | No test interdependency | Tests must not depend on execution order or shared mutable state. Use `[SetUp]`/`[TearDown]`. |
 | Test file location | Mirror source path: `Assets/Scripts/Character/MuscleController.cs` → `Assets/Tests/EditMode/Character/MuscleControllerTests.cs` |
 | Assembly definitions | Tests must have their own `.asmdef` referencing the source `.asmdef` and `nunit.framework`. |
+| Verification scope | Default to feature-scoped verification: changed tests plus nearby regression suites for the same runtime loop. Only run the full project suite when the change is broad or the impact cannot be bounded confidently. |
 
 ---
 

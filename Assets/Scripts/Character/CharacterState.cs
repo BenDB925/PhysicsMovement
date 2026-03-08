@@ -65,23 +65,31 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogError("[CharacterState] Missing BalanceController.", this);
             }
 
-            if (_playerMovement == null)
-            {
-                Debug.LogError("[CharacterState] Missing PlayerMovement.", this);
-            }
-
             if (_rb == null)
             {
                 Debug.LogError("[CharacterState] Missing Rigidbody.", this);
             }
 
-            // STEP 3: Initialize current state to Standing.
+            // STEP 3: Allow PlayerMovement to be absent during Awake and resolve it later.
+            // Some test rigs and staged runtime setup attach CharacterState before PlayerMovement.
+
+            // STEP 4: Initialize current state to Standing.
             CurrentState = CharacterStateType.Standing;
         }
 
         private void FixedUpdate()
         {
-            if (_balanceController == null || _playerMovement == null)
+            if (_balanceController == null)
+            {
+                return;
+            }
+
+            if (_playerMovement == null)
+            {
+                TryGetComponent(out _playerMovement);
+            }
+
+            if (_playerMovement == null)
             {
                 return;
             }

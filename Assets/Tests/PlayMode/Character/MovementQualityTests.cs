@@ -15,6 +15,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     public class MovementQualityTests
     {
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string FallPoseLogFileName = "movement-quality-fall-pose.ndjson";
 
         private const int WalkStraightFrameBudget = 600;
         private const int CornerCourseFrameBudget = 1200;
@@ -159,6 +160,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateFloat(playerMovement, "_moveForce", 1500f);
             SetPrivateFloat(playerMovement, "_maxSpeed", 8f);
 
+            FallPoseRecorder recorder = playerMovement.gameObject.AddComponent<FallPoseRecorder>();
+            ConfigureFallRecorder(recorder);
+
             _characterState = _player.GetComponentInChildren<CharacterState>();
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
 
@@ -191,6 +195,32 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             if (field != null && field.FieldType == typeof(float))
+            {
+                field.SetValue(target, value);
+            }
+        }
+
+        private static void ConfigureFallRecorder(FallPoseRecorder recorder)
+        {
+            Assert.That(recorder, Is.Not.Null, "FallPoseRecorder must be attached before configuration.");
+
+            SetPrivateField(recorder, "_enableDiagnostics", true);
+            SetPrivateField(recorder, "_logToConsole", false);
+            SetPrivateField(recorder, "_logToFile", true);
+            SetPrivateField(recorder, "_clearLogOnStart", true);
+            SetPrivateField(recorder, "_logFileName", FallPoseLogFileName);
+            SetPrivateField(recorder, "_sampleEveryFixedTicks", 1);
+            SetPrivateField(recorder, "_preTriggerSeconds", 1.5f);
+            SetPrivateField(recorder, "_postTriggerSeconds", 2.0f);
+            SetPrivateField(recorder, "_autoTriggerOnFallen", true);
+            SetPrivateField(recorder, "_recordContinuousSamples", false);
+            SetPrivateField(recorder, "_allowManualTrigger", false);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field != null)
             {
                 field.SetValue(target, value);
             }

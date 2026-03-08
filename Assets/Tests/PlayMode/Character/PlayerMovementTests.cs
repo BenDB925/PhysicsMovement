@@ -127,6 +127,44 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Speed cap should block additional acceleration above max speed. before={speedBefore:F3}, after={speedAfter:F3}.");
         }
 
+        [UnityTest]
+        public IEnumerator ApplyMovementForces_WithFacingTurnRateLimit_SlewsFacingTargetAcrossFrames()
+        {
+            // Arrange
+            yield return null;
+            SetAutoPropertyBackingField(_balance, "IsFallen", false);
+            SetPrivateField(_movement, "_maxFacingTurnRateDegPerSecond", 90f);
+
+            _camera.transform.rotation = Quaternion.identity;
+            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
+            yield return new WaitForFixedUpdate();
+
+            // Act — snap the desired direction from +Z to +X in one frame.
+            _camera.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
+
+            Vector3 immediateFacing = GetTargetFacingForward();
+
+            // Assert 1: the target should start rotating toward +X, but not jump there immediately.
+            Assert.That(Vector3.Angle(immediateFacing, Vector3.forward), Is.GreaterThan(0.5f),
+                $"Facing target should begin rotating away from the old heading immediately. facing={immediateFacing}");
+            Assert.That(Vector3.Angle(immediateFacing, Vector3.right), Is.GreaterThan(45f),
+                $"Facing slew limit should prevent a one-frame 90° snap to +X. facing={immediateFacing}");
+
+            // Act 2 — continue holding the new direction until the limited target catches up.
+            int settleFrames = Mathf.CeilToInt(90f / (90f * Time.fixedDeltaTime)) + 10;
+            for (int i = 0; i < settleFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                _applyMovementMethod.Invoke(_movement, new object[] { new Vector2(0f, 1f) });
+            }
+
+            // Assert 2: the target should converge to the requested heading within a reasonable window.
+            Vector3 settledFacing = GetTargetFacingForward();
+            Assert.That(Vector3.Angle(settledFacing, Vector3.right), Is.LessThan(5f),
+                $"Facing target should converge to the requested heading after repeated physics steps. facing={settledFacing}");
+        }
+
         // ─── GAP-1: Camera-relative movement at steep pitch (−60°) ─────────
 
         /// <summary>
@@ -247,6 +285,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             field.SetValue(instance, value);
+        }
+
+        private Vector3 GetTargetFacingForward()
+        {
+            FieldInfo field = typeof(BalanceController).GetField(
+                "_targetFacingRotation",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+            {
+                throw new InvalidOperationException("BalanceController._targetFacingRotation must exist for tests.");
+            }
+
+            Quaternion rotation = (Quaternion)field.GetValue(_balance);
+            Vector3 forward = Vector3.ProjectOnPlane(rotation * Vector3.forward, Vector3.up);
+            if (forward.sqrMagnitude < 0.001f)
+            {
+                return Vector3.forward;
+            }
+
+            return forward.normalized;
         }
 
         private static void SetAutoPropertyBackingField(object instance, string propertyName, object value)

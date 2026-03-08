@@ -1217,6 +1217,7 @@ GameObject:
   - component: {fileID: 129253150340205023}
   - component: {fileID: 7966672302456914730}
   - component: {fileID: 1142327125434414261}
+  - component: {fileID: 1504783932290576645}
   m_Layer: 8
   m_Name: PlayerRagdoll
   m_TagString: Untagged
@@ -1233,7 +1234,7 @@ Transform:
   m_GameObject: {fileID: 3651069376947674363}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 1.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1456,6 +1457,30 @@ MonoBehaviour:
   _enableDebugKeys: 0
   _smallPushForce: 200
   _largePushForce: 800
+--- !u!114 &1504783932290576645
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651069376947674363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f331db220272864abc92ed868fdf0d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.FallPoseRecorder
+  _enableDiagnostics: 1
+  _logToConsole: 0
+  _logToFile: 1
+  _clearLogOnStart: 1
+  _logFileName: fall-pose-log.ndjson
+  _sampleEveryFixedTicks: 5
+  _preTriggerSeconds: 2
+  _postTriggerSeconds: 2
+  _autoTriggerOnFallen: 0
+  _recordContinuousSamples: 0
+  _allowManualTrigger: 1
+  _manualTriggerKey: 101
 --- !u!1 &4190906008843255351
 GameObject:
   m_ObjectHideFlags: 0

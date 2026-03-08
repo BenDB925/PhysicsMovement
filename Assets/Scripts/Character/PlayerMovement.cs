@@ -31,6 +31,11 @@ namespace PhysicsDrivenMovement.Character
                  "Jump is only allowed from Standing or Moving state while grounded.")]
         private float _jumpForce = 100f;
 
+        [SerializeField, Range(0f, 1080f)]
+        [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
+             "0 disables the slew limit and forwards the raw heading immediately.")]
+        private float _maxFacingTurnRateDegPerSecond = 540f;
+
         [SerializeField]
         private Camera _camera;
 
@@ -39,6 +44,9 @@ namespace PhysicsDrivenMovement.Character
         private CharacterState _characterState;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
+        private Vector3 _currentFacingDirection = Vector3.forward;
+        private bool _hasFacingDirection;
+        private bool _hasReceivedMovementInput;
 
         // ─── Jump state ────────────────────────────────────────────────────
 
@@ -127,6 +135,15 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4: Create and enable PlayerInputActions for the local movement map.
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
+
+            Vector3 initialFacing = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (initialFacing.sqrMagnitude < 0.001f)
+            {
+                initialFacing = Vector3.forward;
+            }
+
+            _currentFacingDirection = initialFacing.normalized;
+            _hasFacingDirection = true;
         }
 
         private void FixedUpdate()
@@ -305,8 +322,47 @@ namespace PhysicsDrivenMovement.Character
 
             if (worldDirection.sqrMagnitude > 0.01f)
             {
-                _balance.SetFacingDirection(worldDirection);
+                bool forceImmediateFacing = !_hasReceivedMovementInput;
+                UpdateFacingDirection(worldDirection, forceImmediateFacing);
+                _hasReceivedMovementInput = true;
             }
+        }
+
+        private void UpdateFacingDirection(Vector3 desiredWorldDirection, bool forceImmediateFacing)
+        {
+            Vector3 desiredFacing = new Vector3(desiredWorldDirection.x, 0f, desiredWorldDirection.z);
+            if (desiredFacing.sqrMagnitude < 0.001f)
+            {
+                return;
+            }
+
+            desiredFacing.Normalize();
+
+            if (forceImmediateFacing || !_hasFacingDirection || _maxFacingTurnRateDegPerSecond <= 0f)
+            {
+                _currentFacingDirection = desiredFacing;
+                _hasFacingDirection = true;
+            }
+            else
+            {
+                float maxRadiansDelta = _maxFacingTurnRateDegPerSecond * Mathf.Deg2Rad * Time.fixedDeltaTime;
+                _currentFacingDirection = Vector3.RotateTowards(
+                    _currentFacingDirection,
+                    desiredFacing,
+                    maxRadiansDelta,
+                    0f);
+
+                if (_currentFacingDirection.sqrMagnitude < 0.001f)
+                {
+                    _currentFacingDirection = desiredFacing;
+                }
+                else
+                {
+                    _currentFacingDirection.Normalize();
+                }
+            }
+
+            _balance.SetFacingDirection(_currentFacingDirection);
         }
     }
 }

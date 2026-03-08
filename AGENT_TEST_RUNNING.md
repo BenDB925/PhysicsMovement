@@ -124,11 +124,54 @@ $logFile      = "$projectPath\TestResults\PlayMode.log"
 
 ---
 
-## 4 — Run All Tests (EditMode + PlayMode) (preferred method to run tests)
+## 4 — Run Focused Tests For The Current Feature
+
+Default to the smallest test slice that meaningfully covers the feature you just changed. Use `TASK_ROUTING.md` to choose the closest existing suites first.
+
+### Preferred command for focused verification
+
+`Run-UnityTests.ps1` supports an optional `-TestFilter` argument. Use it when you know the relevant fixtures or test names.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" `
+    -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" `
+    -Platform PlayMode `
+    -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.LegAnimatorTests;PhysicsDrivenMovement.Tests.PlayMode.GaitOutcomeTests" `
+    -MaxAttemptsPerPlatform 2 `
+    -Unattended
+```
+
+### Picking the right scope
+
+- For a single character runtime loop, run the directly affected fixture plus the closest outcome/regression fixtures.
+- For movement or gait changes, prefer suites such as `LegAnimatorTests`, `GaitOutcomeTests`, `TurnRecoveryTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, or `MovementQualityTests` as appropriate.
+- For rig or prefab composition changes, pair the relevant EditMode prefab tests with the closest PlayMode integration tests.
+- For camera-only changes, run `CameraFollowTests` rather than the whole PlayMode suite.
+- If you cannot explain why a smaller slice is sufficient, the slice is too small.
+
+### Manual focused commands (fallback)
+
+If you need raw Unity CLI instead of the repo script, add `-testFilter` directly:
+
+```powershell
+& $unityExe `
+    -runTests `
+    -batchmode `
+    -projectPath $projectPath `
+    -testPlatform PlayMode `
+    -testFilter "PhysicsDrivenMovement.Tests.PlayMode.TurnRecoveryTests" `
+    -testResults "$projectPath\TestResults\PlayMode.xml" `
+    -logFile "$projectPath\TestResults\PlayMode.log" `
+    -forgetProjectPath
+```
+
+---
+
+## 5 — Run All Tests (EditMode + PlayMode) (use only when warranted)
 
 ### Preferred command (lock-safe)
 
-Use the repo script below as the default path. It force-stops lingering Unity processes, clears known lock artifacts, runs platforms sequentially, verifies fresh XML output, and retries once if it detects an infra/lock race.
+Use the repo script below when the change is cross-cutting or when focused verification is not enough. It force-stops lingering Unity processes, clears known lock artifacts, runs platforms sequentially, verifies fresh XML output, and retries once if it detects an infra/lock race.
 
 For agent execution in VS Code: launch this command in a regular (non-background) terminal session. Background terminal launches can trigger a UI confirmation prompt that requires user interaction.
 
@@ -219,7 +262,7 @@ Operator action:
 
 ---
 
-## 5 — Parse Test Results (NUnit XML)
+## 6 — Parse Test Results (NUnit XML)
 
 The results file is standard NUnit 3 XML. Here is how to extract a summary and any failures.
 
