@@ -29,6 +29,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             Rigidbody movementBody = _playerMovement != null ? _playerMovement.GetComponent<Rigidbody>() : null;
+            if (_playerMovement != null && movementBody == null)
+            {
+                Debug.LogError("[WaypointCourseRunner] PlayerMovement object has no Rigidbody.");
+            }
+
             _hipsTransform = movementBody != null
                 ? movementBody.transform
                 : (_playerMovement != null ? _playerMovement.transform : (_player != null ? _player.transform : null));
