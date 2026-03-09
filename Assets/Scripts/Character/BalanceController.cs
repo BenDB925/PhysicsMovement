@@ -305,6 +305,12 @@ namespace PhysicsDrivenMovement.Character
         public bool IsFallen { get; private set; }
 
         /// <summary>
+        /// Current deviation in degrees between the Hips up-axis and world up.
+        /// Updated every FixedUpdate. 0 = perfectly upright, 90 = horizontal.
+        /// </summary>
+        public float UprightAngle { get; private set; }
+
+        /// <summary>
         /// True while the snap recovery window is active after a sharp direction change.
         /// Used by <see cref="PlayerMovement"/> to keep movement forces alive during
         /// brief falls caused by aggressive turns.
@@ -480,6 +486,7 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Measure how far the Hips' up-axis deviates from world-up.
             //         Vector3.Angle always returns 0–180°, so this is safe for all poses.
             float uprightAngle = Vector3.Angle(_rb.transform.up, Vector3.up);
+            UprightAngle = uprightAngle;
 
             // STEP 3: Update fallen state with hysteresis (unless overridden by test seam).
             bool nowFallen;

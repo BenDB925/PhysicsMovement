@@ -31,6 +31,16 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 90f)]
         private float _uprightCompromiseAngleThreshold = 30f;
 
+        [SerializeField, Range(0f, 90f), Tooltip("When upright angle exceeds this severe threshold, the projected-progress " +
+                 "check uses _severeProgressThreshold instead of _projectedProgressThreshold. " +
+                 "This prevents residual momentum from masking genuine collapses at extreme lean angles.")]
+        private float _severeAngleThreshold = 50f;
+
+        [SerializeField, Range(-2f, 2f), Tooltip("Projected-progress threshold used when upright angle exceeds _severeAngleThreshold. " +
+                 "Higher than the normal threshold so residual forward velocity (0.2\u20130.4 m/s) " +
+                 "at extreme lean no longer blocks collapse detection.")]
+        private float _severeProgressThreshold = 0.5f;
+
         [SerializeField, Range(0.5f, 1f)]
         private float _groundedMajorityThreshold = 0.7f;
 
@@ -148,7 +158,10 @@ namespace PhysicsDrivenMovement.Character
             }
 
             bool strongIntent = moveMagnitude >= _moveIntentThreshold;
-            bool lowProjectedProgress = projectedProgress <= _projectedProgressThreshold;
+            float effectiveProgressThreshold = uprightAngle >= _severeAngleThreshold
+                ? _severeProgressThreshold
+                : _projectedProgressThreshold;
+            bool lowProjectedProgress = projectedProgress <= effectiveProgressThreshold;
             bool supportBehindHips = supportBehindDistance >= _supportBehindThreshold;
             bool compromisedUpright = uprightAngle >= _uprightCompromiseAngleThreshold;
 
@@ -178,7 +191,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 Debug.Log(
                     $"[LocomotionCollapseDetector] '{name}': collapse confirmed " +
-                    $"(intent={moveMagnitude:F2}, progress={projectedProgress:F2} m/s, " +
+                    $"(intent={moveMagnitude:F2}, progress={projectedProgress:F2} m/s [threshold={effectiveProgressThreshold:F2}], " +
                     $"supportBehind={supportBehindDistance:F2} m, upright={uprightAngle:F1} deg).",
                     this);
             }

@@ -36,6 +36,40 @@ namespace PhysicsDrivenMovement.Character
                  "0 disables the slew limit and forwards the raw heading immediately.")]
         private float _maxFacingTurnRateDegPerSecond = 540f;
 
+        [Header("Lean-Proportional Force Reduction")]
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Lean angle (degrees) at which movement force begins to reduce. " +
+                 "Below this angle, full force is applied. Prevents forward thrust " +
+                 "from compounding stumbles.")]
+        private float _leanReductionStartAngle = 10f;
+
+        [SerializeField, Range(10f, 90f)]
+        [Tooltip("Lean angle (degrees) at which movement force reaches its minimum multiplier. " +
+                 "Between start and full, force scales linearly.")]
+        private float _leanReductionFullAngle = 35f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum movement force multiplier at or beyond the full lean angle. " +
+                 "0 = no force at extreme lean, 0.2 = 20% force remains for some forward intent.")]
+        private float _leanReductionMinMultiplier = 0.1f;
+
+        [Header("Lean-Proportional Braking")]
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Lean angle (degrees) at which horizontal braking begins. " +
+                 "Actively decelerates the character when stumbling, bleeding off the " +
+                 "kinetic energy that feeds the topple.")]
+        private float _leanBrakingStartAngle = 15f;
+
+        [SerializeField, Range(10f, 90f)]
+        [Tooltip("Lean angle (degrees) at which braking reaches full strength.")]
+        private float _leanBrakingFullAngle = 40f;
+
+        [SerializeField, Range(0f, 500f)]
+        [Tooltip("Maximum braking coefficient at full lean. Applied as a drag force " +
+                 "proportional to horizontal velocity: F = -velocity * coefficient. " +
+                 "Higher = stronger deceleration during stumbles.")]
+        private float _leanBrakingCoefficient = 200f;
+
         [SerializeField]
         private Camera _camera;
 
@@ -212,6 +246,11 @@ namespace PhysicsDrivenMovement.Character
             {
                 ApplyMovementForces(_currentMoveInput);
             }
+
+            // STEP 5: Lean-proportional braking. Applied regardless of locomotion suppression
+            //         because the goal is to bleed off existing horizontal momentum that feeds
+            //         the topple, not to add new movement.
+            ApplyLeanBraking();
         }
 
         private void OnDestroy()
@@ -314,7 +353,8 @@ namespace PhysicsDrivenMovement.Character
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
             if (horizontalVelocity.magnitude < _maxSpeed)
             {
-                _rb.AddForce(worldDirection * _moveForce, ForceMode.Force);
+                float leanMultiplier = GetLeanForceMultiplier();
+                _rb.AddForce(worldDirection * (_moveForce * leanMultiplier), ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
@@ -417,6 +457,53 @@ namespace PhysicsDrivenMovement.Character
 
             return _characterState.CurrentState == CharacterStateType.Fallen ||
                    _characterState.CurrentState == CharacterStateType.GettingUp;
+        }
+
+        private float GetLeanForceMultiplier()
+        {
+            if (_balance == null)
+            {
+                return 1f;
+            }
+
+            float lean = _balance.UprightAngle;
+            if (lean <= _leanReductionStartAngle)
+            {
+                return 1f;
+            }
+
+            float range = _leanReductionFullAngle - _leanReductionStartAngle;
+            if (range <= 0f)
+            {
+                return _leanReductionMinMultiplier;
+            }
+
+            float t = Mathf.Clamp01((lean - _leanReductionStartAngle) / range);
+            return Mathf.Lerp(1f, _leanReductionMinMultiplier, t);
+        }
+
+        private void ApplyLeanBraking()
+        {
+            if (_balance == null || _rb == null)
+            {
+                return;
+            }
+
+            float lean = _balance.UprightAngle;
+            if (lean <= _leanBrakingStartAngle)
+            {
+                return;
+            }
+
+            float range = _leanBrakingFullAngle - _leanBrakingStartAngle;
+            if (range <= 0f)
+            {
+                return;
+            }
+
+            float brakeT = Mathf.Clamp01((lean - _leanBrakingStartAngle) / range);
+            Vector3 horizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+            _rb.AddForce(-horizontalVel * (_leanBrakingCoefficient * brakeT), ForceMode.Force);
         }
     }
 }

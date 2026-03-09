@@ -1430,6 +1430,12 @@ MonoBehaviour:
   _maxSpeed: 5
   _jumpForce: 100
   _maxFacingTurnRateDegPerSecond: 540
+  _leanReductionStartAngle: 10
+  _leanReductionFullAngle: 35
+  _leanReductionMinMultiplier: 0.1
+  _leanBrakingStartAngle: 15
+  _leanBrakingFullAngle: 40
+  _leanBrakingCoefficient: 200
   _camera: {fileID: 0}
 --- !u!114 &7966672302456914730
 MonoBehaviour:
@@ -1477,15 +1483,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.FallPoseRecorder
   _enableDiagnostics: 1
-  _logToConsole: 0
+  _logToConsole: 1
   _logToFile: 1
   _clearLogOnStart: 1
   _logFileName: fall-pose-log.ndjson
   _sampleEveryFixedTicks: 5
-  _preTriggerSeconds: 2
+  _preTriggerSeconds: 3
   _postTriggerSeconds: 2
   _autoTriggerOnFallen: 0
-  _recordContinuousSamples: 0
+  _recordContinuousSamples: 1
   _allowManualTrigger: 1
   _manualTriggerKey: 101
 --- !u!1 &4190906008843255351
