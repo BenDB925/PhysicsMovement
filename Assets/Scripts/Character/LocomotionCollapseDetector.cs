@@ -29,13 +29,23 @@ namespace PhysicsDrivenMovement.Character
         private float _supportBehindThreshold = 0.25f;
 
         [SerializeField, Range(0f, 90f)]
-        private float _uprightCompromiseAngleThreshold = 15f;
+        private float _uprightCompromiseAngleThreshold = 30f;
 
         [SerializeField, Range(0.5f, 1f)]
         private float _groundedMajorityThreshold = 0.7f;
 
         [SerializeField, Range(0f, 0.25f)]
         private float _groundedGraceDuration = 0.05f;
+
+        [SerializeField, Range(0f, 2f), Tooltip("Minimum horizontal speed (m/s) at which the velocity-direction gate activates.")]
+        private float _turnVelocityGateSpeed = 0.15f;
+
+        [SerializeField, Range(0f, 120f), Tooltip("When horizontal velocity exceeds the gate speed AND its angle to the requested direction exceeds this, the character is mid-turn. Collapse evidence is reset.")]
+        private float _turnVelocityAngleThreshold = 60f;
+
+        [SerializeField, Range(0f, 3f), Tooltip("Seconds after collapse evidence clears before re-confirmation is allowed. " +
+                 "Breaks the Fallen→Moving→Fallen stutter loop where gait-resets prevent natural recovery.")]
+        private float _postCollapseCooldown = 1f;
 
         [SerializeField]
         private bool _debugTransitions = false;
@@ -49,6 +59,7 @@ namespace PhysicsDrivenMovement.Character
         private float _evidenceWindowTime;
         private float _groundedWindowTime;
         private float _groundedGraceTimeRemaining;
+        private float _cooldownRemaining;
 
         /// <summary>
         /// True once collapse evidence has remained active for the configured bounded window.
@@ -73,6 +84,23 @@ namespace PhysicsDrivenMovement.Character
             {
                 ResetEvidence();
                 return;
+            }
+
+            // STEP 1a: Tick down post-collapse cooldown. While active, suppress all evidence
+            //          accumulation so the gait has time to produce recovery steps.
+            if (_cooldownRemaining > 0f)
+            {
+                _cooldownRemaining -= Time.fixedDeltaTime;
+                if (_cooldownRemaining > 0f)
+                {
+                    // Don't call ResetEvidence here — evidence is already clear and
+                    // calling it would overwrite _cooldownRemaining to 0 via the
+                    // IsCollapseConfirmed=false path. Just keep timers zeroed.
+                    IsCollapseConfirmed = false;
+                    _evidenceWindowTime = 0f;
+                    _groundedWindowTime = 0f;
+                    return;
+                }
             }
 
             Vector3 horizontalVelocity = new Vector3(_hipsBody.linearVelocity.x, 0f, _hipsBody.linearVelocity.z);
@@ -103,6 +131,21 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Evaluate the sustained collapse evidence using intent, progress, support, and posture.
             float projectedProgress = Vector3.Dot(horizontalVelocity, requestedDirection);
             float uprightAngle = Vector3.Angle(transform.up, Vector3.up);
+
+            // STEP 3a: Suppress collapse detection when the character is mid-turn.
+            // During turns, velocity lags behind the new input direction — the character
+            // has good speed but it points in the old travel direction.  This looks like
+            // a collapse to the progress/support checks.  Velocity direction is a more
+            // reliable turn indicator than hips heading because velocity realigns slower.
+            if (horizontalVelocity.sqrMagnitude > _turnVelocityGateSpeed * _turnVelocityGateSpeed)
+            {
+                float velocityInputAngle = Vector3.Angle(horizontalVelocity, requestedDirection);
+                if (velocityInputAngle > _turnVelocityAngleThreshold)
+                {
+                    ResetEvidence();
+                    return;
+                }
+            }
 
             bool strongIntent = moveMagnitude >= _moveIntentThreshold;
             bool lowProjectedProgress = projectedProgress <= _projectedProgressThreshold;
@@ -218,9 +261,19 @@ namespace PhysicsDrivenMovement.Character
 
         private void ResetEvidence()
         {
-            if (IsCollapseConfirmed && _debugTransitions)
+            if (IsCollapseConfirmed)
             {
-                Debug.Log($"[LocomotionCollapseDetector] '{name}': collapse evidence cleared.", this);
+                // Start cooldown when collapse was confirmed and is now clearing.
+                // This prevents re-confirmation for N seconds, breaking the stutter loop.
+                _cooldownRemaining = _postCollapseCooldown;
+
+                if (_debugTransitions)
+                {
+                    Debug.Log(
+                        $"[LocomotionCollapseDetector] '{name}': collapse evidence cleared, " +
+                        $"cooldown {_postCollapseCooldown:F2}s.",
+                        this);
+                }
             }
 
             IsCollapseConfirmed = false;

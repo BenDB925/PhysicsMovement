@@ -97,7 +97,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 60f)]
         [Tooltip("Peak forward/backward swing angle (degrees) for upper leg joints during gait. " +
                  "Controls the visible stride amplitude. Typical range: 15–35°.")]
-        private float _stepAngle = 50.3f;
+        private float _stepAngle = 60f;
 
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +

@@ -1335,6 +1335,12 @@ MonoBehaviour:
   _kDYaw: 40
   _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
+  _snapRecoveryKdScale: 0.6
+  _snapRecoveryComDampScale: 0.4
+  _snapRecoveryComSpringScale: 1
+  _snapRecoveryForceBoost: 0
+  _snapRecoveryDurationFrames: 130
+  _snapRecoveryKdDurationFrames: 80
   _fallenEnterAngleThreshold: 65
   _fallenExitAngleThreshold: 55
   _enableStartupStandAssist: 1
@@ -1423,6 +1429,7 @@ MonoBehaviour:
   _moveForce: 150
   _maxSpeed: 5
   _jumpForce: 100
+  _maxFacingTurnRateDegPerSecond: 540
   _camera: {fileID: 0}
 --- !u!114 &7966672302456914730
 MonoBehaviour:
@@ -3155,6 +3162,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.GroundSensor
   _castRadius: 0.08
   _castDistance: 0.25
+  _groundedExitDelay: 0.03
   _groundLayers:
     serializedVersion: 2
     m_Bits: 4096
@@ -3824,6 +3832,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.GroundSensor
   _castRadius: 0.08
   _castDistance: 0.25
+  _groundedExitDelay: 0.03
   _groundLayers:
     serializedVersion: 2
     m_Bits: 4096

@@ -63,6 +63,43 @@ namespace PhysicsDrivenMovement.Character
                  "This multiplier does NOT affect yaw torque.")]
         private float _airborneMultiplier = 0.2f;
 
+        [Header("Snap Recovery")]
+        [SerializeField, Range(0.3f, 1f)]
+        [Tooltip("Minimum kD multiplier at the instant of a sharp direction change. " +
+                 "Temporarily reduces over-damping so the character corrects post-snap " +
+                 "lean faster (closer to critical damping). Decays linearly to 1.0.")]
+        private float _snapRecoveryKdScale = 0.6f;
+
+        [SerializeField, Range(0.2f, 1f)]
+        [Tooltip("Minimum COM stabilization damping multiplier at the instant of a " +
+                 "sharp direction change. Reduces velocity drag so the character " +
+                 "re-accelerates faster in the new direction. Decays linearly to 1.0.")]
+        private float _snapRecoveryComDampScale = 0.4f;
+
+        [SerializeField, Range(0.3f, 1f)]
+        [Tooltip("Minimum COM stabilization spring multiplier during snap recovery. " +
+                 "Reduces the positional correction force so the character can develop " +
+                 "the forward lean needed for efficient locomotion sooner.")]
+        private float _snapRecoveryComSpringScale = 1.0f;
+
+        [SerializeField, Range(0f, 200f)]
+        [Tooltip("Supplementary forward force (Newtons) applied in the movement direction " +
+                 "during snap recovery. Compensates for the braking effect of the upright " +
+                 "correction torque during re-acceleration. Decays linearly to zero.")]
+        private float _snapRecoveryForceBoost = 0f;
+
+        [SerializeField, Range(10, 150)]
+        [Tooltip("FixedUpdate frames over which COM damping reductions remain " +
+                 "active after a sharp direction change. The reduction stays " +
+                 "constant for most of the window and fades out over the last 10 frames.")]
+        private int _snapRecoveryDurationFrames = 130;
+
+        [SerializeField, Range(10, 150)]
+        [Tooltip("FixedUpdate frames over which kD reduction remains active after " +
+                 "a sharp direction change. Shorter than the main duration so the " +
+                 "character regains full stability before the next turn.")]
+        private int _snapRecoveryKdDurationFrames = 100;
+
         [SerializeField, Range(0f, 90f)]
         [Tooltip("World-up deviation in degrees at which the character enters the fallen state. " +
              "Use a higher value than exit threshold to avoid chatter near the boundary.")]
@@ -196,6 +233,7 @@ namespace PhysicsDrivenMovement.Character
         // ─── Private Fields ──────────────────────────────────────────────────
 
         private Rigidbody _rb;
+        private PlayerMovement _playerMovement;
         private CharacterState _characterState;
         private LocomotionCollapseDetector _collapseDetector;
 
@@ -232,6 +270,18 @@ namespace PhysicsDrivenMovement.Character
         private float _nextRecoveryTelemetryTime;
 
         /// <summary>
+        /// Previous movement direction from <see cref="PlayerMovement"/>. Used to
+        /// detect sharp direction changes that trigger the snap recovery boost.
+        /// </summary>
+        private Vector3 _prevMoveDirection;
+
+        /// <summary>
+        /// Remaining FixedUpdate frames of extra upright correction after a sharp
+        /// direction change. Linearly decays to zero.
+        /// </summary>
+        private int _snapRecoveryFramesRemaining;
+
+        /// <summary>
         /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
         /// <see cref="_deferLegJointsToAnimator"/> is true. Cached in Awake to avoid
         /// per-frame GetComponent calls.
@@ -253,6 +303,13 @@ namespace PhysicsDrivenMovement.Character
         /// Updated every FixedUpdate.
         /// </summary>
         public bool IsFallen { get; private set; }
+
+        /// <summary>
+        /// True while the snap recovery window is active after a sharp direction change.
+        /// Used by <see cref="PlayerMovement"/> to keep movement forces alive during
+        /// brief falls caused by aggressive turns.
+        /// </summary>
+        public bool IsInSnapRecovery => _snapRecoveryFramesRemaining > 0;
 
         /// <summary>
         /// Test seam: directly override IsGrounded/IsFallen without needing GroundSensor components.
@@ -367,6 +424,7 @@ namespace PhysicsDrivenMovement.Character
             // modifications on the four leg joints so LegAnimator owns them exclusively.
             _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
 
+            TryGetComponent(out _playerMovement);
             TryGetComponent(out _characterState);
             TryGetComponent(out _collapseDetector);
         }
@@ -543,8 +601,22 @@ namespace PhysicsDrivenMovement.Character
                     0f,
                     hipsPos.z - feetCenter.z);
                 Vector3 horizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-                Vector3 comForce = -horizontalOffset * _comStabilizationStrength
-                                   - horizontalVel * _comStabilizationDamping;
+
+                // STEP 3.6a: Reduce COM spring and damping during snap recovery.
+                // Spring reduction allows the character to develop the forward lean
+                // that is the natural running equilibrium. Damping reduction allows
+                // faster re-acceleration in the new direction.
+                float comSpringMul = 1f;
+                float comDampMul = 1f;
+                if (_snapRecoveryFramesRemaining > 0)
+                {
+                    float fade = SnapRecoveryFade(_snapRecoveryFramesRemaining);
+                    comSpringMul = Mathf.Lerp(1f, _snapRecoveryComSpringScale, fade);
+                    comDampMul = Mathf.Lerp(1f, _snapRecoveryComDampScale, fade);
+                }
+
+                Vector3 comForce = -horizontalOffset * (_comStabilizationStrength * comSpringMul)
+                                   - horizontalVel * (_comStabilizationDamping * comDampMul);
                 _rb.AddForce(comForce, ForceMode.Force);
             }
 
@@ -560,6 +632,38 @@ namespace PhysicsDrivenMovement.Character
                                         - _rb.linearVelocity.y * _heightMaintenanceDamping;
                     heightForce = Mathf.Max(0f, heightForce);
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
+                }
+            }
+
+            // ─── STEP 3.8: Detect sharp direction changes for snap recovery boost ──
+            if (_playerMovement != null)
+            {
+                Vector3 currentMoveDir = _playerMovement.CurrentMoveWorldDirection;
+                if (_prevMoveDirection.sqrMagnitude > 0.001f &&
+                    currentMoveDir.sqrMagnitude > 0.001f &&
+                    Vector3.Dot(_prevMoveDirection.normalized, currentMoveDir.normalized) < 0.5f)
+                {
+                    _snapRecoveryFramesRemaining = _snapRecoveryDurationFrames;
+                }
+
+                // STEP 3.8a: Apply supplementary forward force during snap recovery.
+                // The upright correction torque creates a braking reaction force that
+                // opposes forward acceleration after a hard turn. This small boost
+                // compensates, reducing recovery time without affecting equilibrium.
+                // Gate on lean angle to prevent the boost from tipping the character
+                // past the point of no return during an emerging lean crisis.
+                if (_snapRecoveryFramesRemaining > 0 &&
+                    _snapRecoveryForceBoost > 0f &&
+                    currentMoveDir.sqrMagnitude > 0.001f &&
+                    uprightAngle < 12f)
+                {
+                    float fade = SnapRecoveryFade(_snapRecoveryFramesRemaining);
+                    _rb.AddForce(currentMoveDir.normalized * (_snapRecoveryForceBoost * fade), ForceMode.Force);
+                }
+
+                if (currentMoveDir.sqrMagnitude > 0.001f)
+                {
+                    _prevMoveDirection = currentMoveDir;
                 }
             }
 
@@ -588,10 +692,34 @@ namespace PhysicsDrivenMovement.Character
             Vector3 angVel = _rb.angularVelocity;
             Vector3 pitchRollAngVel = new Vector3(angVel.x, 0f, angVel.z);
 
+            // Decrement snap recovery counter every frame, outside the upright-axis
+            // guard so the timer always expires even if the character is perfectly upright.
+            if (_snapRecoveryFramesRemaining > 0)
+            {
+                _snapRecoveryFramesRemaining--;
+            }
+
             if (uprightAxis.sqrMagnitude > 0.001f)
             {
-                float   uprightRad    = uprightAngleDeg * Mathf.Deg2Rad;
-                Vector3 uprightTorque = _kP * uprightRad * uprightAxis - _kD * pitchRollAngVel;
+                // STEP 4a: Reduce kD during snap recovery to bring the over-damped
+                // prefab tuning closer to critical damping.  This lets the character
+                // correct the post-snap lean faster without the sluggish response that
+                // an over-damped PD produces.  kP stays at full strength for stability.
+                // Uses its own shorter duration so the character regains full damping
+                // before the next turn, preventing the sustained kD reduction from
+                // causing falls.  The reduction is gated on lean angle: once the
+                // character leans past 40 degrees, full kD is restored to prevent
+                // the reduced damping from tipping it into the Fallen state.
+                float effectiveKd = _kD;
+                int kdFrames = _snapRecoveryFramesRemaining - (_snapRecoveryDurationFrames - _snapRecoveryKdDurationFrames);
+                if (kdFrames > 0 && Mathf.Abs(uprightAngleDeg) < 40f)
+                {
+                    float fade = SnapRecoveryFade(kdFrames);
+                    effectiveKd *= Mathf.Lerp(1f, _snapRecoveryKdScale, fade);
+                }
+
+                float uprightRad = uprightAngleDeg * Mathf.Deg2Rad;
+                Vector3 uprightTorque = _kP * uprightRad * uprightAxis - effectiveKd * pitchRollAngVel;
 
                 float uprightMultiplier = _hasBeenGrounded
                     ? (effectivelyGrounded ? 1f : _airborneMultiplier)
@@ -818,6 +946,22 @@ namespace PhysicsDrivenMovement.Character
                    segmentName == "UpperLeg_R" ||
                    segmentName == "LowerLeg_L" ||
                    segmentName == "LowerLeg_R";
+        }
+
+        /// <summary>
+        /// Returns a 0–1 blend factor for the current snap recovery frame.
+        /// Full strength (1.0) for most of the window, ramping down to 0 over
+        /// the last 10 frames to avoid an abrupt parameter jump.
+        /// </summary>
+        private float SnapRecoveryFade(int framesRemaining)
+        {
+            const int rampFrames = 10;
+            if (framesRemaining >= rampFrames)
+            {
+                return 1f;
+            }
+
+            return (float)framesRemaining / rampFrames;
         }
     }
 }
