@@ -252,6 +252,30 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator YawCorrection_WhenCollapseWatchdogConfirmsButStateRemainsStanding_StillAppliesTurnDrive()
+        {
+            yield return SpawnTurningCharacter(Quaternion.identity);
+
+            LocomotionCollapseDetector collapseDetector = _instance.GetComponent<LocomotionCollapseDetector>();
+            Assert.That(collapseDetector, Is.Not.Null,
+                "PlayerRagdoll prefab must provide LocomotionCollapseDetector for watchdog-boundary coverage.");
+
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            _characterState.enabled = false;
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            _movement.SetMoveInputForTest(Vector2.right);
+            _hipsRb.angularVelocity = Vector3.zero;
+
+            yield return WaitPhysicsFrames(2);
+
+            float yawMagnitude = Mathf.Abs(_hipsRb.angularVelocity.y);
+            Assert.That(yawMagnitude, Is.GreaterThan(0.001f),
+                $"Raw collapse confirmation should not suppress turn drive while CharacterState still labels the character Standing. yawAngularVelocity={yawMagnitude:F5}");
+        }
+
+        [UnityTest]
         public IEnumerator SetFacingDirection_ZeroVector_IgnoredNoNaN_AfterTorqueSplit()
         {
             yield return SpawnTurningCharacter(Quaternion.identity);
@@ -445,7 +469,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(field, Is.Not.Null, $"Expected private float field '{fieldName}' on {target.GetType().Name}.");
             field.SetValue(target, value);
         }
-
         private static IEnumerator WaitPhysicsFrames(int count)
         {
             for (int i = 0; i < count; i++)

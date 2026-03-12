@@ -126,6 +126,45 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Right leg command should mirror the legacy gait phase with a half-cycle offset.");
         }
 
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseWatchdogConfirmsButStateRemainsMoving_StillEmitsCycleCommands()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C1.5.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            LocomotionCollapseDetector collapseDetector = _rig.Instance.GetComponent<LocomotionCollapseDetector>();
+            Assert.That(collapseDetector, Is.Not.Null,
+                "PlayerRagdoll prefab must provide LocomotionCollapseDetector for watchdog-boundary coverage.");
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.CharacterState.enabled = false;
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+
+            // Act
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            for (int frame = 0; frame < 30; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object leftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object rightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+
+            string leftMode = GetPropertyValue<object>(leftLegCommand, "Mode").ToString();
+            string rightMode = GetPropertyValue<object>(rightLegCommand, "Mode").ToString();
+
+            // Assert
+            Assert.That(leftMode, Is.EqualTo("Cycle"),
+                "Raw collapse confirmation should not disable left-leg cycle commands while CharacterState still labels the character Moving.");
+            Assert.That(rightMode, Is.EqualTo("Cycle"),
+                "Raw collapse confirmation should not disable right-leg cycle commands while CharacterState still labels the character Moving.");
+        }
+
         private static T GetPropertyValue<T>(object instance, string propertyName)
         {
             BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;

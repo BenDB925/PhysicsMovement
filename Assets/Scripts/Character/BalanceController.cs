@@ -234,7 +234,6 @@ namespace PhysicsDrivenMovement.Character
 
         private Rigidbody _rb;
         private CharacterState _characterState;
-        private LocomotionCollapseDetector _collapseDetector;
 
         /// <summary>Left-foot GroundSensor, located in Awake via component search.</summary>
         private GroundSensor _footL;
@@ -445,7 +444,6 @@ namespace PhysicsDrivenMovement.Character
             _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
 
             TryGetComponent(out _characterState);
-            TryGetComponent(out _collapseDetector);
             ClearBodySupportCommand();
         }
 
@@ -742,18 +740,12 @@ namespace PhysicsDrivenMovement.Character
             //
             // Airborne multiplier does NOT apply to yaw — the character should always
             // be able to turn in air.
-            if (_collapseDetector == null)
-            {
-                TryGetComponent(out _collapseDetector);
-            }
-
             if (_characterState == null)
             {
                 TryGetComponent(out _characterState);
             }
 
             bool suppressTurnDrive = IsFallen ||
-                                     (_collapseDetector != null && _collapseDetector.IsCollapseConfirmed) ||
                                      (_characterState != null &&
                                       (_characterState.CurrentState == CharacterStateType.Fallen ||
                                        _characterState.CurrentState == CharacterStateType.GettingUp));

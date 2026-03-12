@@ -76,7 +76,6 @@ namespace PhysicsDrivenMovement.Character
         private Rigidbody _rb;
         private BalanceController _balance;
         private CharacterState _characterState;
-        private LocomotionCollapseDetector _collapseDetector;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
         private Vector3 _currentFacingDirection = Vector3.forward;
@@ -181,17 +180,11 @@ namespace PhysicsDrivenMovement.Character
             //         CharacterState may be added after PlayerMovement in component order, so
             //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
             TryGetComponent(out _characterState);
-            TryGetComponent(out _collapseDetector);
 
             // STEP 3: Resolve a camera reference (serialized value preferred, main camera fallback).
             if (_camera == null)
             {
                 _camera = Camera.main;
-            }
-
-            if (_collapseDetector == null)
-            {
-                TryGetComponent(out _collapseDetector);
             }
 
             // STEP 4: Create and enable PlayerInputActions for the local movement map.
@@ -449,16 +442,6 @@ namespace PhysicsDrivenMovement.Character
             if (_characterState == null)
             {
                 TryGetComponent(out _characterState);
-            }
-
-            if (_collapseDetector == null)
-            {
-                TryGetComponent(out _collapseDetector);
-            }
-
-            if (_collapseDetector != null && _collapseDetector.IsCollapseConfirmed)
-            {
-                return true;
             }
 
             if (_characterState == null)

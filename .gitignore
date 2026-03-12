@@ -129,3 +129,4 @@ yarn-error.log*
 .idea/
 *.sln.iml
 .history
+TestResults

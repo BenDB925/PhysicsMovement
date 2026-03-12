@@ -59,6 +59,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private float _savedFixedDeltaTime;
         private int   _savedSolverIterations;
         private int   _savedSolverVelocityIterations;
+        private bool[,] _savedLayerCollisionMatrix;
 
         [SetUp]
         public void SetUp()
@@ -66,10 +67,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _savedFixedDeltaTime           = Time.fixedDeltaTime;
             _savedSolverIterations         = Physics.defaultSolverIterations;
             _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            _savedLayerCollisionMatrix     = CaptureLayerCollisionMatrix();
 
             Time.fixedDeltaTime                  = 0.01f;
             Physics.defaultSolverIterations      = 12;
             Physics.defaultSolverVelocityIterations = 4;
+
+            Physics.IgnoreLayerCollision(GameSettings.LayerPlayer1Parts, GameSettings.LayerPlayer1Parts, true);
+            Physics.IgnoreLayerCollision(GameSettings.LayerPlayer1Parts, GameSettings.LayerEnvironment, false);
+            Physics.IgnoreLayerCollision(GameSettings.LayerLowerLegParts, GameSettings.LayerEnvironment, true);
 
             BuildGroundPlane();
             BuildRig();
@@ -80,6 +86,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             if (_hipsGO   != null) Object.Destroy(_hipsGO);
             if (_groundGO != null) Object.Destroy(_groundGO);
+
+            RestoreLayerCollisionMatrix(_savedLayerCollisionMatrix);
 
             Time.fixedDeltaTime                  = _savedFixedDeltaTime;
             Physics.defaultSolverIterations      = _savedSolverIterations;
@@ -210,6 +218,36 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             for (int i = 0; i < count; i++)
             {
                 yield return new WaitForFixedUpdate();
+            }
+        }
+
+        private static bool[,] CaptureLayerCollisionMatrix()
+        {
+            bool[,] matrix = new bool[32, 32];
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    matrix[a, b] = Physics.GetIgnoreLayerCollision(a, b);
+                }
+            }
+
+            return matrix;
+        }
+
+        private static void RestoreLayerCollisionMatrix(bool[,] matrix)
+        {
+            if (matrix == null || matrix.GetLength(0) != 32 || matrix.GetLength(1) != 32)
+            {
+                return;
+            }
+
+            for (int a = 0; a < 32; a++)
+            {
+                for (int b = 0; b < 32; b++)
+                {
+                    Physics.IgnoreLayerCollision(a, b, matrix[a, b]);
+                }
             }
         }
 

@@ -156,6 +156,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseDetectorConfirms_TransitionsToFallen()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            Assert.That(collapseDetector, Is.Not.Null,
+                "PlayerRagdoll prefab must provide LocomotionCollapseDetector for collapse watchdog coverage.");
+
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "CharacterState should consume the collapse watchdog signal and enter Fallen.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenRecoveredFromFallenAndGroundedBeforeTimer_StaysFallen()
         {
             yield return WaitForPhysicsFrames(SettleFrames);
@@ -339,7 +357,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             field.SetValue(instance, value);
         }
-
         private void SetCurrentState(CharacterStateType state)
         {
             FieldInfo field = typeof(CharacterState).GetField(

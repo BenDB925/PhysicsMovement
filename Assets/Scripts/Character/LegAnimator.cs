@@ -568,8 +568,7 @@ namespace PhysicsDrivenMovement.Character
 
             CharacterStateType state = observation.CharacterState;
             if (state == CharacterStateType.Fallen ||
-                state == CharacterStateType.GettingUp ||
-                observation.IsLocomotionCollapsed)
+                state == CharacterStateType.GettingUp)
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;

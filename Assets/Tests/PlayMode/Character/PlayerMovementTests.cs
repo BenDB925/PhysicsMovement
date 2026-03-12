@@ -115,6 +115,38 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ApplyMovementForces_WhenCollapseWatchdogConfirmsButStateRemainsStanding_StillAppliesHorizontalForce()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            Assert.That(collapseDetector, Is.Not.Null,
+                "PlayerRagdoll prefab must provide LocomotionCollapseDetector for watchdog-boundary coverage.");
+
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", 8f);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            _characterState.enabled = false;
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            _hipsBody.linearVelocity = Vector3.zero;
+            Vector3 startPosition = _player.transform.position;
+
+            yield return WaitForPhysicsFrames(20);
+
+            Vector3 horizontalVelocity = Horizontal(_hipsBody.linearVelocity);
+            Vector3 horizontalDisplacement = Horizontal(_player.transform.position - startPosition);
+            Assert.That(horizontalVelocity.magnitude, Is.GreaterThan(0.1f),
+                "Raw collapse confirmation should not suppress movement while CharacterState still labels the character Standing.");
+            Assert.That(horizontalDisplacement.magnitude, Is.GreaterThan(0.2f),
+                "Movement should still produce measurable horizontal displacement when only the watchdog signal is active.");
+        }
+
+        [UnityTest]
         public IEnumerator ApplyMovementForces_WithForwardInput_UsesCameraRelativeDirection()
         {
             yield return WaitForPhysicsFrames(SettleFrames);

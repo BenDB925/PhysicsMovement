@@ -131,6 +131,11 @@ Useful physics-style signals:
 
 **Fix:** keep the real stack active in the regression test and diagnose the ownership or ordering conflict.
 
+### "A PlayMode fixture passes alone but degrades inside a multi-fixture slice"
+**Most likely issue:** a previous test leaked global Unity physics state such as the layer-collision matrix, fixed timestep, or solver settings.
+
+**Fix:** save and restore global physics settings in `SetUp`/`TearDown`, then compare the isolated fixture metrics against the full slice again before blaming runtime code.
+
 ---
 
 ## Repo-Specific Examples

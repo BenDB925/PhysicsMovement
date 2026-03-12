@@ -53,9 +53,11 @@ Create one locomotion decision owner without changing final feel yet.
 5. C1.5 Safety role cleanup:
    - LocomotionCollapseDetector remains watchdog only.
    - CharacterState remains the authority for high-level state labels, but no longer produces gait strategy.
+   - Progress note (2026-03-12): `LocomotionCollapseDetector` now stays on the watchdog path into `CharacterState` and `LocomotionDirector` observations only; `PlayerMovement`, `BalanceController`, and pass-through leg command generation no longer gate directly on the raw detector. Focused verification passed via `TestResults/PlayMode.xml` + `Logs/test_playmode_20260312_142638.log` (`46/46`) and `TestResults/EditMode.xml` + `Logs/test_editmode_20260312_142751.log` (`6/6`).
 6. C1.6 Regression gate:
    - Keep behavior parity against the recorded baseline snapshot and the focused Chapter 1 verification slices before enabling new logic paths.
    - Progress note (2026-03-12): focused EditMode seam coverage passed `6/6`, and the targeted broader Chapter 1 PlayMode slice passed `107/110` with `3` ignored and `0` failures after the explicit command-frame timing path was stabilized. Fresh artifacts: `TestResults/EditMode.xml`, `TestResults/PlayMode.xml`, `Logs/test_editmode_20260312_140805.log`, and `Logs/test_playmode_20260312_140637.log`.
+   - Progress note (2026-03-12, parity refresh): focused EditMode seam coverage stayed green `6/6` via `Logs/test_editmode_20260312_145407.log`; the broader Chapter 1 PlayMode gate passed `111/114` with `3` ignored and `0` failures via `Logs/test_playmode_20260312_145449.log`; and the baseline outcome slice improved to `10/12` with only the two pre-existing `MovementQualityTests` reds (`WalkStraight_NoFalls`, `SustainedLocomotionCollapse_TransitionsIntoFallen`) remaining via `Logs/test_playmode_20260312_150230.log`. Step 6 also fixed a PlayMode test-isolation leak by restoring the global layer-collision matrix in `MovementQualityTests` and `SpinRecoveryTests`, which brought slice-level spin metrics back in line with the Chapter 1 baseline snapshot.
 
 ## Verification gate
 
