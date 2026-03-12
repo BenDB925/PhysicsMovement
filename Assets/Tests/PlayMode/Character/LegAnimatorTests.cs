@@ -416,6 +416,164 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"signedDiffA={signedDiffA:F3}°, signedDiffB={signedDiffB:F3}° — sign should invert over half-cycle.");
         }
 
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenLegStateIsCatchStep_DrivesStrongerForwardUpperLegTargetThanPlainSwing()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 5f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            object plainSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.25f,
+                swingAngleDegrees: 12f,
+                kneeAngleDegrees: 35f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            ApplyExplicitCommandFrame(plainSwingCommand, rightSupportCommand);
+            float swingTargetAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            object catchStepCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "CatchStep",
+                transitionReasonName: "StumbleRecovery",
+                cyclePhase: Mathf.PI * 0.25f,
+                swingAngleDegrees: 12f,
+                kneeAngleDegrees: 35f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            // Act
+            ApplyExplicitCommandFrame(catchStepCommand, rightSupportCommand);
+            float catchStepTargetAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            // Assert
+            Assert.That(catchStepTargetAngle, Is.GreaterThan(swingTargetAngle + 2f),
+                $"Catch-step execution should drive a stronger forward upper-leg target than a plain swing " +
+                $"when the raw command payload is otherwise identical. Swing={swingTargetAngle:F2}°, " +
+                $"CatchStep={catchStepTargetAngle:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenOppositeLegIsInStance_ExtendsSupportKneeRelativeToSwingLeg()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            object leftSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.5f,
+                swingAngleDegrees: 20f,
+                kneeAngleDegrees: 55f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+            object rightStanceCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.4f,
+                swingAngleDegrees: -8f,
+                kneeAngleDegrees: 55f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            // Act
+            ApplyExplicitCommandFrame(leftSwingCommand, rightStanceCommand);
+            float leftKneeTargetAngle = Quaternion.Angle(Quaternion.identity, _lowerLegLJoint.targetRotation);
+            float rightKneeTargetAngle = Quaternion.Angle(Quaternion.identity, _lowerLegRJoint.targetRotation);
+
+            // Assert
+            Assert.That(leftKneeTargetAngle, Is.GreaterThan(rightKneeTargetAngle + 5f),
+                $"State-driven execution should keep the swing leg more tucked than the support-side stance leg. " +
+                $"Left swing knee={leftKneeTargetAngle:F2}°, right stance knee={rightKneeTargetAngle:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenPlantWindowProgresses_TapersKneeBendTowardStance()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            object rightNeutralCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.2f,
+                swingAngleDegrees: 0f,
+                kneeAngleDegrees: 0f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            object earlyPlantCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Plant",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.86f,
+                swingAngleDegrees: 16f,
+                kneeAngleDegrees: 50f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            ApplyExplicitCommandFrame(earlyPlantCommand, rightNeutralCommand);
+            float earlyPlantKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegLJoint.targetRotation);
+
+            object latePlantCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Plant",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.99f,
+                swingAngleDegrees: 16f,
+                kneeAngleDegrees: 50f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            // Act
+            ApplyExplicitCommandFrame(latePlantCommand, rightNeutralCommand);
+            float latePlantKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegLJoint.targetRotation);
+
+            // Assert
+            Assert.That(earlyPlantKneeAngle, Is.GreaterThan(latePlantKneeAngle + 5f),
+                $"The plant timing window should extend the knee as touchdown completes instead of holding a fixed bend. " +
+                $"EarlyPlant={earlyPlantKneeAngle:F2}°, latePlant={latePlantKneeAngle:F2}°.");
+        }
+
         // ─── Identity Tests (Fallen / GettingUp) ────────────────────────────
 
         [UnityTest]
@@ -2116,6 +2274,120 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // (world-space swing with forward input) cases.
             float xzComponent = axis.x + axis.z;   // dominant horizontal component
             return angle * Mathf.Sign(xzComponent != 0f ? xzComponent : 1f);
+        }
+
+        private void ApplyExplicitCommandFrame(object leftCommand, object rightCommand)
+        {
+            object desiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+
+            MethodInfo setCommandFrameMethod = typeof(LegAnimator).GetMethod(
+                "SetCommandFrame",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (setCommandFrameMethod == null)
+            {
+                throw new InvalidOperationException(
+                    "Missing expected internal method 'SetCommandFrame' on LegAnimator.");
+            }
+
+            setCommandFrameMethod.Invoke(_legAnimator, new[] { desiredInput, observation, leftCommand, rightCommand });
+        }
+
+        private static object CreateLegCommand(
+            string legName,
+            string modeName,
+            string stateName,
+            string transitionReasonName,
+            float cyclePhase,
+            float swingAngleDegrees,
+            float kneeAngleDegrees,
+            float blendWeight,
+            Vector3 footTarget)
+        {
+            Assembly characterAssembly = typeof(LegAnimator).Assembly;
+            Type legType = RequireLocomotionType(characterAssembly, "LocomotionLeg");
+            Type modeType = RequireLocomotionType(characterAssembly, "LegCommandMode");
+            Type stateType = RequireLocomotionType(characterAssembly, "LegStateType");
+            Type transitionReasonType = RequireLocomotionType(characterAssembly, "LegStateTransitionReason");
+            Type stateFrameType = RequireLocomotionType(characterAssembly, "LegStateFrame");
+            Type commandType = RequireLocomotionType(characterAssembly, "LegCommandOutput");
+
+            object leg = Enum.Parse(legType, legName);
+            object mode = Enum.Parse(modeType, modeName);
+            object state = Enum.Parse(stateType, stateName);
+            object transitionReason = Enum.Parse(transitionReasonType, transitionReasonName);
+
+            ConstructorInfo stateFrameConstructor = stateFrameType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { legType, stateType, transitionReasonType },
+                modifiers: null);
+            if (stateFrameConstructor == null)
+            {
+                throw new InvalidOperationException(
+                    "Missing expected LegStateFrame constructor for Chapter 3 command injection tests.");
+            }
+
+            object stateFrame = stateFrameConstructor.Invoke(new[] { leg, state, transitionReason });
+
+            ConstructorInfo commandConstructor = commandType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    legType,
+                    modeType,
+                    stateFrameType,
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(Vector3),
+                },
+                modifiers: null);
+            if (commandConstructor == null)
+            {
+                throw new InvalidOperationException(
+                    "Missing expected LegCommandOutput constructor for Chapter 3 command injection tests.");
+            }
+
+            return commandConstructor.Invoke(new object[]
+            {
+                leg,
+                mode,
+                stateFrame,
+                cyclePhase,
+                swingAngleDegrees,
+                kneeAngleDegrees,
+                blendWeight,
+                footTarget,
+            });
+        }
+
+        private static Type RequireLocomotionType(Assembly assembly, string typeName)
+        {
+            Type type = assembly.GetType($"PhysicsDrivenMovement.Character.{typeName}");
+            if (type == null)
+            {
+                throw new InvalidOperationException(
+                    $"Missing expected locomotion type 'PhysicsDrivenMovement.Character.{typeName}'.");
+            }
+
+            return type;
+        }
+
+        private static T GetPropertyValue<T>(object instance, string propertyName)
+        {
+            PropertyInfo property = instance.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property == null)
+            {
+                throw new InvalidOperationException(
+                    $"Missing expected property '{propertyName}' on {instance.GetType().Name}.");
+            }
+
+            return (T)property.GetValue(instance);
         }
 
         private static object GetPrivateField(object instance, string fieldName)

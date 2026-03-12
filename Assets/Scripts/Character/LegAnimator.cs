@@ -172,6 +172,14 @@ namespace PhysicsDrivenMovement.Character
                  "Logs/debug_gait.txt and also outputs to Debug.Log. Disabled by default.")]
         private bool _debugLog = false;
 
+        [SerializeField]
+        [Tooltip("Logs per-leg state transitions emitted by the Chapter 3 pass-through gait model.")]
+        private bool _debugStateTransitions = false;
+
+        [SerializeField]
+        [Tooltip("When enabled, explicit Chapter 3 leg states shape per-leg upper-leg and knee targets before the legacy sinusoidal executor applies them. Disable to fall back to the raw pass-through command angles during migration.")]
+        private bool _useStateDrivenExecution = true;
+
         // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
 
         [SerializeField, Range(0f, 1f)]
@@ -332,6 +340,8 @@ namespace PhysicsDrivenMovement.Character
         private LegCommandOutput _rightLegCommand;
         private bool _hasCommandFrame;
         private bool _suppressIncomingCommandFrame;
+        private LegStateMachine _leftLegStateMachine;
+        private LegStateMachine _rightLegStateMachine;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -462,6 +472,10 @@ namespace PhysicsDrivenMovement.Character
             //         hierarchy lacks them (e.g. minimal test rigs) the bias feature degrades
             //         gracefully — IsFootBehindHips returns false when the transform is null.
             CacheFootTransforms();
+
+            // STEP 5: Seed the per-leg state machines so Chapter 3.2 starts from the same
+            //         mirrored cadence shape as the legacy pass-through gait.
+            ResetLegStateMachinesForMirroredCadence();
         }
 
         private void Start()
@@ -525,6 +539,7 @@ namespace PhysicsDrivenMovement.Character
                 _suppressIncomingCommandFrame = true;
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetLegStateMachinesToIdle();
                 SetAllLegTargetsToIdentity();
                 return;
             }
@@ -535,6 +550,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetLegStateMachinesToIdle();
                 SetAllLegTargetsToIdentity();
                 return;
             }
@@ -575,6 +591,7 @@ namespace PhysicsDrivenMovement.Character
                 _prevInputDir = Vector2.zero;
                 _wasMoving = false;
                 _stuckFrameCounter = 0;
+                ResetLegStateMachinesToIdle();
                 leftCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
                 rightCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
                 return;
@@ -621,6 +638,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetLegStateMachinesForMirroredCadence();
             }
 
             _prevInputDir = currentInputDir;
@@ -663,12 +681,25 @@ namespace PhysicsDrivenMovement.Character
                 ? desiredInput.MoveWorldDirection
                 : observation.BodyForward;
 
+            EnsureLegStateMachines();
+
             if (_isRecovering)
             {
+                _leftLegStateMachine.ForceState(
+                    LegStateType.RecoveryStep,
+                    LegStateTransitionReason.StumbleRecovery,
+                    0f);
+                _rightLegStateMachine.ForceState(
+                    LegStateType.RecoveryStep,
+                    LegStateTransitionReason.StumbleRecovery,
+                    Mathf.PI);
+                _phase = _leftLegStateMachine.CyclePhase;
+
                 leftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
                     LegCommandMode.HoldPose,
-                    _phase,
+                    BuildStateFrame(_leftLegStateMachine),
+                    _leftLegStateMachine.CyclePhase,
                     -30f,
                     0f,
                     1f,
@@ -676,7 +707,8 @@ namespace PhysicsDrivenMovement.Character
                 rightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.HoldPose,
-                    _phase + Mathf.PI,
+                    BuildStateFrame(_rightLegStateMachine),
+                    _rightLegStateMachine.CyclePhase,
                     -30f,
                     0f,
                     1f,
@@ -694,45 +726,80 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            LegStateTransitionReason dominantReason = DetermineDominantTransitionReason(
+                desiredInput,
+                observation,
+                isRecoveryState: false);
+            SynchronizeLegStateMachinesFromLegacyPhaseIfNeeded(dominantReason);
+
             if (isMoving)
             {
                 float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
-                _phase += effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
-                if (_phase >= 2f * Mathf.PI)
-                {
-                    _phase -= 2f * Mathf.PI;
-                }
+                float phaseAdvance = effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
                 float velocityMag01 = Mathf.Clamp01(horizontalSpeedGate / 2f);
                 float amplitudeTarget = Mathf.Max(inputMagnitude, velocityMag01);
                 _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, amplitudeTarget, t);
 
-                float sinL = Mathf.Sin(_phase);
-                float sinR = Mathf.Sin(_phase + Mathf.PI);
-                float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
-                float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
-                float leftSwingDeg = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
-                float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
-
+                bool bothFeetBehind = false;
+                bool bothFeetFarBehind = false;
                 if (desiredInput.HasMoveIntent && _footL != null && _footR != null)
                 {
-                    bool leftBehind = IsFootBehindHips(_footL, gaitReferenceDirection);
-                    bool rightBehind = IsFootBehindHips(_footR, gaitReferenceDirection);
-                    if (leftBehind && rightBehind)
-                    {
-                        float strandedBias = _stepAngle * _smoothedInputMag;
-                        leftSwingDeg += strandedBias;
-                        rightSwingDeg += strandedBias;
-                        _isGaitBiasedForward = true;
-                    }
+                    float leftFootForwardOffset = GetFootForwardOffsetFromHips(_footL, gaitReferenceDirection);
+                    float rightFootForwardOffset = GetFootForwardOffsetFromHips(_footR, gaitReferenceDirection);
+                    bothFeetBehind = leftFootForwardOffset < 0f && rightFootForwardOffset < 0f;
+                    bothFeetFarBehind = leftFootForwardOffset < -0.2f && rightFootForwardOffset < -0.2f;
+                }
+
+                bool promoteCatchStep = desiredInput.HasMoveIntent &&
+                    (observation.IsLocomotionCollapsed || bothFeetFarBehind);
+                LocomotionLeg catchLeg = SelectCatchStepLeg();
+                LegStateTransitionReason controllerTransitionReason = promoteCatchStep
+                    ? LegStateTransitionReason.StumbleRecovery
+                    : dominantReason;
+
+                LegStateType previousLeftState = _leftLegStateMachine.CurrentState;
+                LegStateType previousRightState = _rightLegStateMachine.CurrentState;
+                LegStateFrame leftStateFrame = _leftLegStateMachine.AdvanceMoving(
+                    observation.LeftFoot,
+                    previousRightState,
+                    controllerTransitionReason,
+                    phaseAdvance,
+                    promoteCatchStep && catchLeg == LocomotionLeg.Left);
+                LegStateFrame rightStateFrame = _rightLegStateMachine.AdvanceMoving(
+                    observation.RightFoot,
+                    previousLeftState,
+                    controllerTransitionReason,
+                    phaseAdvance,
+                    promoteCatchStep && catchLeg == LocomotionLeg.Right);
+
+                _phase = _leftLegStateMachine.CyclePhase;
+
+                float leftSwingDeg = BuildSwingAngleFromPhase(
+                    _leftLegStateMachine.CyclePhase,
+                    _smoothedInputMag,
+                    leftStateFrame.State);
+                float rightSwingDeg = BuildSwingAngleFromPhase(
+                    _rightLegStateMachine.CyclePhase,
+                    _smoothedInputMag,
+                    rightStateFrame.State);
+
+                if (bothFeetBehind)
+                {
+                    float strandedBias = _stepAngle * _smoothedInputMag;
+                    leftSwingDeg += strandedBias;
+                    rightSwingDeg += strandedBias;
+                    _isGaitBiasedForward = true;
                 }
 
                 float kneeBendDeg = _kneeAngle * _smoothedInputMag;
+
                 leftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
                     LegCommandMode.Cycle,
-                    _phase,
+                    leftStateFrame,
+                    _leftLegStateMachine.CyclePhase,
                     leftSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
@@ -740,7 +807,8 @@ namespace PhysicsDrivenMovement.Character
                 rightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.Cycle,
-                    _phase + Mathf.PI,
+                    rightStateFrame,
+                    _rightLegStateMachine.CyclePhase,
                     rightSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
@@ -749,17 +817,26 @@ namespace PhysicsDrivenMovement.Character
             }
 
             float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
-            _phase = Mathf.Max(0f, _phase - decayStep);
             float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
             _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
+
+            LegStateFrame idleLeftStateFrame = _leftLegStateMachine.AdvanceIdle(decayStep);
+            LegStateFrame idleRightStateFrame = _rightLegStateMachine.AdvanceIdle(decayStep);
+            _phase = _leftLegStateMachine.CyclePhase;
 
             if (_smoothedInputMag < 0.01f)
             {
                 _smoothedInputMag = 0f;
+                ResetLegStateMachinesToIdle();
+                idleLeftStateFrame = BuildStateFrame(_leftLegStateMachine);
+                idleRightStateFrame = BuildStateFrame(_rightLegStateMachine);
+                _phase = _leftLegStateMachine.CyclePhase;
+
                 leftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
                     LegCommandMode.HoldPose,
-                    0f,
+                    idleLeftStateFrame,
+                    _leftLegStateMachine.CyclePhase,
                     0f,
                     0f,
                     0f,
@@ -767,7 +844,8 @@ namespace PhysicsDrivenMovement.Character
                 rightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.HoldPose,
-                    0f,
+                    idleRightStateFrame,
+                    _rightLegStateMachine.CyclePhase,
                     0f,
                     0f,
                     0f,
@@ -775,18 +853,21 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float idleSinL = Mathf.Sin(_phase);
-            float idleSinR = Mathf.Sin(_phase + Mathf.PI);
-            float idleLiftBoostL = idleSinL > 0f ? idleSinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
-            float idleLiftBoostR = idleSinR > 0f ? idleSinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
-            float idleLeftSwingDeg = idleSinL * _stepAngle * _smoothedInputMag + idleLiftBoostL;
-            float idleRightSwingDeg = idleSinR * _stepAngle * _smoothedInputMag + idleLiftBoostR;
+            float idleLeftSwingDeg = BuildSwingAngleFromPhase(
+                _leftLegStateMachine.CyclePhase,
+                _smoothedInputMag,
+                idleLeftStateFrame.State);
+            float idleRightSwingDeg = BuildSwingAngleFromPhase(
+                _rightLegStateMachine.CyclePhase,
+                _smoothedInputMag,
+                idleRightStateFrame.State);
             float idleKneeBendDeg = _kneeAngle * _smoothedInputMag;
 
             leftCommand = new LegCommandOutput(
                 LocomotionLeg.Left,
                 LegCommandMode.Cycle,
-                _phase,
+                idleLeftStateFrame,
+                _leftLegStateMachine.CyclePhase,
                 idleLeftSwingDeg,
                 idleKneeBendDeg,
                 _smoothedInputMag,
@@ -794,7 +875,8 @@ namespace PhysicsDrivenMovement.Character
             rightCommand = new LegCommandOutput(
                 LocomotionLeg.Right,
                 LegCommandMode.Cycle,
-                _phase + Mathf.PI,
+                idleRightStateFrame,
+                _rightLegStateMachine.CyclePhase,
                 idleRightSwingDeg,
                 idleKneeBendDeg,
                 _smoothedInputMag,
@@ -812,10 +894,17 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            LogLegStateTransitionIfNeeded(_leftLegCommand, leftCommand);
+            LogLegStateTransitionIfNeeded(_rightLegCommand, rightCommand);
+
             _commandDesiredInput = desiredInput;
             _commandObservation = observation;
             _leftLegCommand = leftCommand;
             _rightLegCommand = rightCommand;
+            EnsureLegStateMachines();
+            _leftLegStateMachine.ForceState(leftCommand.State, leftCommand.TransitionReason, leftCommand.CyclePhase);
+            _rightLegStateMachine.ForceState(rightCommand.State, rightCommand.TransitionReason, rightCommand.CyclePhase);
+            _phase = leftCommand.Mode == LegCommandMode.Disabled ? 0f : leftCommand.CyclePhase;
             _hasCommandFrame = true;
             ApplyCommandFrame();
         }
@@ -837,6 +926,7 @@ namespace PhysicsDrivenMovement.Character
             _recoveryFrameCounter = 0;
             _recoveryCooldownFrameCounter = 0;
             _isGaitBiasedForward = false;
+            ResetLegStateMachinesToIdle();
             SetLegSpringMultiplier(1f);
             SetAllLegTargetsToIdentity();
         }
@@ -849,21 +939,267 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float leftSwingDeg = _leftLegCommand.Mode == LegCommandMode.Disabled
-                ? 0f
-                : _leftLegCommand.SwingAngleDegrees;
-            float rightSwingDeg = _rightLegCommand.Mode == LegCommandMode.Disabled
-                ? 0f
-                : _rightLegCommand.SwingAngleDegrees;
-            float kneeBendDeg = Mathf.Max(_leftLegCommand.KneeAngleDegrees, _rightLegCommand.KneeAngleDegrees);
+            ResolveLegExecutionTargets(_leftLegCommand, out float leftSwingDeg, out float leftKneeBendDeg);
+            ResolveLegExecutionTargets(_rightLegCommand, out float rightSwingDeg, out float rightKneeBendDeg);
 
             if (_useWorldSpaceSwing)
             {
-                ApplyWorldSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                ApplyWorldSpaceSwing(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg);
                 return;
             }
 
-            ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+            ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg);
+        }
+
+        private void ResolveLegExecutionTargets(
+            LegCommandOutput command,
+            out float swingAngleDegrees,
+            out float kneeAngleDegrees)
+        {
+            if (command.Mode == LegCommandMode.Disabled)
+            {
+                swingAngleDegrees = 0f;
+                kneeAngleDegrees = 0f;
+                return;
+            }
+
+            // STEP 1: Start from the raw pass-through payload so the legacy sinusoidal
+            //         executor remains the fallback for any state that is not yet bridged.
+            swingAngleDegrees = command.SwingAngleDegrees;
+            kneeAngleDegrees = command.KneeAngleDegrees;
+
+            if (!_useStateDrivenExecution)
+            {
+                return;
+            }
+
+            // STEP 2: Shape per-leg targets from the explicit Chapter 3 state so support,
+            //         touchdown, and catch-step windows can diverge even when the raw command
+            //         payload still mirrors the old sinusoidal executor contract.
+            switch (command.State)
+            {
+                case LegStateType.Swing:
+                    ApplySwingExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    break;
+
+                case LegStateType.Stance:
+                    ApplyStanceExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    break;
+
+                case LegStateType.Plant:
+                    ApplyPlantExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    break;
+
+                case LegStateType.CatchStep:
+                    ApplyCatchStepExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    break;
+            }
+        }
+
+        private void ApplySwingExecutionProfile(
+            LegCommandOutput command,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            // STEP 1: Explicit swing windows should keep a reliable forward arc so each leg
+            //         visibly takes a turn leading even when physics noise eats part of the raw gait command.
+            float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
+            float swingForwardTarget = Mathf.Lerp(
+                _stepAngle * 0.58f,
+                _stepAngle * 0.68f,
+                Mathf.SmoothStep(0f, 1f, swingProgress)) * command.BlendWeight;
+
+            swingAngleDegrees = Mathf.Max(swingAngleDegrees, swingForwardTarget);
+            kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, _kneeAngle * 0.35f * command.BlendWeight);
+        }
+
+        private void ApplyStanceExecutionProfile(
+            LegCommandOutput command,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            // STEP 1: Support-side stance should stay comparatively extended so the opposite
+            //         swing leg owns most of the visible lift and knee tuck.
+            float stanceProgress = Mathf.InverseLerp(Mathf.PI, Mathf.PI * 2f, command.CyclePhase);
+            float supportKneeTarget = Mathf.Lerp(_kneeAngle * 0.2f, _kneeAngle * 0.08f, stanceProgress) * command.BlendWeight;
+
+            kneeAngleDegrees = Mathf.Min(kneeAngleDegrees, supportKneeTarget);
+
+            if (command.TransitionReason == LegStateTransitionReason.None)
+            {
+                swingAngleDegrees = Mathf.Lerp(swingAngleDegrees, 0f, 0.85f);
+                return;
+            }
+
+            if (swingAngleDegrees > 0f)
+            {
+                swingAngleDegrees *= 1f - stanceProgress * 0.5f;
+            }
+        }
+
+        private void ApplyPlantExecutionProfile(
+            LegCommandOutput command,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            // STEP 1: The plant window should keep the legacy upper-leg forward reach intact,
+            //         but extend the knee back toward the neutral support pose as the foot settles.
+            float plantProgress = Mathf.InverseLerp(Mathf.PI * 0.85f, Mathf.PI, command.CyclePhase);
+            float easedPlantProgress = Mathf.SmoothStep(0f, 1f, plantProgress);
+            float touchdownKneeTarget = Mathf.Lerp(
+                kneeAngleDegrees,
+                _kneeAngle * 0.1f * command.BlendWeight,
+                easedPlantProgress);
+
+            kneeAngleDegrees = Mathf.Min(kneeAngleDegrees, touchdownKneeTarget);
+        }
+
+        private void ApplyCatchStepExecutionProfile(
+            LegCommandOutput command,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            // STEP 1: Catch steps need a more assertive forward placement than normal swing
+            //         so the recovery leg reaches under the body instead of tracing the old arc.
+            float catchStepProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
+            float catchStepForwardTarget = Mathf.Lerp(
+                _stepAngle * 0.35f,
+                _stepAngle * 0.55f,
+                Mathf.SmoothStep(0f, 1f, catchStepProgress)) * command.BlendWeight;
+            float catchStepKneeTarget = _kneeAngle * 0.55f * command.BlendWeight;
+
+            swingAngleDegrees = Mathf.Max(swingAngleDegrees, catchStepForwardTarget);
+            kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, catchStepKneeTarget);
+        }
+
+        private void EnsureLegStateMachines()
+        {
+            if (_leftLegStateMachine == null)
+            {
+                _leftLegStateMachine = new LegStateMachine(LocomotionLeg.Left, startsInSwing: true);
+            }
+
+            if (_rightLegStateMachine == null)
+            {
+                _rightLegStateMachine = new LegStateMachine(LocomotionLeg.Right, startsInSwing: false);
+            }
+        }
+
+        private void ResetLegStateMachinesForMirroredCadence()
+        {
+            EnsureLegStateMachines();
+            _leftLegStateMachine.ResetForMirroredCadence();
+            _rightLegStateMachine.ResetForMirroredCadence();
+        }
+
+        private void ResetLegStateMachinesToIdle()
+        {
+            EnsureLegStateMachines();
+            _leftLegStateMachine.ResetToIdle();
+            _rightLegStateMachine.ResetToIdle();
+        }
+
+        private void SynchronizeLegStateMachinesFromLegacyPhaseIfNeeded(LegStateTransitionReason transitionReason)
+        {
+            if (Mathf.Abs(Mathf.DeltaAngle(_leftLegStateMachine.CyclePhase * Mathf.Rad2Deg, _phase * Mathf.Rad2Deg)) <= 0.01f)
+            {
+                return;
+            }
+
+            _leftLegStateMachine.SyncFromLegacyPhase(_phase, transitionReason);
+            _rightLegStateMachine.SyncFromLegacyPhase(
+                Mathf.Repeat(_phase + Mathf.PI, Mathf.PI * 2f),
+                transitionReason);
+        }
+
+        private float BuildSwingAngleFromPhase(
+            float cyclePhase,
+            float amplitudeScale,
+            LegStateType state)
+        {
+            float swingSin = Mathf.Sin(cyclePhase);
+            float liftBoost = swingSin > 0f ? swingSin * _upperLegLiftBoost * amplitudeScale : 0f;
+            float swingAngle = swingSin * _stepAngle * amplitudeScale + liftBoost;
+
+            if ((state == LegStateType.Swing || state == LegStateType.CatchStep) && amplitudeScale > 0f)
+            {
+                swingAngle += _upperLegLiftBoost * 0.6f * amplitudeScale;
+
+                float minimumForwardArc = _stepAngle * 0.55f * amplitudeScale;
+                swingAngle = Mathf.Max(swingAngle, minimumForwardArc);
+            }
+
+            return swingAngle;
+        }
+
+        private LocomotionLeg SelectCatchStepLeg()
+        {
+            float leftSwingBias = Mathf.Sin(_leftLegStateMachine.CyclePhase);
+            float rightSwingBias = Mathf.Sin(_rightLegStateMachine.CyclePhase);
+            return leftSwingBias >= rightSwingBias ? LocomotionLeg.Left : LocomotionLeg.Right;
+        }
+
+        private static LegStateFrame BuildStateFrame(LegStateMachine stateMachine)
+        {
+            return new LegStateFrame(stateMachine.Leg, stateMachine.CurrentState, stateMachine.TransitionReason);
+        }
+
+        private static LegStateTransitionReason DetermineDominantTransitionReason(
+            DesiredInput desiredInput,
+            LocomotionObservation observation,
+            bool isRecoveryState)
+        {
+            if (isRecoveryState)
+            {
+                return LegStateTransitionReason.StumbleRecovery;
+            }
+
+            if (observation.IsLocomotionCollapsed || observation.IsComOutsideSupport)
+            {
+                return LegStateTransitionReason.StumbleRecovery;
+            }
+
+            if (observation.TurnSeverity >= 0.45f && desiredInput.HasMoveIntent)
+            {
+                return LegStateTransitionReason.TurnSupport;
+            }
+
+            if (!desiredInput.HasMoveIntent && observation.PlanarSpeed > 0.15f)
+            {
+                return LegStateTransitionReason.Braking;
+            }
+
+            float normalizedPlanarSpeed = Mathf.Clamp01(observation.PlanarSpeed / 2f);
+            if (desiredInput.HasMoveIntent && desiredInput.MoveMagnitude > normalizedPlanarSpeed + 0.15f)
+            {
+                return LegStateTransitionReason.SpeedUp;
+            }
+
+            if (desiredInput.HasMoveIntent || observation.PlanarSpeed > 0.05f)
+            {
+                return LegStateTransitionReason.DefaultCadence;
+            }
+
+            return LegStateTransitionReason.None;
+        }
+
+        private void LogLegStateTransitionIfNeeded(LegCommandOutput previousCommand, LegCommandOutput nextCommand)
+        {
+            if (!_debugStateTransitions)
+            {
+                return;
+            }
+
+            if (previousCommand.Leg == nextCommand.Leg &&
+                previousCommand.State == nextCommand.State &&
+                previousCommand.TransitionReason == nextCommand.TransitionReason)
+            {
+                return;
+            }
+
+            Debug.Log(
+                $"[LegAnimator] {nextCommand.Leg} leg state {previousCommand.State} -> {nextCommand.State} ({nextCommand.TransitionReason})",
+                this);
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -901,7 +1237,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private bool IsFootBehindHips(Transform footTransform, Vector3 referenceDirection)
         {
-            if (footTransform == null) return false;
+            return GetFootForwardOffsetFromHips(footTransform, referenceDirection) < 0f;
+        }
+
+        private float GetFootForwardOffsetFromHips(Transform footTransform, Vector3 referenceDirection)
+        {
+            if (footTransform == null) return 0f;
 
             Vector3 hipToFoot = footTransform.position - transform.position;
 
@@ -914,14 +1255,14 @@ namespace PhysicsDrivenMovement.Character
                 referenceDirection = new Vector3(transform.forward.x, 0f, transform.forward.z);
             }
 
-            if (referenceDirection.sqrMagnitude < 0.0001f) return false;
+            if (referenceDirection.sqrMagnitude < 0.0001f) return 0f;
 
             referenceDirection.Normalize();
             float forwardDot = Vector3.Dot(
                 new Vector3(hipToFoot.x, 0f, hipToFoot.z),
                 referenceDirection);
 
-            return forwardDot < 0f;
+            return forwardDot;
         }
 
 
@@ -933,8 +1274,13 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         /// <param name="leftSwingDeg">Signed swing angle (degrees) for the left upper leg.</param>
         /// <param name="rightSwingDeg">Signed swing angle (degrees) for the right upper leg.</param>
-        /// <param name="kneeBendDeg">Knee bend angle (degrees, positive = forward flex).</param>
-        private void ApplyWorldSpaceSwing(float leftSwingDeg, float rightSwingDeg, float kneeBendDeg)
+        /// <param name="leftKneeBendDeg">Knee bend angle (degrees, positive = forward flex) for the left leg.</param>
+        /// <param name="rightKneeBendDeg">Knee bend angle (degrees, positive = forward flex) for the right leg.</param>
+        private void ApplyWorldSpaceSwing(
+            float leftSwingDeg,
+            float rightSwingDeg,
+            float leftKneeBendDeg,
+            float rightKneeBendDeg)
         {
             // STEP A: Determine the world-space gait-forward direction.
             //         Primary: use the Hips Rigidbody's horizontal velocity (most accurate
@@ -962,7 +1308,7 @@ namespace PhysicsDrivenMovement.Character
             else
             {
                 // No axis at all (very first frames) — local-space fallback.
-                ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg);
                 return;
             }
 
@@ -978,9 +1324,9 @@ namespace PhysicsDrivenMovement.Character
             //         Positive kneeBendDeg bends the knee forward (in the direction of
             //         movement) — same worldSwingAxis, but opposite sign convention
             //         so the lower leg folds in the physiologically correct direction.
-            ApplyWorldSpaceJointTarget(_lowerLegL, -kneeBendDeg, worldSwingAxis);
+            ApplyWorldSpaceJointTarget(_lowerLegL, -leftKneeBendDeg, worldSwingAxis);
             if (_lowerLegL != null) { _lowerLegLTargetEuler = _lowerLegL.targetRotation.eulerAngles; }
-            ApplyWorldSpaceJointTarget(_lowerLegR, -kneeBendDeg, worldSwingAxis);
+            ApplyWorldSpaceJointTarget(_lowerLegR, -rightKneeBendDeg, worldSwingAxis);
         }
 
         /// <summary>
@@ -1098,8 +1444,13 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         /// <param name="leftSwingDeg">Signed swing angle (degrees) for the left upper leg.</param>
         /// <param name="rightSwingDeg">Signed swing angle (degrees) for the right upper leg.</param>
-        /// <param name="kneeBendDeg">Knee bend angle (degrees).</param>
-        private void ApplyLocalSpaceSwing(float leftSwingDeg, float rightSwingDeg, float kneeBendDeg)
+        /// <param name="leftKneeBendDeg">Knee bend angle (degrees) for the left leg.</param>
+        /// <param name="rightKneeBendDeg">Knee bend angle (degrees) for the right leg.</param>
+        private void ApplyLocalSpaceSwing(
+            float leftSwingDeg,
+            float rightSwingDeg,
+            float leftKneeBendDeg,
+            float rightKneeBendDeg)
         {
             // DESIGN: Quaternion.AngleAxis with _swingAxis (default Vector3.forward / Z)
             //         is used because ConfigurableJoint.targetRotation maps the primary joint
@@ -1128,7 +1479,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_lowerLegL != null)
             {
-                _lowerLegL.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+                _lowerLegL.targetRotation = Quaternion.AngleAxis(-leftKneeBendDeg, _kneeAxis);
                 _lowerLegLTargetEuler = _lowerLegL.targetRotation.eulerAngles;
             }
             else
@@ -1138,7 +1489,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_lowerLegR != null)
             {
-                _lowerLegR.targetRotation = Quaternion.AngleAxis(-kneeBendDeg, _kneeAxis);
+                _lowerLegR.targetRotation = Quaternion.AngleAxis(-rightKneeBendDeg, _kneeAxis);
             }
             else
             {

@@ -1,6 +1,6 @@
 # Chapter 6: Turn Recovery, Stumbles, And Catch Steps
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 

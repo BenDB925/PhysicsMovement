@@ -2,6 +2,19 @@
 
 *Living document. Update this file whenever a debugging workflow, test pattern, logging tactic, or bug pattern proves useful more than once.*
 
+## Quick Load
+
+- If the game is visibly wrong and tests are green, write the failing outcome-based test first; if the failure mode is still unclear, add targeted logging before changing code.
+- Keep the nearest task plan or roadmap chapter as the parent record, and split into a bug sheet once hypotheses, raw logs, or telemetry start to sprawl.
+- Start with the broadest trustworthy outcome check, then add narrower outcome assertions only when they help localize the broken layer.
+- Isolate one subsystem at a time and fix the first layer where behavior becomes wrong rather than patching a downstream symptom.
+
+## Read More When
+
+- Continue into the default debugging workflow when a regression needs a fresh end-to-end investigation path.
+- Continue into the repo pattern sections when the symptom looks like green-tests/wrong-game, mixed-slice contamination, or another recurring failure shape.
+- Continue into the checklists when you are adding new regression tests or instrumentation and need the keep/remove criteria.
+
 ---
 
 ## Core Rules

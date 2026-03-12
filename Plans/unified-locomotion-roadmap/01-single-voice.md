@@ -1,6 +1,19 @@
 # Chapter 1: Define The Single Voice
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
+
+## Quick Load
+
+- Use this chapter for locomotion authority cleanup: `LocomotionDirector` becomes the single decision owner while movement feel stays at parity.
+- Focus on C1.1-C1.6 only: baseline capture, contracts, director skeleton, ownership rewiring, safety-role cleanup, and the regression gate.
+- The core verification seams are `LocomotionContractsTests`, `LocomotionDirectorEditModeTests`, `LocomotionDirectorTests`, and the closest runtime regression fixtures named below.
+- Known pre-existing baseline reds belong in `LOCOMOTION_BASELINES.md` and should be carried forward explicitly rather than accidentally treated as new failures.
+
+## Read More When
+
+- Continue into the work packages when the task touches any C1.x ownership boundary or needs a new progress note.
+- Continue into the verification gate when runtime wiring, command ownership, or safety-role behaviour changes.
+- Continue into the related artifacts when you need the specific baseline logs or XML that back a Chapter 1 claim.
 
 ## Read this chapter when
 
@@ -27,7 +40,7 @@ Create one locomotion decision owner without changing final feel yet.
 
 ## Related artifacts
 
-- [LOCOMOTION_BASELINES.md](../../../LOCOMOTION_BASELINES.md)
+- [LOCOMOTION_BASELINES.md](../../LOCOMOTION_BASELINES.md)
 - `Logs/test_playmode_20260312_140637.log`
 - `Logs/test_editmode_20260312_140805.log`
 
@@ -74,4 +87,4 @@ Create one locomotion decision owner without changing final feel yet.
 ## Exit criteria
 
 - One script (LocomotionDirector) can be named as locomotion intent authority.
-- Focused Chapter 1 verification slices remain green, and any wider baseline gaps are either unchanged from [LOCOMOTION_BASELINES.md](../../../LOCOMOTION_BASELINES.md) or explicitly called out there.
+- Focused Chapter 1 verification slices remain green, and any wider baseline gaps are either unchanged from [LOCOMOTION_BASELINES.md](../../LOCOMOTION_BASELINES.md) or explicitly called out there.

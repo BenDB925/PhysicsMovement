@@ -4,6 +4,19 @@
 > **Purpose:** Step-by-step instructions for running Unity EditMode and PlayMode tests directly from the terminal, without requiring the user to manually open the Test Runner window.
 > **Authority:** Referenced by `CODING_STANDARDS.md` §2 and the development workflow (Phases C–E).
 
+## Quick Load
+
+- Default to `Tools/Run-UnityTests.ps1` and the smallest meaningful `-TestFilter` slice for the feature you changed; only escalate to full-platform coverage when the impact is cross-cutting.
+- Run EditMode and PlayMode sequentially, never in parallel, and verify that fresh XML was written under `TestResults/` before trusting the result.
+- Prefer the absolute-path, `-NoProfile` invocation of the repo script for terminal reliability; use raw Unity CLI only when the repo script is insufficient.
+- Decide pass/fail from the NUnit XML, not from Unity's process exit code alone; use the log file for compile or infrastructure diagnostics.
+
+## Read More When
+
+- Continue into the Unity executable lookup and raw CLI sections only when you cannot use the repo script or need a manual fallback.
+- Continue into the troubleshooting and lock-guardrail sections when Unity leaves no XML, reports another instance, or behaves differently in batch mode.
+- Continue into the workflow-integration section when you need explicit red/green phase guidance instead of a one-off test run.
+
 ---
 
 ## Overview

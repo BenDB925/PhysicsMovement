@@ -1,6 +1,19 @@
 # Chapter 2: Build A Better World Model
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
+
+## Quick Load
+
+- Use this chapter for observation-model work: promote raw physics signals into support quality, contact confidence, planted confidence, slip, turn severity, and related locomotion-facing telemetry.
+- Read Chapter 1 only if the change also alters director contracts or ownership boundaries; otherwise keep the scope inside Chapter 2.
+- Current completed slices already cover schema, sensor aggregation, hysteresis, debug visibility, and director decision integration.
+- Broader verification still inherits the pre-existing `MovementQualityTests` pressure points tracked in `LOCOMOTION_BASELINES.md`; do not treat them as new Chapter 2 regressions by default.
+
+## Read More When
+
+- Continue into the work packages when changing support quality, planted-foot logic, slip estimates, debug draw, or director observation decisions.
+- Continue into the completion verification when deciding whether a red is newly introduced versus pre-existing or slice-order-sensitive.
+- Continue into the dependency notes when the work starts changing contracts, ownership boundaries, or scene/runtime assumptions outside the observation layer.
 
 ## Read this chapter when
 

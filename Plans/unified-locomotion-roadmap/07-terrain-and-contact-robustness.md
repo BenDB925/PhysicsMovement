@@ -1,6 +1,6 @@
 # Chapter 7: Terrain And Contact Robustness
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 

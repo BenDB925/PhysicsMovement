@@ -3,6 +3,19 @@
 > Living document. Update whenever a new system, assembly, or significant data flow is introduced.
 > See `CODING_STANDARDS.md §7 Layer 5` for the update rules.
 
+## Quick Load
+
+- Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label and `LocomotionCollapseDetector` as a watchdog input.
+- The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
+- `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity` respectively.
+- When ownership boundaries or key collaborators change, keep this file, `TASK_ROUTING.md`, and `.copilot-instructions.md` aligned in the same slice.
+
+## Read More When
+
+- Continue into the system diagram if the task adds a new runtime system, scene-generation path, or assembly boundary.
+- Continue into the key class sections if the task changes responsibilities, collaborators, or public seams for an existing system.
+- Continue into the assembly structure if code is moving between runtime, editor, or test assemblies.
+
 ---
 
 ## 1 — High-Level System Diagram
@@ -139,11 +152,11 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | Internal locomotion types now cover the command/observation contracts (`DesiredInput`, `FootContactObservation`, `SupportObservation`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, `LocomotionLeg`, `LegCommandMode`), the shared Chapter 2 sensor helpers (`SupportGeometry`, `LocomotionSensorSnapshot`, `LocomotionSensorAggregator`), and the C2.3 `SupportObservationFilter` that stabilizes planted/unplanted support confidence over time. |
-| **Why** | Keeps one test-backed handoff boundary for director-owned commands while centralizing raw foot-contact, hips-motion, yaw-rate, support-geometry sampling, and confidence filtering so support decisions are expressed in locomotion language instead of repeated transform math or one-frame sensor noise. |
-| **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)`, `LegCommandOutput.Disabled(LocomotionLeg)`, and support-geometry classification methods seed the current migration slice without widening public APIs. |
+| **What** | Internal locomotion types now cover the command/observation contracts (`DesiredInput`, `FootContactObservation`, `SupportObservation`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, `LocomotionLeg`, `LegCommandMode`), the Chapter 3 leg-role contracts (`LegStateType`, `LegStateTransitionReason`, `LegStateFrame`), the new `LegStateMachine` per-leg controller, the shared Chapter 2 sensor helpers (`SupportGeometry`, `LocomotionSensorSnapshot`, `LocomotionSensorAggregator`), and the C2.3 `SupportObservationFilter` that stabilizes planted/unplanted support confidence over time. |
+| **Why** | Keeps one test-backed handoff boundary for director-owned commands while centralizing raw foot-contact, hips-motion, yaw-rate, support-geometry sampling, confidence filtering, explicit leg-state labels, and the new left/right controller timing so support and gait decisions are expressed in locomotion language instead of repeated transform math or one-frame sensor noise. |
+| **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)`, `LegCommandOutput.Disabled(LocomotionLeg)`, `LegCommandOutput.State`, `LegCommandOutput.TransitionReason`, `LegStateMachine.SyncFromLegacyPhase(...)`, and support-geometry classification methods seed the current migration slice without widening public APIs. |
 | **Collaborators** | Sits between `GroundSensor`, `PlayerMovement`, `BalanceController`, `CharacterState`, `LocomotionCollapseDetector`, `LegAnimator`, and `LocomotionDirector`. |
-| **Phase** | Unified locomotion roadmap C1.2-C2.3 |
+| **Phase** | Unified locomotion roadmap C1.2-C3.2 |
 
 ### `Character.CharacterState` — `Assets/Scripts/Character/CharacterState.cs`
 
@@ -169,10 +182,10 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; consumes explicit left and right leg command frames and applies UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values, while retaining a pass-through gait planner for the current roadmap slice. |
-| **Why** | Ragdoll characters still need procedural joint targets, but locomotion intent ownership now lives in `LocomotionDirector` rather than inside the animator's FixedUpdate loop. |
+| **What** | MonoBehaviour on Hips; consumes explicit left and right leg command frames, advances them through the internal `LegStateMachine` controllers for the Chapter 3 pass-through path, and applies UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values while retaining a sinusoidal executor fallback. |
+| **Why** | Ragdoll characters still need procedural joint targets, but locomotion intent ownership now lives in `LocomotionDirector` and the per-leg controller layer instead of inside a purely mirrored phase-only animator loop. |
 | **Public Surface** | `Phase: float`, `SmoothedInputMag: float`, `StepAngleDegrees`, `KneeAngleDegrees` — read by `ArmAnimator` and diagnostics; internal command-frame seams are consumed by `LocomotionDirector`. |
-| **Collaborators** | `CharacterState` (non-ambulatory state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`), `LocomotionDirector` (publishes explicit command frames and requests pass-through planning during migration). |
+| **Collaborators** | `CharacterState` (non-ambulatory state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`), `LocomotionDirector` (publishes explicit command frames and requests pass-through planning during migration), `LegStateMachine` (left/right Chapter 3 state progression). |
 | **Key design** | Supports both legacy local-frame swing and a world-space swing path. Current field default in code is `_useWorldSpaceSwing = false`. Angular velocity spin gate at 8 rad/s. Command frames apply immediately and suppress late writes on non-ambulatory frames to keep timing stable. |
 | **Phase** | 3E |
 

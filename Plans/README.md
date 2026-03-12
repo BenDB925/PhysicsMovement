@@ -15,6 +15,8 @@ If the user names a folder, use that folder. Otherwise create the task record un
 
 If a matching task record tree already exists, reuse it instead of creating a parallel tree.
 
+Durable agent guidance belongs under `.github/instructions/`. If a roadmap or other long-running effort needs progress notes, checkpoints, or resumable execution state, keep the working plan under `Plans/` and leave any instruction file as a thin routing shim.
+
 ## Canonical structure
 
 ### 1. Parent plan file
@@ -25,8 +27,12 @@ Suggested path:
 
 The parent plan is the canonical entry point.
 
+A future agent should be able to resume from the parent plan's `Quick Resume` and `Verified Artifacts` sections before opening old chat history, raw logs, or child docs.
+
 Keep it short and current:
 
+- quick resume
+- verified artifacts
 - current status
 - acceptance target
 - current next step
@@ -94,10 +100,15 @@ When in doubt, split early. A short linked doc is cheaper than a bloated parent 
 - Every material child-doc update must be reflected in the parent plan in the same slice.
 - Never leave a child doc or bug sheet unlinked.
 - Parent plans summarize the latest truth. Child docs hold the detail.
+- When a task is paused or complete, refresh the parent plan's `Quick Resume` and `Verified Artifacts` sections in the same slice.
+- `Quick Resume` should be one paragraph or 3 bullets with the current truth, the most important verified outcome, and the next useful restart point.
+- `Verified Artifacts` should list the one or two files or artifacts worth opening first on resume.
 - Never paste long raw logs into the parent plan. Summarize them and link the artifact or bug sheet.
 - When a bug is resolved or abandoned, update both the bug sheet and the parent plan with the outcome.
 - If the user provided the initial plan document, treat it as the parent record unless they explicitly ask for a different top-level doc.
-- If the user signals that the task is complete, use that moment to review whether the parent plan, any child docs, and the core project docs need updates before ending the session.
+- If the user signals that the task is complete or paused, use that moment to review whether the parent plan, any child docs, and the core project docs need updates before ending the session.
+- After a plan is complete and its durable outcomes have been promoted into long-lived docs, either archive it under `Plans/archive/` or delete it if it no longer adds resume value.
+- Keep only active or recently paused plans at the top level of `Plans/`; old execution history should not crowd the default entry surface.
 
 ## Minimal templates
 
@@ -111,6 +122,15 @@ When in doubt, split early. A short linked doc is cheaper than a bloated parent 
 - Acceptance target:
 - Current next step:
 - Active blockers:
+
+## Quick Resume
+- <current truth>
+- <most important verified result>
+- <next useful restart point>
+
+## Verified Artifacts
+- <path>: <why this is the first file or artifact to open>
+- <path>: <why this is the second file or artifact to open>
 
 ## Child docs
 - [ ] <work package>: <one-line summary> (<path>)

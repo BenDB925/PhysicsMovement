@@ -1,6 +1,6 @@
 # Chapter 5: Recast Balance As Body Support
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 

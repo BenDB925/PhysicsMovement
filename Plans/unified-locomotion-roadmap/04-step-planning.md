@@ -1,6 +1,6 @@
 # Chapter 4: Add Step Planning And Foot Placement
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 

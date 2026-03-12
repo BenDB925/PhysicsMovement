@@ -16,6 +16,11 @@ Every task — bug fix, feature, refactor — MUST follow these phases **in orde
 2. Identify the **acceptance criteria** — what does "done" look like?
 3. List affected classes/systems. If unsure, search the codebase first.
 4. Read existing class-level `<summary>` XML docs and any `// DESIGN:` comments before touching code.
+5. When a referenced doc has `Quick Load` or `Read More When`, read those sections first and continue deeper only if the task needs that extra detail.
+6. Prefer the active parent plan and the freshest artifact summary before opening raw logs, raw XML, or long historical notes.
+7. Read `LOCOMOTION_BASELINES.md` only when comparing regressions, triaging known reds, or validating against an earlier baseline.
+8. For roadmap work, load only the chapter docs whose scope matches the task instead of reading every chapter.
+9. For test work, read `TestResults/latest-summary.md` when present, then the relevant XML, and only then the full Unity log if the summary or XML is insufficient.
 
 ### Phase B: Comment-First Design
 

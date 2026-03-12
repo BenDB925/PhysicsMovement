@@ -284,7 +284,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator FixedUpdate_WhenLegacyGaitIsAdvancing_EmitsCycleCommandsWithMirroredPhaseOffset()
+        public IEnumerator FixedUpdate_WhenLegacyGaitIsAdvancing_EmitsCycleCommandsWithPerLegStateSeparation()
         {
             // Arrange
             Assert.That(_director, Is.Not.Null,
@@ -304,6 +304,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             string leftMode = GetPropertyValue<object>(leftLegCommand, "Mode").ToString();
             string rightMode = GetPropertyValue<object>(rightLegCommand, "Mode").ToString();
+            string leftState = GetPropertyValue<object>(leftLegCommand, "State").ToString();
+            string rightState = GetPropertyValue<object>(rightLegCommand, "State").ToString();
+            string leftTransitionReason = GetPropertyValue<object>(leftLegCommand, "TransitionReason").ToString();
+            string rightTransitionReason = GetPropertyValue<object>(rightLegCommand, "TransitionReason").ToString();
             float leftPhase = GetPropertyValue<float>(leftLegCommand, "CyclePhase");
             float rightPhase = GetPropertyValue<float>(rightLegCommand, "CyclePhase");
             float leftBlendWeight = GetPropertyValue<float>(leftLegCommand, "BlendWeight");
@@ -314,18 +318,126 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Pass-through director should mirror legacy gait as Cycle commands while moving.");
             Assert.That(rightMode, Is.EqualTo("Cycle"),
                 "Pass-through director should mirror legacy gait as Cycle commands while moving.");
+            Assert.That(leftTransitionReason, Is.Not.EqualTo("None"),
+                "The left leg command should include an explicit transition reason once Chapter 3 state roles are introduced.");
+            Assert.That(rightTransitionReason, Is.Not.EqualTo("None"),
+                "The right leg command should include an explicit transition reason once Chapter 3 state roles are introduced.");
             Assert.That(leftBlendWeight, Is.EqualTo(_rig.LegAnimator.SmoothedInputMag).Within(0.0001f),
                 "Left leg command should mirror the legacy gait blend weight.");
             Assert.That(rightBlendWeight, Is.EqualTo(_rig.LegAnimator.SmoothedInputMag).Within(0.0001f),
                 "Right leg command should mirror the legacy gait blend weight.");
             Assert.That(Mathf.Abs(Mathf.DeltaAngle(leftPhase * Mathf.Rad2Deg, _rig.LegAnimator.Phase * Mathf.Rad2Deg)),
                 Is.LessThan(0.01f),
-                "Left leg command should mirror the legacy gait phase.");
+                "Left leg command should remain the exposed compatibility phase for legacy collaborators and tests.");
 
-            float expectedRightPhase = Mathf.Repeat(_rig.LegAnimator.Phase + Mathf.PI, Mathf.PI * 2f);
-            Assert.That(Mathf.Abs(Mathf.DeltaAngle(rightPhase * Mathf.Rad2Deg, expectedRightPhase * Mathf.Rad2Deg)),
-                Is.LessThan(0.01f),
-                "Right leg command should mirror the legacy gait phase with a half-cycle offset.");
+            float phaseSeparation = Mathf.Abs(
+                Mathf.DeltaAngle(leftPhase * Mathf.Rad2Deg, rightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+            Assert.That(phaseSeparation, Is.GreaterThan(0.1f),
+                "The right leg should keep a distinct controller phase instead of collapsing onto the left leg phase while moving.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenSupportFallsBehindHips_PromotesCatchStepStateWithStumbleRecoveryReason()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C3.1.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footLeftBody = _rig.FootL.GetComponent<Rigidbody>();
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+
+            Assert.That(footLeftBody, Is.Not.Null, "Foot_L should expose a Rigidbody on the prefab-backed test rig.");
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            Vector3 supportCenter = _rig.HipsBody.position - Vector3.forward * 0.55f + Vector3.up * 0.02f;
+            TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object leftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object rightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+
+            string leftState = GetPropertyValue<object>(leftLegCommand, "State").ToString();
+            string rightState = GetPropertyValue<object>(rightLegCommand, "State").ToString();
+            string leftTransitionReason = GetPropertyValue<object>(leftLegCommand, "TransitionReason").ToString();
+            string rightTransitionReason = GetPropertyValue<object>(rightLegCommand, "TransitionReason").ToString();
+
+            // Assert
+            Assert.That(new[] { leftState, rightState }, Does.Contain("CatchStep"),
+                "Weak support ahead of the support patch should promote at least one leg into a catch-step role.");
+            Assert.That(leftTransitionReason, Is.EqualTo("StumbleRecovery"),
+                "The left leg command should explain catch-step promotion as a stumble-recovery transition.");
+            Assert.That(rightTransitionReason, Is.EqualTo("StumbleRecovery"),
+                "The right leg command should explain weak-support promotion as a stumble-recovery transition.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenOneFootLosesContact_BreaksStrictHalfCyclePhaseMirror()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C3.2.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object baselineLeftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object baselineRightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+            float baselineLeftPhase = GetPropertyValue<float>(baselineLeftLegCommand, "CyclePhase");
+            float baselineRightPhase = GetPropertyValue<float>(baselineRightLegCommand, "CyclePhase");
+            float baselinePhaseDelta = Mathf.Abs(
+                Mathf.DeltaAngle(baselineLeftPhase * Mathf.Rad2Deg, baselineRightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+
+            RigidbodyConstraints originalConstraints = footRightBody.constraints;
+            footRightBody.constraints = RigidbodyConstraints.FreezeAll;
+            TeleportFootBody(
+                footRightBody,
+                _rig.HipsBody.position + Vector3.right * 0.25f + Vector3.up * 0.9f + Vector3.forward * 0.1f);
+
+            for (int frame = 0; frame < 10; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Act
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+            object rightFoot = GetPropertyValue<object>(observation, "RightFoot");
+            object leftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object rightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+            float leftPhase = GetPropertyValue<float>(leftLegCommand, "CyclePhase");
+            float rightPhase = GetPropertyValue<float>(rightLegCommand, "CyclePhase");
+            float phaseDelta = Mathf.Abs(Mathf.DeltaAngle(leftPhase * Mathf.Rad2Deg, rightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+
+            footRightBody.constraints = originalConstraints;
+
+            // Assert
+            Assert.That(GetPropertyValue<bool>(rightFoot, "IsGrounded"), Is.False,
+                "The lifted right foot should leave ground contact so the per-leg controller sees asymmetric support.");
+            float mirroredRightPhase = Mathf.Repeat(_rig.LegAnimator.Phase + Mathf.PI, Mathf.PI * 2f);
+            float mirrorDeviation = Mathf.Abs(
+                Mathf.DeltaAngle(rightPhase * Mathf.Rad2Deg, mirroredRightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+
+            Assert.That(baselinePhaseDelta, Is.GreaterThan(0.1f),
+                "Before asymmetric contact is introduced, the stable gait should at least keep both leg phases distinct.");
+            Assert.That(mirrorDeviation, Is.GreaterThan(0.05f),
+                "Once one foot loses contact, the right leg command should stop looking like a simple left-phase-plus-pi mirror.");
         }
 
         [UnityTest]

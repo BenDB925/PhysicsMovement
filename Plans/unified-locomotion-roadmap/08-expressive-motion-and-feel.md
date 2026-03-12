@@ -1,6 +1,6 @@
 # Chapter 8: Expressive Motion And Feel
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 

@@ -1,6 +1,6 @@
 # Chapter 9: Validation, Debugging, And Tuning Infrastructure
 
-Back to routing: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.instructions.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
 ## Read this chapter when
 
@@ -24,14 +24,16 @@ Prevent the unified system from becoming a black box.
 - Assets/Tests/PlayMode/Character/MovementQualityTests.cs
 - Assets/Tests/PlayMode/Character/GaitOutcomeTests.cs
 - Assets/Tests/PlayMode/Character/HardSnapRecoveryTests.cs
+- Tools/Write-TestSummary.ps1
+- Tools/ParseResults.ps1
 - parse_results.ps1
 - summary.ps1
 - AGENT_TEST_RUNNING.md
 
 ## Related artifacts
 
-- [LOCOMOTION_BASELINES.md](../../../LOCOMOTION_BASELINES.md)
-- [DEBUGGING.md](../../../DEBUGGING.md)
+- [LOCOMOTION_BASELINES.md](../../LOCOMOTION_BASELINES.md)
+- [DEBUGGING.md](../../DEBUGGING.md)
 
 ## Work packages
 
@@ -50,6 +52,7 @@ Prevent the unified system from becoming a black box.
 
 - Keep the focused slice for the active chapter green.
 - Refresh baseline artifacts when thresholds or behavior expectations change.
+- Prefer `TestResults/latest-summary.md` for first-pass triage, then open raw XML or logs only when the digest is insufficient.
 - Verify new telemetry is interpretable from NUnit XML or stored logs, not only the Unity Console.
 
 ## Exit criteria

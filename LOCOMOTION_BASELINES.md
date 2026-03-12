@@ -2,6 +2,19 @@
 
 Purpose: store concrete locomotion regression snapshots and focused test-run results without mixing them into general debugging policy.
 
+## Quick Load
+
+- This file is artifact history for locomotion regressions and verification slices, not the general debugging workflow.
+- The main long-lived known reds are `WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen`; mixed slices can also surface order-sensitive pressure points such as `TurnAndWalk_CornerRecovery`, `HardSnap90_AtFullSpeed_CharacterRecoversAndMakesProgress`, and `SpinRecoveryTests.AfterFullSpinThenForwardInput_DisplacementRecoveredWithin2s`.
+- The Chapter 1 baseline snapshot and completion verification are the current reference points for pre-director parity and for distinguishing pre-existing failures from new regressions.
+- Prefer the newest relevant section for the active chapter or verification pass rather than rereading the whole file on every task.
+
+## Read More When
+
+- Continue into the specific snapshot sections when the task needs metric-by-metric comparison against an earlier run.
+- Continue into the completion verification sections when triaging whether a current failure is pre-existing, order-sensitive, or newly introduced.
+- Continue into the artifact lists when you need the exact XML or log paths that back a baseline claim.
+
 ---
 
 ## Chapter 1 Baseline Snapshot (2026-03-12)

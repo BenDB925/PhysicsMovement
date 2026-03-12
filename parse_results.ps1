@@ -1,10 +1,17 @@
-[xml]$xml = Get-Content 'H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml'
-$failures = $xml.SelectNodes("//test-case[@result='Failed']")
-foreach ($f in $failures) {
-    Write-Host "FAIL: $($f.fullname)"
-    $msg = $f.failure.message.'#cdata-section'
-    Write-Host "  MSG: $($msg -replace "`n",' ')"
-    $stack = $f.failure.'stack-trace'.'#cdata-section'
-    Write-Host "  STACK: $($stack -replace "`n",' ')"
-    Write-Host ""
-}
+param(
+    [string]$ProjectPath = $PSScriptRoot,
+    [string]$XmlPath,
+    [string]$LogPath,
+    [string]$OutputPath,
+    [string]$TestFilter,
+    [switch]$NoWriteSummary
+)
+
+$scriptPath = Join-Path $PSScriptRoot "Tools\ParseResults.ps1"
+& $scriptPath `
+    -ProjectPath $ProjectPath `
+    -XmlPath $XmlPath `
+    -LogPath $LogPath `
+    -OutputPath $OutputPath `
+    -TestFilter $TestFilter `
+    -NoWriteSummary:$NoWriteSummary

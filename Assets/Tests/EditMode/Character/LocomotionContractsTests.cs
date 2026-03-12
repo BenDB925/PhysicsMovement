@@ -24,6 +24,10 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string SupportObservationTypeName = "PhysicsDrivenMovement.Character.SupportObservation";
         private const string LocomotionObservationTypeName = "PhysicsDrivenMovement.Character.LocomotionObservation";
         private const string BodySupportCommandTypeName = "PhysicsDrivenMovement.Character.BodySupportCommand";
+        private const string LegStateFrameTypeName = "PhysicsDrivenMovement.Character.LegStateFrame";
+        private const string LegStateMachineTypeName = "PhysicsDrivenMovement.Character.LegStateMachine";
+        private const string LegStateTypeTypeName = "PhysicsDrivenMovement.Character.LegStateType";
+        private const string LegStateTransitionReasonTypeName = "PhysicsDrivenMovement.Character.LegStateTransitionReason";
         private const string LegCommandOutputTypeName = "PhysicsDrivenMovement.Character.LegCommandOutput";
         private const string LocomotionLegTypeName = "PhysicsDrivenMovement.Character.LocomotionLeg";
         private const string LegCommandModeTypeName = "PhysicsDrivenMovement.Character.LegCommandMode";
@@ -45,6 +49,10 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 SupportObservationTypeName,
                 LocomotionObservationTypeName,
                 BodySupportCommandTypeName,
+                LegStateFrameTypeName,
+                LegStateMachineTypeName,
+                LegStateTypeTypeName,
+                LegStateTransitionReasonTypeName,
                 LegCommandOutputTypeName,
                 LocomotionLegTypeName,
                 LegCommandModeTypeName,
@@ -410,10 +418,184 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void LegStateFrame_ConstructedWithExplicitRole_PreservesLegStateAndTransitionReason()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type stateType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
+            Type stateFrameType = RequireType(LegStateFrameTypeName);
+
+            object rightLeg = Enum.Parse(legType, "Right");
+            object swingState = Enum.Parse(stateType, "Swing");
+            object speedUpReason = Enum.Parse(transitionReasonType, "SpeedUp");
+
+            // Act
+            object stateFrame = CreateInstance(stateFrameType, rightLeg, swingState, speedUpReason);
+
+            // Assert
+            Assert.That(GetPropertyValue<object>(stateFrame, "Leg"), Is.EqualTo(rightLeg));
+            Assert.That(GetPropertyValue<object>(stateFrame, "State"), Is.EqualTo(swingState));
+            Assert.That(GetPropertyValue<object>(stateFrame, "TransitionReason"), Is.EqualTo(speedUpReason));
+        }
+
+        [Test]
+        public void LegStateMachine_AdvanceMovingWhenOppositeLegStillSwinging_HoldsSupportStateAtPhaseEnd()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type stateMachineType = RequireType(LegStateMachineTypeName);
+            Type stateType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
+
+            MethodInfo syncMethod = RequireInstanceMethod(
+                stateMachineType,
+                "SyncFromLegacyPhase",
+                typeof(float),
+                transitionReasonType);
+            MethodInfo advanceMovingMethod = RequireInstanceMethod(
+                stateMachineType,
+                "AdvanceMoving",
+                footObservationType,
+                stateType,
+                transitionReasonType,
+                typeof(float),
+                typeof(bool));
+
+            object rightLeg = Enum.Parse(legType, "Right");
+            object swingState = Enum.Parse(stateType, "Swing");
+            object speedUpReason = Enum.Parse(transitionReasonType, "SpeedUp");
+            object plantedRightFoot = CreateInstance(
+                footObservationType,
+                rightLeg,
+                true,
+                1f,
+                1f,
+                0f);
+            object machine = CreateInstance(stateMachineType, rightLeg, false);
+
+            syncMethod.Invoke(machine, new object[] { Mathf.PI * 2f - 0.02f, speedUpReason });
+
+            // Act
+            object stateFrame = advanceMovingMethod.Invoke(
+                machine,
+                new[] { plantedRightFoot, swingState, speedUpReason, 0.05f, false });
+
+            // Assert
+            Assert.That(GetPropertyValue<object>(stateFrame, "State"), Is.EqualTo(Enum.Parse(stateType, "Stance")),
+                "A leg should remain in support when the opposite leg is still swinging and cannot hand support back yet.");
+            Assert.That(GetPropertyValue<float>(machine, "CyclePhase"), Is.EqualTo(Mathf.PI * 2f).Within(0.0001f),
+                "The support leg should hold at the end of stance rather than wrapping immediately into swing while the opposite leg is airborne.");
+        }
+
+        [Test]
+        public void LegStateMachine_AdvanceMovingWhenSupportPhaseCompletesAndOppositeLegCanSupport_TransitionsIntoSwing()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type stateMachineType = RequireType(LegStateMachineTypeName);
+            Type stateType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
+
+            MethodInfo syncMethod = RequireInstanceMethod(
+                stateMachineType,
+                "SyncFromLegacyPhase",
+                typeof(float),
+                transitionReasonType);
+            MethodInfo advanceMovingMethod = RequireInstanceMethod(
+                stateMachineType,
+                "AdvanceMoving",
+                footObservationType,
+                stateType,
+                transitionReasonType,
+                typeof(float),
+                typeof(bool));
+
+            object rightLeg = Enum.Parse(legType, "Right");
+            object stanceState = Enum.Parse(stateType, "Stance");
+            object defaultCadenceReason = Enum.Parse(transitionReasonType, "DefaultCadence");
+            object plantedRightFoot = CreateInstance(
+                footObservationType,
+                rightLeg,
+                true,
+                1f,
+                1f,
+                0f);
+            object machine = CreateInstance(stateMachineType, rightLeg, false);
+
+            syncMethod.Invoke(machine, new object[] { Mathf.PI * 2f - 0.02f, defaultCadenceReason });
+
+            // Act
+            object stateFrame = advanceMovingMethod.Invoke(
+                machine,
+                new[] { plantedRightFoot, stanceState, defaultCadenceReason, 0.05f, false });
+
+            // Assert
+            Assert.That(GetPropertyValue<object>(stateFrame, "State"), Is.EqualTo(Enum.Parse(stateType, "Swing")),
+                "Once the opposite leg can support again, the controller should release the held leg back into swing instead of keeping a hard-wired mirror offset.");
+            Assert.That(GetPropertyValue<float>(machine, "CyclePhase"), Is.LessThan(0.05f),
+                "Entering swing should restart the leg's cycle near zero rather than preserving the previous support phase.");
+        }
+
+        [Test]
+        public void LegStateMachine_AdvanceMovingWhenSwingFootRegainsGroundAfterMinimumProgress_TransitionsIntoPlant()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type stateMachineType = RequireType(LegStateMachineTypeName);
+            Type stateType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
+
+            MethodInfo syncMethod = RequireInstanceMethod(
+                stateMachineType,
+                "SyncFromLegacyPhase",
+                typeof(float),
+                transitionReasonType);
+            MethodInfo advanceMovingMethod = RequireInstanceMethod(
+                stateMachineType,
+                "AdvanceMoving",
+                footObservationType,
+                stateType,
+                transitionReasonType,
+                typeof(float),
+                typeof(bool));
+
+            object leftLeg = Enum.Parse(legType, "Left");
+            object stanceState = Enum.Parse(stateType, "Stance");
+            object defaultCadenceReason = Enum.Parse(transitionReasonType, "DefaultCadence");
+            object groundedLeftFoot = CreateInstance(
+                footObservationType,
+                leftLeg,
+                true,
+                1f,
+                1f,
+                0f);
+            object machine = CreateInstance(stateMachineType, leftLeg, true);
+
+            syncMethod.Invoke(machine, new object[] { Mathf.PI * 0.8f, defaultCadenceReason });
+
+            // Act
+            object stateFrame = advanceMovingMethod.Invoke(
+                machine,
+                new[] { groundedLeftFoot, stanceState, defaultCadenceReason, 0.05f, false });
+
+            // Assert
+            Assert.That(GetPropertyValue<object>(stateFrame, "State"), Is.EqualTo(Enum.Parse(stateType, "Plant")),
+                "A swing leg that re-establishes ground after meaningful forward progress should enter Plant instead of snapping straight back to stance.");
+            Assert.That(GetPropertyValue<float>(machine, "CyclePhase"), Is.GreaterThan(Mathf.PI * 0.8f),
+                "Touchdown should preserve forward cycle progress so the plant window can finish before stance resumes.");
+        }
+
+        [Test]
         public void LegCommandOutput_DisabledRequested_UsesDisabledModeAndZeroedExecutionPayload()
         {
             // Arrange
             Type legType = RequireType(LocomotionLegTypeName);
+            Type stateType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
             Type commandModeType = RequireType(LegCommandModeTypeName);
             Type commandOutputType = RequireType(LegCommandOutputTypeName);
             MethodInfo disabledMethod = RequireStaticMethod(commandOutputType, "Disabled", legType);
@@ -423,6 +605,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             object command = disabledMethod.Invoke(null, new[] { leftLeg });
             object leg = GetPropertyValue<object>(command, "Leg");
             object mode = GetPropertyValue<object>(command, "Mode");
+            object state = GetPropertyValue<object>(command, "State");
+            object transitionReason = GetPropertyValue<object>(command, "TransitionReason");
             float cyclePhase = GetPropertyValue<float>(command, "CyclePhase");
             float blendWeight = GetPropertyValue<float>(command, "BlendWeight");
             Vector3 footTarget = GetPropertyValue<Vector3>(command, "FootTarget");
@@ -430,6 +614,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Assert
             Assert.That(leg, Is.EqualTo(leftLeg));
             Assert.That(mode, Is.EqualTo(Enum.Parse(commandModeType, "Disabled")));
+            Assert.That(state, Is.EqualTo(Enum.Parse(stateType, "Stance")));
+            Assert.That(transitionReason, Is.EqualTo(Enum.Parse(transitionReasonType, "None")));
             Assert.That(cyclePhase, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(blendWeight, Is.EqualTo(0f).Within(0.0001f));
             AssertVector3Equal(footTarget, Vector3.zero, "FootTarget");

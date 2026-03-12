@@ -218,6 +218,7 @@ function Invoke-UnityTestPlatform {
 
 $resolvedProjectPath = (Resolve-Path $ProjectPath).Path
 $unityExe = Get-UnityExePath -ResolvedProjectPath $resolvedProjectPath
+$summaryScriptPath = Join-Path $PSScriptRoot "Write-TestSummary.ps1"
 
 $platformsToRun = switch ($Platform) {
     "All" { @("EditMode", "PlayMode") }
@@ -270,6 +271,37 @@ foreach ($singlePlatform in $platformsToRun) {
 Write-Host "`n=== Summary ===" -ForegroundColor Cyan
 foreach ($r in $allResults) {
     Write-Host "[$($r.Platform)] $($r.Status) :: $($r.Message)"
+}
+
+$summaryInputResults = @(
+    $allResults |
+    Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_.ResultPath) -and
+        (Test-Path $_.ResultPath)
+    }
+)
+
+if ($summaryInputResults.Count -gt 0 -and (Test-Path $summaryScriptPath)) {
+    try {
+        $summaryArgs = @{
+            ProjectPath = $resolvedProjectPath
+            XmlPaths = @($summaryInputResults | Select-Object -ExpandProperty ResultPath)
+            LogPaths = @($summaryInputResults | Select-Object -ExpandProperty LogPath)
+            PassThru = $true
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+            $summaryArgs.TestFilter = $TestFilter
+        }
+
+        $latestSummary = & $summaryScriptPath @summaryArgs
+        if ($latestSummary -and $latestSummary.RelativeOutputPath) {
+            Write-Host "[Summary] $($latestSummary.RelativeOutputPath)"
+        }
+    }
+    catch {
+        Write-Warning "Failed to write TestResults/latest-summary.md: $($_.Exception.Message)"
+    }
 }
 
 if ($allResults | Where-Object { $_.Status -eq "InfraFailure" }) {

@@ -25,16 +25,16 @@ function Get-StatePath {
     return Join-Path (Get-StateRoot) ($safeSessionId + '.json')
 }
 
-function Test-CompletionPrompt {
+function Get-ReviewTriggerKind {
     param(
         [string]$Prompt
     )
 
     if ([string]::IsNullOrWhiteSpace($Prompt)) {
-        return $false
+        return $null
     }
 
-    $patterns = @(
+    $completionPatterns = @(
         '\b(task|work|change|fix|feature|bug|investigation|plan)\s+(is\s+)?(complete|completed|done|finished)\b',
         '\b(this|that|it)\s+(is\s+)?(complete|completed|done|finished)\b',
         '\b(we are|we''re|you can|can you)\s+(wrap up|finalize|finish)\b',
@@ -42,13 +42,50 @@ function Test-CompletionPrompt {
         '\bready\s+to\s+finish\b'
     )
 
-    foreach ($pattern in $patterns) {
+    foreach ($pattern in $completionPatterns) {
         if ($Prompt -match $pattern) {
-            return $true
+            return 'complete'
         }
     }
 
-    return $false
+    $pausePatterns = @(
+        '\b(task|work|change|fix|feature|bug|investigation|plan)\s+(is\s+)?(paused|on\s+hold)\b',
+        '\b(pause|stop)\s+(here|for\s+now|today)\b',
+        '\b(pick|continue|resume)\s+(this|it)?\s*(up\s+)?(later|tomorrow)\b',
+        '\b(hand\s*off|handoff)\b'
+    )
+
+    foreach ($pattern in $pausePatterns) {
+        if ($Prompt -match $pattern) {
+            return 'pause'
+        }
+    }
+
+    return $null
+}
+
+function Get-ReviewSystemMessage {
+    param(
+        [string]$ReviewKind
+    )
+
+    if ($ReviewKind -eq 'pause') {
+        return 'The user signaled a pause or handoff. Before stopping, review the active parent task record, refresh its Quick Resume and Verified Artifacts sections, and update any affected documentation so the next agent can resume without replaying chat history.'
+    }
+
+    return 'The user signaled that the task may be complete. Before stopping, review the active parent task record, refresh its Quick Resume and Verified Artifacts sections, and update any affected documentation so a future agent can resume without replaying chat history.'
+}
+
+function Get-StopBlockReason {
+    param(
+        [string]$ReviewKind
+    )
+
+    if ($ReviewKind -eq 'pause') {
+        return 'The user signaled a pause or handoff. Before ending the session, update the active parent plan with Quick Resume and Verified Artifacts, review any changed docs, and then provide the handoff summary.'
+    }
+
+    return 'The user signaled task completion. Before ending the session, update the active parent plan with Quick Resume and Verified Artifacts, review any changed docs, and then provide the completion summary.'
 }
 
 function Write-HookOutput {
@@ -72,19 +109,21 @@ $statePath = Get-StatePath -SessionId $sessionId
 switch ($hookEventName) {
     'UserPromptSubmit' {
         $prompt = [string]$hookInput.prompt
+        $reviewKind = Get-ReviewTriggerKind -Prompt $prompt
 
-        if (-not (Test-CompletionPrompt -Prompt $prompt)) {
+        if ([string]::IsNullOrWhiteSpace($reviewKind)) {
             return
         }
 
         @{
             pendingReview = $true
-            updatedAt = (Get-Date).ToString('o')
-            prompt = $prompt
+            reviewKind    = $reviewKind
+            updatedAt     = (Get-Date).ToString('o')
+            prompt        = $prompt
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding utf8
 
         Write-HookOutput -Payload @{
-            systemMessage = 'The user signaled that the task may be complete. Before stopping, review the active task record and update any affected documentation such as PLAN.md, DEBUGGING.md, ARCHITECTURE.md, TASK_ROUTING.md, .copilot-instructions.md, and linked plan or bug docs.'
+            systemMessage = Get-ReviewSystemMessage -ReviewKind $reviewKind
         }
 
         return
@@ -92,6 +131,21 @@ switch ($hookEventName) {
     'Stop' {
         if (-not (Test-Path -LiteralPath $statePath)) {
             return
+        }
+
+        $state = $null
+        try {
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        }
+        catch {
+            $state = $null
+        }
+
+        $reviewKind = if ($null -ne $state -and -not [string]::IsNullOrWhiteSpace([string]$state.reviewKind)) {
+            [string]$state.reviewKind
+        }
+        else {
+            'complete'
         }
 
         Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
@@ -103,8 +157,8 @@ switch ($hookEventName) {
         Write-HookOutput -Payload @{
             hookSpecificOutput = @{
                 hookEventName = 'Stop'
-                decision = 'block'
-                reason = 'The user signaled task completion. Before ending the session, review the active task record and update any documentation that changed, then provide the completion summary.'
+                decision      = 'block'
+                reason        = Get-StopBlockReason -ReviewKind $reviewKind
             }
         }
 
