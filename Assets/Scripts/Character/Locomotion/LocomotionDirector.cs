@@ -4,8 +4,8 @@ namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
     /// Coordinates locomotion data flow on the Hips root by reading desired input and runtime
-    /// observations, then publishing pass-through commands that future locomotion slices can
-    /// hand to the execution systems without changing current behavior yet.
+    /// observations, then publishing observation-driven body-support commands plus pass-through
+    /// leg commands that future locomotion slices can hand to the execution systems.
     /// </summary>
     [DefaultExecutionOrder(250)]
     [RequireComponent(typeof(Rigidbody))]
@@ -20,19 +20,91 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Keeps the director on the legacy pass-through path while ownership is migrated.")]
         private bool _passThroughMode = true;
 
+        [Header("Observation Filtering")]
+        [SerializeField, Range(1f, 60f)]
+        [Tooltip("How quickly per-foot contact confidence rises toward a newly grounded sample. Higher values reacquire contact faster.")]
+        private float _contactConfidenceRiseSpeed = 20f;
+
+        [SerializeField, Range(1f, 60f)]
+        [Tooltip("How quickly per-foot contact confidence falls after contact is lost. Higher values clear stale support faster.")]
+        private float _contactConfidenceFallSpeed = 30f;
+
+        [SerializeField, Range(1f, 40f)]
+        [Tooltip("How quickly planted confidence rises once a foot re-establishes stable support.")]
+        private float _plantedConfidenceRiseSpeed = 12f;
+
+        [SerializeField, Range(1f, 40f)]
+        [Tooltip("How quickly planted confidence falls once a foot is truly slipping or lifting away.")]
+        private float _plantedConfidenceFallSpeed = 20f;
+
+        [SerializeField, Range(0.5f, 0.98f)]
+        [Tooltip("Planted-confidence threshold required to enter the planted state. Keep this above the exit threshold to prevent frame-to-frame chatter.")]
+        private float _plantedEnterThreshold = 0.75f;
+
+        [SerializeField, Range(0.02f, 0.9f)]
+        [Tooltip("Planted-confidence threshold required to leave the planted state. Keep this below the enter threshold to preserve hysteresis.")]
+        private float _plantedExitThreshold = 0.55f;
+
+        [Header("Observation Decisions")]
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Minimum turn-severity observation required before the director enters support recovery from the world model.")]
+        private float _turnRecoveryThreshold = 0.45f;
+
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Minimum support-risk observation required before the director escalates from neutral support into recovery-strength commands.")]
+        private float _supportRiskRecoveryThreshold = 0.45f;
+
+        [SerializeField, Range(0.1f, 1f)]
+        [Tooltip("Lowest yaw-strength scale the director may request while support risk and turn severity are both high.")]
+        private float _minimumRiskYawStrengthScale = 0.45f;
+
+        [SerializeField, Range(0f, 2f)]
+        [Tooltip("Additional upright-strength scale applied as support risk rises so body support reacts to the observation model.")]
+        private float _supportRiskUprightBoost = 0.5f;
+
+        [SerializeField, Range(0f, 2f)]
+        [Tooltip("Additional COM-stabilization scale applied as support risk rises so weak support receives stronger body support.")]
+        private float _supportRiskStabilizationBoost = 0.75f;
+
+        [Header("Debug Visibility")]
+        [SerializeField]
+        [Tooltip("Draws the current support geometry, COM offset, and predicted drift direction in the Scene view while the game is running.")]
+        private bool _debugObservationDraw = false;
+
+        [SerializeField]
+        [Tooltip("Logs throttled locomotion-observation telemetry including support geometry, drift direction, and confidence values.")]
+        private bool _debugObservationTelemetry = false;
+
+        [SerializeField, Range(0.05f, 2f)]
+        [Tooltip("Seconds between locomotion-observation telemetry logs while running.")]
+        private float _debugObservationTelemetryInterval = 0.25f;
+
+        [SerializeField, Range(0.01f, 0.3f)]
+        [Tooltip("Vertical offset applied to support debug geometry so the observation draw stays readable above the floor.")]
+        private float _debugObservationDrawHeight = 0.05f;
+
         private Rigidbody _hipsBody;
         private PlayerMovement _playerMovement;
         private BalanceController _balanceController;
         private CharacterState _characterState;
         private LocomotionCollapseDetector _collapseDetector;
         private LegAnimator _legAnimator;
+        private LocomotionSensorAggregator _sensorAggregator;
+        private SupportObservationFilter _supportObservationFilter;
+        private GroundSensor _leftGroundSensor;
+        private GroundSensor _rightGroundSensor;
+        private Transform _leftFootTransform;
+        private Transform _rightFootTransform;
 
         private DesiredInput _currentDesiredInput;
+        private LocomotionSensorSnapshot _currentSensorSnapshot;
         private LocomotionObservation _currentObservation;
         private BodySupportCommand _currentBodySupportCommand;
         private LegCommandOutput _leftLegCommand;
         private LegCommandOutput _rightLegCommand;
-        private Vector3 _previousMoveDirection;
+        private Vector3 _currentPredictedDriftDirection;
+        private string _currentObservationTelemetryLine;
+        private float _nextObservationTelemetryTime;
         private int _recoveryFramesRemaining;
 
         public bool HasCommandFrame { get; private set; }
@@ -41,6 +113,8 @@ namespace PhysicsDrivenMovement.Character
 
         internal DesiredInput CurrentDesiredInput => _currentDesiredInput;
 
+        internal LocomotionSensorSnapshot CurrentSensorSnapshot => _currentSensorSnapshot;
+
         internal LocomotionObservation CurrentObservation => _currentObservation;
 
         internal BodySupportCommand CurrentBodySupportCommand => _currentBodySupportCommand;
@@ -48,6 +122,10 @@ namespace PhysicsDrivenMovement.Character
         internal LegCommandOutput LeftLegCommand => _leftLegCommand;
 
         internal LegCommandOutput RightLegCommand => _rightLegCommand;
+
+        internal Vector3 CurrentPredictedDriftDirection => _currentPredictedDriftDirection;
+
+        internal string CurrentObservationTelemetryLine => _currentObservationTelemetryLine;
 
         private void Awake()
         {
@@ -69,11 +147,22 @@ namespace PhysicsDrivenMovement.Character
 
             _currentDesiredInput = _playerMovement.CurrentDesiredInput;
 
-            // STEP 2: Refresh the locomotion observation snapshot from BalanceController, CharacterState, and the hips Rigidbody.
-            _currentObservation = BuildObservation();
+            // STEP 2: Gather a shared sensor snapshot, then promote it into the locomotion observation frame.
+            if (!_sensorAggregator.TryCollect(out _currentSensorSnapshot))
+            {
+                ResetOutputs();
+                return;
+            }
 
-            // STEP 3: Emit pass-through support and legacy leg commands without changing current movement behavior.
-            EmitPassThroughCommands();
+            SupportObservation filteredSupport = _supportObservationFilter.Filter(
+                _currentSensorSnapshot.Support,
+                Time.fixedDeltaTime);
+
+            _currentObservation = BuildObservation(_currentSensorSnapshot, filteredSupport);
+            RefreshObservationDebugVisibility();
+
+            // STEP 3: Emit observation-driven support commands and pass-through leg commands.
+            EmitObservationDrivenCommands();
             PushCommandsToExecutors();
             HasCommandFrame = true;
         }
@@ -90,14 +179,20 @@ namespace PhysicsDrivenMovement.Character
                 _legAnimator.ClearCommandFrame();
             }
 
-            _previousMoveDirection = Vector3.zero;
+            _currentPredictedDriftDirection = Vector3.zero;
+            _currentObservationTelemetryLine = string.Empty;
+            _nextObservationTelemetryTime = 0f;
             _recoveryFramesRemaining = 0;
+            _supportObservationFilter = null;
             ResetOutputs();
         }
 
-        private LocomotionObservation BuildObservation()
+        private LocomotionObservation BuildObservation(
+            LocomotionSensorSnapshot sensorSnapshot,
+            SupportObservation filteredSupport)
         {
             bool isLocomotionCollapsed = _collapseDetector != null && _collapseDetector.IsCollapseConfirmed;
+            float turnSeverity = ComputeTurnSeverity(sensorSnapshot);
 
             return new LocomotionObservation(
                 _characterState.CurrentState,
@@ -106,28 +201,192 @@ namespace PhysicsDrivenMovement.Character
                 isLocomotionCollapsed,
                 _balanceController.IsInSnapRecovery,
                 _balanceController.UprightAngle,
-                _hipsBody.linearVelocity,
-                _hipsBody.angularVelocity,
+                sensorSnapshot.HipsVelocity,
+                sensorSnapshot.HipsAngularVelocity,
                 transform.forward,
-                transform.up);
+                transform.up,
+                filteredSupport,
+                turnSeverity);
         }
 
-        private void EmitPassThroughCommands()
+        private float ComputeTurnSeverity(LocomotionSensorSnapshot sensorSnapshot)
         {
-            Vector3 supportFacing = _currentDesiredInput.FacingDirection;
-            if (supportFacing.sqrMagnitude < CommandEpsilon)
+            // STEP 1: Choose the currently requested horizontal direction as the turn target.
+            Vector3 requestedDirection = _currentDesiredInput.HasMoveIntent
+                ? _currentDesiredInput.MoveWorldDirection
+                : _currentDesiredInput.FacingDirection;
+            if (requestedDirection.sqrMagnitude < CommandEpsilon)
             {
-                supportFacing = _currentObservation.BodyForward;
+                return 0f;
             }
 
-            Vector3 moveDirection = _currentDesiredInput.MoveWorldDirection;
-            if (_previousMoveDirection.sqrMagnitude > CommandEpsilon &&
-                moveDirection.sqrMagnitude > CommandEpsilon &&
-                Vector3.Dot(_previousMoveDirection, moveDirection) < 0.5f)
+            // STEP 2: Compare requested heading against current body heading.
+            Vector3 bodyForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (bodyForward.sqrMagnitude < CommandEpsilon)
             {
-                _recoveryFramesRemaining = _balanceController.SnapRecoveryDurationFrames;
+                bodyForward = Vector3.forward;
+            }
+            else
+            {
+                bodyForward.Normalize();
             }
 
+            float headingDelta = Vector3.Angle(requestedDirection, bodyForward);
+
+            // STEP 3: Blend heading disagreement with live yaw rate into a normalized turn severity scalar.
+            float headingSeverity = Mathf.InverseLerp(0f, 90f, headingDelta);
+            float yawRateSeverity = Mathf.InverseLerp(0f, 8f, Mathf.Abs(sensorSnapshot.YawRate));
+            return Mathf.Clamp01(Mathf.Max(headingSeverity, yawRateSeverity));
+        }
+
+        private void RefreshObservationDebugVisibility()
+        {
+            // STEP 1: Promote the observation and support geometry into a single debug-facing drift estimate.
+            _currentPredictedDriftDirection = ComputePredictedDriftDirection(_currentSensorSnapshot, _currentObservation);
+
+            // STEP 2: Cache the current observation telemetry line so tests and runtime logging share the same source.
+            _currentObservationTelemetryLine = BuildObservationTelemetryLine(
+                _currentSensorSnapshot,
+                _currentObservation,
+                _currentPredictedDriftDirection);
+
+            // STEP 3: Emit optional draw and log visibility without affecting the control path.
+            if (_debugObservationDraw)
+            {
+                DrawObservationDebug(_currentSensorSnapshot, _currentObservation, _currentPredictedDriftDirection);
+            }
+
+            LogObservationTelemetry();
+        }
+
+        private Vector3 ComputePredictedDriftDirection(
+            LocomotionSensorSnapshot sensorSnapshot,
+            LocomotionObservation observation)
+        {
+            // STEP 1: Start from the planar hips offset relative to the active support patch.
+            Vector3 supportToHips = Vector3.ProjectOnPlane(
+                sensorSnapshot.HipsPosition - sensorSnapshot.SupportGeometry.SupportCenter,
+                Vector3.up);
+
+            Vector3 supportToCom = Vector3.ProjectOnPlane(
+                sensorSnapshot.CenterOfMassPosition - sensorSnapshot.SupportGeometry.SupportCenter,
+                Vector3.up);
+
+            Vector3 driftVector = supportToHips;
+
+            if (supportToCom.sqrMagnitude > CommandEpsilon)
+            {
+                driftVector += supportToCom * 0.5f;
+            }
+
+            // STEP 2: Blend in live planar body velocity so the debug direction reflects ongoing slip or topple momentum.
+            Vector3 planarVelocity = Vector3.ProjectOnPlane(sensorSnapshot.HipsVelocity, Vector3.up);
+            if (planarVelocity.sqrMagnitude > CommandEpsilon)
+            {
+                driftVector += planarVelocity * 0.2f;
+            }
+
+            // STEP 3: Fall back to the intended move direction when the body is centered but the gait still carries directional risk.
+            if (driftVector.sqrMagnitude <= CommandEpsilon && _currentDesiredInput.HasMoveIntent)
+            {
+                driftVector = _currentDesiredInput.MoveWorldDirection;
+            }
+
+            if (driftVector.sqrMagnitude <= CommandEpsilon)
+            {
+                return Vector3.zero;
+            }
+
+            float driftWeight = Mathf.Clamp01(
+                observation.SlipEstimate +
+                observation.TurnSeverity * 0.5f +
+                (observation.IsComOutsideSupport ? 0.5f : 0f));
+
+            if (driftWeight <= 0f)
+            {
+                driftWeight = 1f;
+            }
+
+            return driftVector.normalized * driftWeight;
+        }
+
+        private string BuildObservationTelemetryLine(
+            LocomotionSensorSnapshot sensorSnapshot,
+            LocomotionObservation observation,
+            Vector3 predictedDriftDirection)
+        {
+            SupportGeometry supportGeometry = sensorSnapshot.SupportGeometry;
+
+            // STEP 1: Summarize support geometry in locomotion language so the draw and log paths stay comparable.
+            string supportStart = FormatPlanarVector(supportGeometry.SupportStart);
+            string supportEnd = FormatPlanarVector(supportGeometry.SupportEnd);
+            string supportCenter = FormatPlanarVector(supportGeometry.SupportCenter);
+            string driftDirection = FormatPlanarVector(predictedDriftDirection);
+
+            // STEP 2: Include the active confidence values and support classifications used by the director.
+            return
+                $"[LocomotionDirector] '{name}' observation: supportStart={supportStart}, supportEnd={supportEnd}, " +
+                $"supportCenter={supportCenter}, supportSpan={supportGeometry.SupportSpan:F2}, supportRadius={supportGeometry.SupportRadius:F2}, " +
+                $"groundedFeet={supportGeometry.GroundedFootCount}, supportQuality={observation.SupportQuality:F2}, " +
+                $"contactConfidence={observation.ContactConfidence:F2}, plantedConfidence={observation.PlantedFootConfidence:F2}, " +
+                $"slip={observation.SlipEstimate:F2}, turnSeverity={observation.TurnSeverity:F2}, " +
+                $"comOutsideSupport={observation.IsComOutsideSupport}, leftPlanted={observation.LeftFoot.IsPlanted}, " +
+                $"rightPlanted={observation.RightFoot.IsPlanted}, driftDir={driftDirection}";
+        }
+
+        private void DrawObservationDebug(
+            LocomotionSensorSnapshot sensorSnapshot,
+            LocomotionObservation observation,
+            Vector3 predictedDriftDirection)
+        {
+            SupportGeometry supportGeometry = sensorSnapshot.SupportGeometry;
+            Vector3 lift = Vector3.up * _debugObservationDrawHeight;
+            Color supportColor = observation.IsComOutsideSupport
+                ? Color.red
+                : Color.Lerp(Color.red, Color.green, observation.SupportQuality);
+            float duration = Time.fixedDeltaTime;
+
+            // STEP 1: Draw the active support capsule approximation so the current support patch is visible in Scene view.
+            DrawSupportCapsule(supportGeometry, lift, supportColor, duration);
+
+            // STEP 2: Draw the COM offset and predicted drift direction over the support patch.
+            Vector3 supportCenter = supportGeometry.SupportCenter + lift;
+            Vector3 centerOfMass = Vector3.ProjectOnPlane(sensorSnapshot.CenterOfMassPosition, Vector3.up) + lift;
+            Debug.DrawLine(supportCenter, centerOfMass, Color.yellow, duration, false);
+            DrawCross(centerOfMass, 0.05f, observation.IsComOutsideSupport ? Color.red : Color.cyan, duration);
+
+            if (predictedDriftDirection.sqrMagnitude > CommandEpsilon)
+            {
+                float driftLength = Mathf.Max(0.25f, supportGeometry.SupportRadius * 2f + observation.TurnSeverity * 0.2f);
+                DrawArrow(centerOfMass, predictedDriftDirection.normalized, driftLength, Color.magenta, duration);
+            }
+        }
+
+        private void LogObservationTelemetry()
+        {
+            if (!_debugObservationTelemetry || string.IsNullOrEmpty(_currentObservationTelemetryLine))
+            {
+                return;
+            }
+
+            if (Time.time < _nextObservationTelemetryTime)
+            {
+                return;
+            }
+
+            _nextObservationTelemetryTime = Time.time + Mathf.Max(0.05f, _debugObservationTelemetryInterval);
+            Debug.Log(_currentObservationTelemetryLine, this);
+        }
+
+        private void EmitObservationDrivenCommands()
+        {
+            // STEP 1: Classify the current locomotion risk directly from the promoted observation model.
+            float supportRisk = ComputeSupportRisk(_currentObservation);
+            float turnRisk = _currentDesiredInput.HasMoveIntent ? _currentObservation.TurnSeverity : 0f;
+            float turnSupportRisk = Mathf.Clamp01(turnRisk * supportRisk);
+
+            // STEP 2: Promote the observation risk into the support recovery window instead of relying on raw direction history.
+            UpdateObservationRecoveryState(supportRisk);
             int recoveryFramesThisStep = _recoveryFramesRemaining;
             float recoveryBlend = ComputeRecoveryBlend(recoveryFramesThisStep);
 
@@ -136,16 +395,25 @@ namespace PhysicsDrivenMovement.Character
             int kdFrames = recoveryFramesAfterSupport - kdStartOffset;
             float recoveryKdBlend = ComputeRecoveryBlend(kdFrames);
 
-            Vector3 supportTravel = moveDirection.sqrMagnitude > CommandEpsilon
-                ? moveDirection
-                : supportFacing;
+            // STEP 3: Map observation severity onto the existing support-command surface so executors stay unchanged.
+            Vector3 supportFacing = GetSupportFacingDirection();
+            Vector3 supportTravel = GetSupportTravelDirection(supportFacing);
+            float yawStrengthScale = Mathf.Lerp(1f, _minimumRiskYawStrengthScale, turnSupportRisk);
+            float uprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
+            float stabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
 
-            _currentBodySupportCommand = BodySupportCommand.PassThrough(
+            _currentBodySupportCommand = new BodySupportCommand(
                 supportFacing,
+                Vector3.up,
                 supportTravel,
+                0f,
+                uprightStrengthScale,
+                yawStrengthScale,
+                stabilizationStrengthScale,
                 recoveryBlend,
                 recoveryKdBlend);
 
+            // STEP 4: Keep the existing pass-through leg-command seam until the dedicated gait slices replace it.
             if (_legAnimator != null && _passThroughMode)
             {
                 _legAnimator.BuildPassThroughCommands(
@@ -160,15 +428,101 @@ namespace PhysicsDrivenMovement.Character
                 _rightLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
             }
 
-            if (moveDirection.sqrMagnitude > CommandEpsilon)
-            {
-                _previousMoveDirection = moveDirection;
-            }
-
+            // STEP 5: Advance the recovery countdown after publishing the command frame for this step.
             if (recoveryFramesThisStep > 0)
             {
                 _recoveryFramesRemaining = recoveryFramesThisStep - 1;
             }
+        }
+
+        private void UpdateObservationRecoveryState(float supportRisk)
+        {
+            // STEP 1: Skip recovery escalation when the current locomotion state cannot execute a support response.
+            CharacterStateType state = _currentObservation.CharacterState;
+            if (!_currentDesiredInput.HasMoveIntent ||
+                state == CharacterStateType.Fallen ||
+                state == CharacterStateType.GettingUp)
+            {
+                return;
+            }
+
+            // STEP 2: Refresh the recovery window whenever the observation model reports a risky turn or support failure.
+            if (ShouldEnterObservationRecovery(supportRisk))
+            {
+                _recoveryFramesRemaining = Mathf.Max(
+                    _recoveryFramesRemaining,
+                    _balanceController.SnapRecoveryDurationFrames);
+            }
+        }
+
+        private bool ShouldEnterObservationRecovery(float supportRisk)
+        {
+            // STEP 1: Sharp-turn recovery should start once the observation model reports both heading demand and weak support.
+            bool turnRiskExceedsThreshold = _currentObservation.TurnSeverity >= _turnRecoveryThreshold;
+            bool supportRiskExceedsThreshold = supportRisk >= _supportRiskRecoveryThreshold;
+
+            // STEP 2: COM-outside-support and watchdog collapse are immediate observation-level recovery signals.
+            if (_currentObservation.IsLocomotionCollapsed)
+            {
+                return true;
+            }
+
+            if (_currentObservation.IsComOutsideSupport &&
+                _currentObservation.ContactConfidence > 0f &&
+                turnRiskExceedsThreshold)
+            {
+                return true;
+            }
+
+            return turnRiskExceedsThreshold && supportRiskExceedsThreshold;
+        }
+
+        private float ComputeSupportRisk(LocomotionObservation observation)
+        {
+            // STEP 1: Translate the promoted support metrics into a single risk scalar that the command builder can reason about.
+            float supportDeficit = 1f - observation.SupportQuality;
+            float contactDeficit = 1f - observation.ContactConfidence;
+            float plantedDeficit = 1f - observation.PlantedFootConfidence;
+            float comOutsideRisk = observation.IsComOutsideSupport
+                ? Mathf.Max(
+                    observation.TurnSeverity,
+                    observation.SlipEstimate,
+                    plantedDeficit)
+                : 0f;
+            float collapseRisk = observation.IsLocomotionCollapsed ? 1f : 0f;
+
+            return Mathf.Clamp01(Mathf.Max(
+                supportDeficit,
+                contactDeficit * 0.75f,
+                plantedDeficit,
+                observation.SlipEstimate,
+                comOutsideRisk,
+                collapseRisk,
+                0f));
+        }
+
+        private Vector3 GetSupportFacingDirection()
+        {
+            // STEP 1: Prefer the commanded facing direction while falling back to the current body heading when there is no explicit request.
+            Vector3 supportFacing = _currentDesiredInput.FacingDirection;
+            if (supportFacing.sqrMagnitude > CommandEpsilon)
+            {
+                return supportFacing;
+            }
+
+            return _currentObservation.BodyForward;
+        }
+
+        private Vector3 GetSupportTravelDirection(Vector3 supportFacing)
+        {
+            // STEP 1: Travel in the requested move direction when intent exists; otherwise keep the command aligned with facing.
+            Vector3 moveDirection = _currentDesiredInput.MoveWorldDirection;
+            if (moveDirection.sqrMagnitude > CommandEpsilon)
+            {
+                return moveDirection;
+            }
+
+            return supportFacing;
         }
 
         private void PushCommandsToExecutors()
@@ -215,7 +569,53 @@ namespace PhysicsDrivenMovement.Character
                 TryGetComponent(out _collapseDetector);
             }
 
-            return true;
+            if (_leftGroundSensor == null || _rightGroundSensor == null)
+            {
+                CacheFootReferences();
+            }
+
+            if (_sensorAggregator == null && _leftFootTransform != null && _rightFootTransform != null)
+            {
+                _sensorAggregator = new LocomotionSensorAggregator(
+                    _hipsBody,
+                    _balanceController,
+                    _leftFootTransform,
+                    _rightFootTransform,
+                    _leftGroundSensor,
+                    _rightGroundSensor);
+            }
+
+            if (_supportObservationFilter == null)
+            {
+                _supportObservationFilter = new SupportObservationFilter(
+                    _contactConfidenceRiseSpeed,
+                    _contactConfidenceFallSpeed,
+                    _plantedConfidenceRiseSpeed,
+                    _plantedConfidenceFallSpeed,
+                    _plantedEnterThreshold,
+                    _plantedExitThreshold);
+            }
+
+            return _sensorAggregator != null && _supportObservationFilter != null;
+        }
+
+        private void CacheFootReferences()
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(includeInactive: true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Transform child = children[i];
+                if (_leftFootTransform == null && child.name == "Foot_L")
+                {
+                    _leftFootTransform = child;
+                    child.TryGetComponent(out _leftGroundSensor);
+                }
+                else if (_rightFootTransform == null && child.name == "Foot_R")
+                {
+                    _rightFootTransform = child;
+                    child.TryGetComponent(out _rightGroundSensor);
+                }
+            }
         }
 
         private void ResetOutputs()
@@ -226,6 +626,7 @@ namespace PhysicsDrivenMovement.Character
                 : CharacterStateType.Standing;
 
             _currentDesiredInput = new DesiredInput(Vector2.zero, Vector3.zero, fallbackFacing, false);
+            _currentSensorSnapshot = default;
             _currentObservation = new LocomotionObservation(
                 fallbackState,
                 false,
@@ -240,7 +641,9 @@ namespace PhysicsDrivenMovement.Character
             _currentBodySupportCommand = BodySupportCommand.PassThrough(fallbackFacing);
             _leftLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
             _rightLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
-            _previousMoveDirection = Vector3.zero;
+            _currentPredictedDriftDirection = Vector3.zero;
+            _currentObservationTelemetryLine = string.Empty;
+            _nextObservationTelemetryTime = 0f;
             _recoveryFramesRemaining = 0;
             HasCommandFrame = false;
         }
@@ -270,6 +673,86 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return Vector3.forward;
+        }
+
+        private static void DrawSupportCapsule(
+            SupportGeometry supportGeometry,
+            Vector3 lift,
+            Color color,
+            float duration)
+        {
+            Vector3 supportStart = supportGeometry.SupportStart + lift;
+            Vector3 supportEnd = supportGeometry.SupportEnd + lift;
+            float radius = supportGeometry.SupportRadius;
+
+            Vector3 supportAxis = supportEnd - supportStart;
+            Vector3 lateral = supportAxis.sqrMagnitude > CommandEpsilon
+                ? Vector3.Cross(Vector3.up, supportAxis.normalized)
+                : Vector3.right;
+            lateral.Normalize();
+            Vector3 lateralOffset = lateral * radius;
+
+            Debug.DrawLine(supportStart + lateralOffset, supportEnd + lateralOffset, color, duration, false);
+            Debug.DrawLine(supportStart - lateralOffset, supportEnd - lateralOffset, color, duration, false);
+
+            DrawCircle(supportStart, radius, color, duration);
+            DrawCircle(supportEnd, radius, color, duration);
+        }
+
+        private static void DrawArrow(
+            Vector3 origin,
+            Vector3 direction,
+            float length,
+            Color color,
+            float duration)
+        {
+            Vector3 arrowDirection = Vector3.ProjectOnPlane(direction, Vector3.up);
+            if (arrowDirection.sqrMagnitude <= CommandEpsilon)
+            {
+                return;
+            }
+
+            arrowDirection.Normalize();
+            Vector3 tip = origin + arrowDirection * length;
+            Debug.DrawLine(origin, tip, color, duration, false);
+
+            Vector3 wing = Quaternion.AngleAxis(150f, Vector3.up) * arrowDirection;
+            Debug.DrawLine(tip, tip + wing * (length * 0.25f), color, duration, false);
+
+            wing = Quaternion.AngleAxis(-150f, Vector3.up) * arrowDirection;
+            Debug.DrawLine(tip, tip + wing * (length * 0.25f), color, duration, false);
+        }
+
+        private static void DrawCross(Vector3 center, float halfSize, Color color, float duration)
+        {
+            Debug.DrawLine(center + Vector3.right * halfSize, center - Vector3.right * halfSize, color, duration, false);
+            Debug.DrawLine(center + Vector3.forward * halfSize, center - Vector3.forward * halfSize, color, duration, false);
+        }
+
+        private static void DrawCircle(Vector3 center, float radius, Color color, float duration)
+        {
+            const int SegmentCount = 12;
+            if (radius <= 0f)
+            {
+                return;
+            }
+
+            Vector3 previousPoint = center + Vector3.forward * radius;
+            for (int segmentIndex = 1; segmentIndex <= SegmentCount; segmentIndex++)
+            {
+                float angleRadians = (segmentIndex / (float)SegmentCount) * Mathf.PI * 2f;
+                Vector3 nextPoint = center + new Vector3(
+                    Mathf.Sin(angleRadians) * radius,
+                    0f,
+                    Mathf.Cos(angleRadians) * radius);
+                Debug.DrawLine(previousPoint, nextPoint, color, duration, false);
+                previousPoint = nextPoint;
+            }
+        }
+
+        private static string FormatPlanarVector(Vector3 value)
+        {
+            return $"({value.x:F2}, {value.z:F2})";
         }
     }
 }

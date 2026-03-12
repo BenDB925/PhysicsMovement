@@ -36,6 +36,7 @@ namespace PhysicsDrivenMovement.Character
 
         private bool _isGrounded;
         private Collider _footCollider;
+        private Vector3 _groundPoint;
         private float _ungroundedTimer;
 
         // ─── Public Properties ────────────────────────────────────────────────
@@ -45,6 +46,13 @@ namespace PhysicsDrivenMovement.Character
         /// SphereCast). Updated every FixedUpdate.
         /// </summary>
         public bool IsGrounded => _isGrounded;
+
+        /// <summary>
+        /// Latest world-space ground contact point reported by the sensor while grounded.
+        /// When the sensor is temporarily coasting through the grounded exit delay, this preserves
+        /// the last confirmed support point so higher-level aggregation keeps a stable contact anchor.
+        /// </summary>
+        public Vector3 GroundPoint => _groundPoint;
 
         // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -67,7 +75,7 @@ namespace PhysicsDrivenMovement.Character
                 origin: origin,
                 radius:    _castRadius,
                 direction: Vector3.down,
-                hitInfo:   out _,
+                hitInfo:   out RaycastHit hitInfo,
                 maxDistance: _castDistance + _castRadius,
                 layerMask:   _groundLayers,
                 queryTriggerInteraction: QueryTriggerInteraction.Ignore);
@@ -75,6 +83,7 @@ namespace PhysicsDrivenMovement.Character
             if (detectedGround)
             {
                 _isGrounded = true;
+                _groundPoint = hitInfo.point;
                 _ungroundedTimer = 0f;
                 return;
             }

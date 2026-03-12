@@ -63,8 +63,11 @@ namespace PhysicsDrivenMovement.Character
         private Rigidbody _hipsBody;
         private BalanceController _balanceController;
         private PlayerMovement _playerMovement;
+        private LocomotionSensorAggregator _sensorAggregator;
         private Transform _leftFootTransform;
         private Transform _rightFootTransform;
+        private GroundSensor _leftGroundSensor;
+        private GroundSensor _rightGroundSensor;
 
         private float _evidenceWindowTime;
         private float _groundedWindowTime;
@@ -84,13 +87,19 @@ namespace PhysicsDrivenMovement.Character
             TryGetComponent(out _balanceController);
             TryGetComponent(out _playerMovement);
 
-            CacheFootTransforms();
+            CacheFootReferences();
         }
 
         private void FixedUpdate()
         {
             // STEP 1: Resolve runtime dependencies lazily for test rigs and staged setup.
             if (!TryResolveDependencies())
+            {
+                ResetEvidence();
+                return;
+            }
+
+            if (!_sensorAggregator.TryCollect(out LocomotionSensorSnapshot sensorSnapshot))
             {
                 ResetEvidence();
                 return;
@@ -113,7 +122,7 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            Vector3 horizontalVelocity = new Vector3(_hipsBody.linearVelocity.x, 0f, _hipsBody.linearVelocity.z);
+            Vector3 horizontalVelocity = new Vector3(sensorSnapshot.HipsVelocity.x, 0f, sensorSnapshot.HipsVelocity.z);
             float moveMagnitude = _playerMovement.CurrentMoveInput.magnitude;
 
             // STEP 2: Preserve a short grounded grace window so one-frame airborne blips do not reset the detector.
@@ -132,11 +141,9 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            if (!TryGetSupportBehindDistance(requestedDirection, out float supportBehindDistance))
-            {
-                ResetEvidence();
-                return;
-            }
+            float supportBehindDistance = sensorSnapshot.SupportGeometry.GetSupportBehindDistance(
+                sensorSnapshot.HipsPosition,
+                requestedDirection);
 
             // STEP 3: Evaluate the sustained collapse evidence using intent, progress, support, and posture.
             float projectedProgress = Vector3.Dot(horizontalVelocity, requestedDirection);
@@ -218,17 +225,27 @@ namespace PhysicsDrivenMovement.Character
 
             if (_leftFootTransform == null || _rightFootTransform == null)
             {
-                CacheFootTransforms();
+                CacheFootReferences();
+            }
+
+            if (_sensorAggregator == null && _leftFootTransform != null && _rightFootTransform != null)
+            {
+                _sensorAggregator = new LocomotionSensorAggregator(
+                    _hipsBody,
+                    _balanceController,
+                    _leftFootTransform,
+                    _rightFootTransform,
+                    _leftGroundSensor,
+                    _rightGroundSensor);
             }
 
             return _hipsBody != null &&
                    _balanceController != null &&
                    _playerMovement != null &&
-                   _leftFootTransform != null &&
-                   _rightFootTransform != null;
+                   _sensorAggregator != null;
         }
 
-        private void CacheFootTransforms()
+        private void CacheFootReferences()
         {
             Transform[] children = GetComponentsInChildren<Transform>(includeInactive: true);
             for (int i = 0; i < children.Length; i++)
@@ -237,10 +254,12 @@ namespace PhysicsDrivenMovement.Character
                 if (_leftFootTransform == null && child.name == "Foot_L")
                 {
                     _leftFootTransform = child;
+                    child.TryGetComponent(out _leftGroundSensor);
                 }
                 else if (_rightFootTransform == null && child.name == "Foot_R")
                 {
                     _rightFootTransform = child;
+                    child.TryGetComponent(out _rightGroundSensor);
                 }
             }
         }
@@ -254,21 +273,6 @@ namespace PhysicsDrivenMovement.Character
             }
 
             requestedDirection.Normalize();
-            return true;
-        }
-
-        private bool TryGetSupportBehindDistance(Vector3 requestedDirection, out float supportBehindDistance)
-        {
-            supportBehindDistance = 0f;
-            if (_leftFootTransform == null || _rightFootTransform == null)
-            {
-                return false;
-            }
-
-            Vector3 supportCenter = (_leftFootTransform.position + _rightFootTransform.position) * 0.5f;
-            Vector3 supportOffset = supportCenter - _hipsBody.position;
-            float signedSupportOffset = Vector3.Dot(supportOffset, requestedDirection);
-            supportBehindDistance = Mathf.Max(0f, -signedSupportOffset);
             return true;
         }
 

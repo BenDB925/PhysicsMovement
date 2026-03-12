@@ -21,6 +21,35 @@ namespace PhysicsDrivenMovement.Character
             Vector3 angularVelocity,
             Vector3 bodyForward,
             Vector3 bodyUp)
+            : this(
+                characterState,
+                isGrounded,
+                isFallen,
+                isLocomotionCollapsed,
+                isInSnapRecovery,
+                uprightAngleDegrees,
+                velocity,
+                angularVelocity,
+                bodyForward,
+                bodyUp,
+                CreateBaselineSupportObservation(isGrounded),
+                0f)
+        {
+        }
+
+        public LocomotionObservation(
+            CharacterStateType characterState,
+            bool isGrounded,
+            bool isFallen,
+            bool isLocomotionCollapsed,
+            bool isInSnapRecovery,
+            float uprightAngleDegrees,
+            Vector3 velocity,
+            Vector3 angularVelocity,
+            Vector3 bodyForward,
+            Vector3 bodyUp,
+            SupportObservation support,
+            float turnSeverity)
         {
             // STEP 1: Preserve authoritative posture/state flags exactly as reported by runtime systems.
             CharacterState = characterState;
@@ -39,6 +68,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Normalize body basis vectors so future consumers share the same reference frame.
             BodyForward = NormalizePlanarDirection(bodyForward, Vector3.forward);
             BodyUp = NormalizeDirection(bodyUp, Vector3.up);
+
+            // STEP 4: Cache the locomotion-language support and turning signals for the Chapter 2 world model.
+            Support = support;
+            TurnSeverity = Mathf.Clamp01(turnSeverity);
         }
 
         public CharacterStateType CharacterState { get; }
@@ -64,6 +97,50 @@ namespace PhysicsDrivenMovement.Character
         public Vector3 BodyForward { get; }
 
         public Vector3 BodyUp { get; }
+
+        public SupportObservation Support { get; }
+
+        public FootContactObservation LeftFoot => Support.LeftFoot;
+
+        public FootContactObservation RightFoot => Support.RightFoot;
+
+        public float SupportQuality => Support.SupportQuality;
+
+        public float ContactConfidence => Support.ContactConfidence;
+
+        public float PlantedFootConfidence => Support.PlantedFootConfidence;
+
+        public float SlipEstimate => Support.SlipEstimate;
+
+        public bool IsComOutsideSupport => Support.IsComOutsideSupport;
+
+        public float TurnSeverity { get; }
+
+        private static SupportObservation CreateBaselineSupportObservation(bool isGrounded)
+        {
+            float groundedConfidence = isGrounded ? 1f : 0f;
+            FootContactObservation leftFoot = new FootContactObservation(
+                LocomotionLeg.Left,
+                isGrounded,
+                groundedConfidence,
+                groundedConfidence,
+                0f);
+            FootContactObservation rightFoot = new FootContactObservation(
+                LocomotionLeg.Right,
+                isGrounded,
+                groundedConfidence,
+                groundedConfidence,
+                0f);
+
+            return new SupportObservation(
+                leftFoot,
+                rightFoot,
+                groundedConfidence,
+                groundedConfidence,
+                groundedConfidence,
+                0f,
+                false);
+        }
 
         private static Vector3 NormalizePlanarDirection(Vector3 rawDirection, Vector3 fallback)
         {

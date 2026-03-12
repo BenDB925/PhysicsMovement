@@ -82,6 +82,208 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenSupportCenterFallsBehindHips_MarksObservationAsComOutsideSupport()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C2.2.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footLeftBody = _rig.FootL.GetComponent<Rigidbody>();
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+
+            Assert.That(footLeftBody, Is.Not.Null, "Foot_L should expose a Rigidbody on the prefab-backed test rig.");
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            yield return new WaitForFixedUpdate();
+
+            Vector3 supportCenter = _rig.HipsBody.position - Vector3.forward * 0.45f + Vector3.up * 0.02f;
+            TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+            bool isGrounded = GetPropertyValue<bool>(observation, "IsGrounded");
+            bool isComOutsideSupport = GetPropertyValue<bool>(observation, "IsComOutsideSupport");
+
+            // Assert
+            Assert.That(isGrounded, Is.True,
+                "The director should continue to mirror the authoritative grounded state while sampling support geometry.");
+            Assert.That(isComOutsideSupport, Is.True,
+                "Chapter 2.2 should classify the hips COM as outside support once both grounded feet trail behind the body.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenFootSlidesForOneFrame_KeepsPlantedClassificationStable()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C2.3.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footLeftBody = _rig.FootL.GetComponent<Rigidbody>();
+            Assert.That(footLeftBody, Is.Not.Null, "Foot_L should expose a Rigidbody on the prefab-backed test rig.");
+
+            yield return new WaitForFixedUpdate();
+
+            object baselineObservation = GetPropertyValue<object>(_director, "CurrentObservation");
+            object baselineLeftFoot = GetPropertyValue<object>(baselineObservation, "LeftFoot");
+            Assert.That(GetPropertyValue<bool>(baselineLeftFoot, "IsPlanted"), Is.True,
+                "Standing on the ground should seed the left foot as planted before the transient slide sample.");
+
+            TeleportFootBody(footLeftBody, footLeftBody.position + Vector3.right * 0.14f);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+            object leftFoot = GetPropertyValue<object>(observation, "LeftFoot");
+            bool isPlanted = GetPropertyValue<bool>(leftFoot, "IsPlanted");
+            float plantedConfidence = GetPropertyValue<float>(leftFoot, "PlantedConfidence");
+
+            // Assert
+            Assert.That(isPlanted, Is.True,
+                "A one-frame planted-confidence dip from foot slide should be absorbed by the observation hysteresis.");
+            Assert.That(plantedConfidence, Is.GreaterThan(0.4f),
+                "The filtered planted confidence should remain above zero after a one-frame slide spike.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenSupportFallsBehindHips_PublishesDriftDirectionAndTelemetrySnapshot()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C2.4.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footLeftBody = _rig.FootL.GetComponent<Rigidbody>();
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+
+            Assert.That(footLeftBody, Is.Not.Null, "Foot_L should expose a Rigidbody on the prefab-backed test rig.");
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            yield return new WaitForFixedUpdate();
+
+            Vector3 supportCenter = _rig.HipsBody.position - Vector3.forward * 0.55f + Vector3.up * 0.02f;
+            TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            Vector3 predictedDriftDirection = GetPropertyValue<Vector3>(_director, "CurrentPredictedDriftDirection");
+            string telemetryLine = GetPropertyValue<string>(_director, "CurrentObservationTelemetryLine");
+            object sensorSnapshot = GetPropertyValue<object>(_director, "CurrentSensorSnapshot");
+            object supportGeometry = GetPropertyValue<object>(sensorSnapshot, "SupportGeometry");
+            Vector3 runtimeSupportCenter = GetPropertyValue<Vector3>(supportGeometry, "SupportCenter");
+            Vector3 expectedDriftDirection = Vector3.ProjectOnPlane(
+                _rig.HipsBody.position - runtimeSupportCenter,
+                Vector3.up).normalized;
+
+            // Assert
+            Assert.That(predictedDriftDirection.sqrMagnitude, Is.GreaterThan(0.1f),
+                "The director should publish a non-zero predicted drift direction when support trails behind the body.");
+            Assert.That(Vector3.Dot(predictedDriftDirection.normalized, expectedDriftDirection), Is.GreaterThan(0.8f),
+                "The predicted drift direction should point away from the runtime support center toward the body drift risk.");
+            Assert.That(telemetryLine, Does.Contain("supportQuality="),
+                "The telemetry snapshot should include support quality for Chapter 2.4 confidence visibility.");
+            Assert.That(telemetryLine, Does.Contain("contactConfidence="),
+                "The telemetry snapshot should include contact confidence for Chapter 2.4 visibility.");
+            Assert.That(telemetryLine, Does.Contain("plantedConfidence="),
+                "The telemetry snapshot should include planted-foot confidence for Chapter 2.4 visibility.");
+            Assert.That(telemetryLine, Does.Contain("slip="),
+                "The telemetry snapshot should include slip estimate for Chapter 2.4 visibility.");
+            Assert.That(telemetryLine, Does.Contain("turnSeverity="),
+                "The telemetry snapshot should include turn severity for Chapter 2.4 visibility.");
+            Assert.That(telemetryLine, Does.Contain("driftDir="),
+                "The telemetry snapshot should include the predicted drift direction for Chapter 2.4 visibility.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenObservationShowsTurnRiskWithoutDirectionHistory_StartsRecoveryAndBoostsSupportCommand()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C2.5.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footLeftBody = _rig.FootL.GetComponent<Rigidbody>();
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+
+            Assert.That(footLeftBody, Is.Not.Null, "Foot_L should expose a Rigidbody on the prefab-backed test rig.");
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            Vector3 supportCenter = _rig.HipsBody.position - Vector3.forward * 0.55f + Vector3.up * 0.02f;
+            TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
+
+            // Act
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.right);
+            yield return new WaitForFixedUpdate();
+
+            object desiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object supportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+
+            Vector3 moveWorldDirection = GetPropertyValue<Vector3>(desiredInput, "MoveWorldDirection");
+            Vector3 travelDirection = GetPropertyValue<Vector3>(supportCommand, "TravelDirection");
+            float recoveryBlend = GetPropertyValue<float>(supportCommand, "RecoveryBlend");
+            float yawStrengthScale = GetPropertyValue<float>(supportCommand, "YawStrengthScale");
+            float uprightStrengthScale = GetPropertyValue<float>(supportCommand, "UprightStrengthScale");
+            float stabilizationStrengthScale = GetPropertyValue<float>(supportCommand, "StabilizationStrengthScale");
+
+            // Assert
+            Assert.That(recoveryBlend, Is.GreaterThan(0f),
+                "A weak-support sharp-turn observation should start recovery even without legacy previous-direction history.");
+            Assert.That(yawStrengthScale, Is.LessThan(1f),
+                "Risky support observations should suppress yaw strength so turning torque does not ignore the support model.");
+            Assert.That(uprightStrengthScale, Is.GreaterThan(1f),
+                "Risky support observations should boost upright strength instead of leaving the body command at neutral pass-through values.");
+            Assert.That(stabilizationStrengthScale, Is.GreaterThan(1f),
+                "Risky support observations should boost stabilization strength instead of leaving the body command at neutral pass-through values.");
+            Assert.That(Vector3.Dot(moveWorldDirection.normalized, travelDirection.normalized), Is.GreaterThan(0.95f),
+                "The support command should keep traveling in the requested move direction while observation-driven recovery is active.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenStandingSupportIsStable_KeepsLowRiskSupportCommandScales()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C2.5.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            // Act
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+
+            object supportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+
+            float recoveryBlend = GetPropertyValue<float>(supportCommand, "RecoveryBlend");
+            float yawStrengthScale = GetPropertyValue<float>(supportCommand, "YawStrengthScale");
+            float uprightStrengthScale = GetPropertyValue<float>(supportCommand, "UprightStrengthScale");
+            float stabilizationStrengthScale = GetPropertyValue<float>(supportCommand, "StabilizationStrengthScale");
+
+            // Assert
+            Assert.That(recoveryBlend, Is.EqualTo(0f).Within(0.0001f),
+                "Stable standing support should not enter the observation-driven recovery path.");
+            Assert.That(yawStrengthScale, Is.EqualTo(1f).Within(0.01f),
+                "Stable standing support should preserve the neutral yaw strength scale.");
+            Assert.That(uprightStrengthScale, Is.InRange(1f, 1.15f),
+                "Stable standing support should remain in a low-risk upright-strength band rather than escalating into strong recovery support.");
+            Assert.That(stabilizationStrengthScale, Is.InRange(1f, 1.15f),
+                "Stable standing support should remain in a low-risk stabilization band rather than escalating into strong recovery support.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenLegacyGaitIsAdvancing_EmitsCycleCommandsWithMirroredPhaseOffset()
         {
             // Arrange
@@ -182,6 +384,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             Assert.That(actual.x, Is.EqualTo(expected.x).Within(0.0001f), $"{propertyName}.x mismatch.");
             Assert.That(actual.y, Is.EqualTo(expected.y).Within(0.0001f), $"{propertyName}.y mismatch.");
+        }
+
+        private static void TeleportFootBodies(Rigidbody footLeftBody, Rigidbody footRightBody, Vector3 supportCenter)
+        {
+            Vector3 lateralOffset = Vector3.right * 0.18f;
+
+            footLeftBody.position = supportCenter - lateralOffset;
+            footRightBody.position = supportCenter + lateralOffset;
+            footLeftBody.linearVelocity = Vector3.zero;
+            footRightBody.linearVelocity = Vector3.zero;
+            footLeftBody.angularVelocity = Vector3.zero;
+            footRightBody.angularVelocity = Vector3.zero;
+            Physics.SyncTransforms();
+        }
+
+        private static void TeleportFootBody(Rigidbody footBody, Vector3 position)
+        {
+            footBody.position = position;
+            footBody.linearVelocity = Vector3.zero;
+            footBody.angularVelocity = Vector3.zero;
+            Physics.SyncTransforms();
         }
     }
 }

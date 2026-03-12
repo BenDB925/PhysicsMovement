@@ -129,21 +129,21 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; reads `PlayerMovement` desired input plus live locomotion observations, decides the current support-recovery state, and publishes body-support and leg-command frames each FixedUpdate. |
+| **What** | MonoBehaviour on Hips; reads `PlayerMovement` desired input plus a shared Chapter 2 sensor snapshot, filters support confidence through serialized C2.3 hysteresis settings, seeds the locomotion world-model observation, converts that observation risk into body-support recovery plus upright/yaw/stabilization strength decisions, and publishes body-support plus leg-command frames each FixedUpdate. |
 | **Why** | Establishes the first real runtime locomotion owner in the single-voice roadmap while keeping `BalanceController` and `LegAnimator` as explicit executors. |
-| **Public Surface** | `HasCommandFrame: bool`, `IsPassThroughMode: bool`; internal snapshots for current desired input, observation, support command, and left/right leg commands. |
-| **Collaborators** | Reads `PlayerMovement`, `BalanceController`, `CharacterState`, optional `LocomotionCollapseDetector`, optional `LegAnimator`, and the Hips `Rigidbody`; publishes support commands into `BalanceController` and leg command frames into `LegAnimator`, while treating raw collapse detection as observation/watchdog data rather than executor authority. |
-| **Phase** | Unified locomotion roadmap C1.3-C1.5 |
+| **Public Surface** | `HasCommandFrame: bool`, `IsPassThroughMode: bool`; internal snapshots for current desired input, shared sensor data, filtered observation, support command, and left/right leg commands. |
+| **Collaborators** | Reads `PlayerMovement`, `BalanceController`, `CharacterState`, optional `LocomotionCollapseDetector`, optional `LegAnimator`, the shared `LocomotionSensorAggregator` helper over the Hips `Rigidbody` plus foot sensors, and the internal `SupportObservationFilter`; publishes support commands into `BalanceController` and leg command frames into `LegAnimator`, while treating raw collapse detection as observation/watchdog data rather than executor authority. |
+| **Phase** | Unified locomotion roadmap C1.3-C2.5 |
 
-### `Character.Locomotion Contracts` — `Assets/Scripts/Character/Locomotion/*.cs`
+### `Character.Locomotion Contracts, Sensor Aggregation, And Observation Filtering` — `Assets/Scripts/Character/Locomotion/*.cs`
 
 | Concern | Detail |
 |---------|--------|
-| **What** | Internal readonly contract types: `DesiredInput`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, plus `LocomotionLeg` and `LegCommandMode`. |
-| **Why** | Establishes the thin, test-backed handoff boundary used by `LocomotionDirector` to publish explicit support and gait commands into the legacy executors. |
-| **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)` and `LegCommandOutput.Disabled(LocomotionLeg)` seed pass-through and disabled command frames. |
-| **Collaborators** | Sits between `PlayerMovement`, `BalanceController`, `CharacterState`, `LegAnimator`, and `LocomotionDirector`. |
-| **Phase** | Unified locomotion roadmap C1.2-C1.4 |
+| **What** | Internal locomotion types now cover the command/observation contracts (`DesiredInput`, `FootContactObservation`, `SupportObservation`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, `LocomotionLeg`, `LegCommandMode`), the shared Chapter 2 sensor helpers (`SupportGeometry`, `LocomotionSensorSnapshot`, `LocomotionSensorAggregator`), and the C2.3 `SupportObservationFilter` that stabilizes planted/unplanted support confidence over time. |
+| **Why** | Keeps one test-backed handoff boundary for director-owned commands while centralizing raw foot-contact, hips-motion, yaw-rate, support-geometry sampling, and confidence filtering so support decisions are expressed in locomotion language instead of repeated transform math or one-frame sensor noise. |
+| **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)`, `LegCommandOutput.Disabled(LocomotionLeg)`, and support-geometry classification methods seed the current migration slice without widening public APIs. |
+| **Collaborators** | Sits between `GroundSensor`, `PlayerMovement`, `BalanceController`, `CharacterState`, `LocomotionCollapseDetector`, `LegAnimator`, and `LocomotionDirector`. |
+| **Phase** | Unified locomotion roadmap C1.2-C2.3 |
 
 ### `Character.CharacterState` — `Assets/Scripts/Character/CharacterState.cs`
 
@@ -162,7 +162,7 @@
 | **What** | MonoBehaviour on Hips; detects the bounded strong-intent/no-progress/rear-support collapse regime that posture-only fallen thresholds miss during sharp-turn locomotion failures. |
 | **Why** | Prevents the sustained hover-kick loop where feet trail behind the hips, progress collapses, and the FSM never enters `Fallen` because upright angle alone stays below the global fallen threshold. |
 | **Public Surface** | `IsCollapseConfirmed: bool` — watchdog signal consumed by `CharacterState` and observed by `LocomotionDirector` snapshots; execution systems should react through state labels or director commands instead of reading it directly. |
-| **Collaborators** | Reads `BalanceController.IsGrounded`, `PlayerMovement.CurrentMoveInput`, `PlayerMovement.CurrentFacingDirection`, and foot transforms on the ragdoll root; feeds the safety layer rather than directly suppressing locomotion executors. |
+| **Collaborators** | Reads `BalanceController.IsGrounded`, `PlayerMovement.CurrentMoveInput`, `PlayerMovement.CurrentFacingDirection`, and the shared `LocomotionSensorAggregator` support geometry over the ragdoll feet; feeds the safety layer rather than directly suppressing locomotion executors. |
 | **Phase** | 3C / locomotion recovery hardening / unified locomotion roadmap C1.5 |
 
 ### `Character.LegAnimator` — `Assets/Scripts/Character/LegAnimator.cs`
