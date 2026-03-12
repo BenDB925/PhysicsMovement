@@ -91,6 +91,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 TrackFallenFrames(ref consecutiveFallen, ref maxConsecutiveFallen);
             }
 
+            LogBaseline(
+                nameof(WalkStraight_NoFalls),
+                $"completed={_courseRunner.IsComplete} framesElapsed={_courseRunner.FramesElapsed} maxConsecutiveFallen={maxConsecutiveFallen}");
+
             Assert.That(_courseRunner.IsComplete, Is.True,
                 $"Straight course did not finish within {WalkStraightFrameBudget} frames. " +
                 $"Reached waypoint index {_courseRunner.CurrentWaypointIndex}.");
@@ -122,6 +126,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 TrackFallenFrames(ref consecutiveFallen, ref maxConsecutiveFallen);
             }
 
+            LogBaseline(
+                nameof(TurnAndWalk_CornerRecovery),
+                $"completed={_courseRunner.IsComplete} framesElapsed={_courseRunner.FramesElapsed} maxConsecutiveFallen={maxConsecutiveFallen}");
+
             Assert.That(_courseRunner.IsComplete, Is.True,
                 $"Corner course did not finish within {CornerCourseFrameBudget} frames. " +
                 $"Current waypoint index: {_courseRunner.CurrentWaypointIndex}.");
@@ -152,6 +160,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(footRightBody, Is.Not.Null, "Foot_R Rigidbody must exist for collapse regression.");
 
             bool enteredFallen = false;
+            int enteredFallenFrame = -1;
 
             for (int frame = 0; frame < CollapseEvidenceFrameBudget; frame++)
             {
@@ -171,9 +180,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 if (_characterState.CurrentState == CharacterStateType.Fallen)
                 {
                     enteredFallen = true;
+                    enteredFallenFrame = frame + 1;
                     break;
                 }
             }
+
+            LogBaseline(
+                nameof(SustainedLocomotionCollapse_TransitionsIntoFallen),
+                $"enteredFallen={enteredFallen} frame={enteredFallenFrame} finalState={_characterState.CurrentState}");
 
             Assert.That(enteredFallen, Is.True,
                 $"Sustained locomotion collapse should transition into Fallen within {CollapseEvidenceFrameBudget} frames. " +
@@ -212,6 +226,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
                 yield return new WaitForFixedUpdate();
             }
+
+            LogBaseline(
+                nameof(LowProgressWithoutRearSupport_DoesNotTransitionIntoFallen),
+                $"finalState={_characterState.CurrentState} frameBudget={CollapseEvidenceFrameBudget}");
 
             Assert.That(_characterState.CurrentState, Is.Not.EqualTo(CharacterStateType.Fallen),
                 "Low progress alone must not transition into Fallen when the feet remain under the hips.");
@@ -365,6 +383,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 field.SetValue(target, value);
             }
+        }
+
+        private static void LogBaseline(string scenario, string summary)
+        {
+            Debug.Log($"[C1.1 Baseline][MovementQuality] {scenario} {summary}");
         }
     }
 }

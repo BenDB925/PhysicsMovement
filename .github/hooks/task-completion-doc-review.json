@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "pwsh -NoLogo -NoProfile -File .github/hooks/task-completion-doc-review.ps1",
+        "windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .github\\hooks\\task-completion-doc-review.ps1",
+        "cwd": ".",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "pwsh -NoLogo -NoProfile -File .github/hooks/task-completion-doc-review.ps1",
+        "windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .github\\hooks\\task-completion-doc-review.ps1",
+        "cwd": ".",
+        "timeout": 10
+      }
+    ]
+  }
+}

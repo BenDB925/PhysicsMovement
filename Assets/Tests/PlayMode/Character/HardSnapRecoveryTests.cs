@@ -89,6 +89,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             string summary = BuildTurnSummary(outcome);
             Debug.Log($"[HardSnap90] {summary}");
+            LogBaseline(nameof(HardSnap90_AtFullSpeed_CharacterRecoversAndMakesProgress), summary);
 
             Assert.That(outcome.PreTurnDisplacement, Is.GreaterThanOrEqualTo(MinWindupDisplacement),
                 $"Hard snap windup must build at least {MinWindupDisplacement:F2}m of travel before the turn. {summary}");
@@ -173,6 +174,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             string summary = BuildSlalomSummary(outcome);
             Debug.Log($"[HardSnapSlalom] {summary}");
+            LogBaseline(nameof(HardSnap_Slalom5Turns_CharacterCompletesWithoutPermastuck), summary);
 
             float totalProgress = 0f;
             for (int segmentIndex = 0; segmentIndex < outcome.SegmentProgress.Count; segmentIndex++)
@@ -333,6 +335,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             builder.Append($"] maxFallenFrames={outcome.MaxConsecutiveFallenFrames} maxStalledFrames={outcome.MaxConsecutiveStalledFrames}");
             return builder.ToString();
+        }
+
+        private static void LogBaseline(string scenario, string summary)
+        {
+            Debug.Log($"[C1.1 Baseline][HardSnapRecovery] {scenario} {summary}");
         }
     }
 }

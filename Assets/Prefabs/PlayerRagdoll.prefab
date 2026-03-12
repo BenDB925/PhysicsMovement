@@ -1216,6 +1216,7 @@ GameObject:
   - component: {fileID: 8103612442498461491}
   - component: {fileID: 129253150340205023}
   - component: {fileID: 7966672302456914730}
+  - component: {fileID: 3352970662418711214}
   - component: {fileID: 1142327125434414261}
   - component: {fileID: 1504783932290576645}
   m_Layer: 8
@@ -1455,6 +1456,19 @@ MonoBehaviour:
   _knockoutDuration: 1.5
   _getUpForce: 250
   _getUpTimeout: 3
+--- !u!114 &3352970662418711214
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651069376947674363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d5f8375a9784f4c9b8a8a1fe5edc138, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.LocomotionDirector
+  _passThroughMode: 1
 --- !u!114 &1142327125434414261
 MonoBehaviour:
   m_ObjectHideFlags: 0

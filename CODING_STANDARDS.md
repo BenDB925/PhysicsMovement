@@ -274,6 +274,17 @@ Avoid god classes. Split functionality to avoid context-drain in agents. Keep cl
 
 The goal is to give agents maximum context **without reading method bodies**. Every layer of documentation below is **mandatory**.
 
+### Layer 0: Task Record Tree
+
+When a user provides a task list, asks for a plan, or the work becomes a multi-step debugging or implementation effort, create or update a task record tree before major implementation work.
+
+1. Use the user-specified folder if one is given. Otherwise default to `Plans/` and follow `Plans/README.md`.
+2. The parent plan file is the canonical summary. Keep it short and current with status, next step, blockers, and links to child docs.
+3. Split a work package out of the parent once that section would exceed 80 lines, needs more than 3 dated progress notes, or requires raw logs or telemetry.
+4. Create a dedicated bug sheet when an investigation section would exceed 120 lines, includes more than 30 lines of raw logs or telemetry, or tracks more than one active bug or hypothesis thread.
+5. Whenever a child doc changes materially, update the parent doc in the same slice. Never leave child docs unlinked.
+6. If the user provides an existing plan document, treat it as the parent record unless they explicitly ask for a new top-level doc.
+
 ### Layer 1: Class-Level XML Doc (`<summary>`)
 
 Every class/struct/interface MUST have a `<summary>` block that answers:

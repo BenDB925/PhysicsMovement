@@ -23,12 +23,14 @@
 │  GameSettings.Awake()   ─── configures Time, Physics, layers      │
 │                                                                    │
 │  RagdollSetup.Awake()   ─── disables neighbour collisions         │
-│  BalanceController      ─── PD torque → upright + yaw pose        │
+│  BalanceController      ─── PD torque executor for body support   │
 │  GroundSensor           ─── foot ground detection                 │
-│  PlayerMovement         ─── input → AddForce on Hips              │
+│  PlayerMovement         ─── input → AddForce on Hips + intent     │
+│  LocomotionDirector     ─── desired input + observations →        │
+│                           support / leg command frames            │
 │  CharacterState         ─── FSM (Standing/Moving/Airborne/...)    │
 │  LocomotionCollapseDetector ─ root stalled-collapse fall trigger   │
-│  LegAnimator            ─── procedural walk cycle (sinusoidal)    │
+│  LegAnimator            ─── explicit leg-command executor         │
 │  ArmAnimator            ─── counter-swing arm gait                │
 │  FallPoseRecorder       ─── rolling fall pose NDJSON diagnostics  │
 │  CameraFollow           ─── orbital third-person camera           │
@@ -52,7 +54,7 @@
 | Assembly | Path | Depends On | Notes |
 |----------|------|------------|-------|
 | `PhysicsDrivenMovement.Core` | `Assets/Scripts/Core/` | *(none)* | `GameSettings` singleton |
-| `PhysicsDrivenMovement.Character` | `Assets/Scripts/Character/` | `Core` | Ragdoll physics scripts |
+| `PhysicsDrivenMovement.Character` | `Assets/Scripts/Character/` | `Core` | Ragdoll physics scripts plus the locomotion contract and director command layer |
 | `PhysicsDrivenMovement.Input` | `Assets/Scripts/Input/` | `Character` | Generated input wrapper |
 | `PhysicsDrivenMovement.Environment` | `Assets/Scripts/Environment/` | *(none)* | Runtime room metadata for generated scenes |
 | `PhysicsDrivenMovement.Editor` | `Assets/Scripts/Editor/` | `Core`, `Character` | Editor-only build tools |
@@ -90,7 +92,7 @@
 | **What** | Static editor class; `[MenuItem]` that procedurally builds `PlayerRagdoll.prefab`. |
 | **Why** | Ensures a reproducible, data-driven ragdoll. Segment definitions (mass, shape, limits) live in a static `SegmentDef[]` table — edit there to tune. |
 | **Public Surface** | `BuildRagdollPrefab()` (MenuItem). |
-| **Collaborators** | Attaches `RagdollSetup`; reads `PhysicsMaterials/Ragdoll.physicsMaterial`. |
+| **Collaborators** | Attaches `RagdollSetup`, `LocomotionDirector`, and the rest of the character runtime; reads `PhysicsMaterials/Ragdoll.physicsMaterial`. |
 | **Phase** | 1 |
 
 ### `Character.GroundSensor` — `Assets/Scripts/Character/GroundSensor.cs`
@@ -107,21 +109,41 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on the Hips; applies a PD torque every FixedUpdate to keep the character upright and facing the desired direction. |
-| **Why** | Active ragdolls need a continuous corrective torque to counteract gravity and perturbations; a PD controller is the standard technique (no integral windup risk). |
-| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `SetFacingDirection(Vector3)` — consumed by `PlayerMovement` and `CharacterState` (Phase 3). |
-| **Collaborators** | Reads `GroundSensor.IsGrounded`; forces applied to Hips `Rigidbody`. |
+| **What** | MonoBehaviour on the Hips; applies a PD torque every FixedUpdate to execute the current body-support command and maintain upright plus yaw alignment. |
+| **Why** | Active ragdolls need continuous corrective torque to counteract gravity and perturbations, but locomotion-specific support intent now comes from `LocomotionDirector` instead of local turn heuristics. |
+| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `SetFacingDirection(Vector3)` — compatibility/manual seam; the runtime support-command path is consumed internally from `LocomotionDirector`. |
+| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector`; feeds `CharacterState` and diagnostics through fallen/grounded state. |
 | **Phase** | 2C |
 
 ### `Character.PlayerMovement` — `Assets/Scripts/Character/PlayerMovement.cs`
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; reads player input and applies camera-relative horizontal forces and jump impulses. |
-| **Why** | Separates input-to-force translation from balance/animation concerns. |
-| **Public Surface** | `CurrentMoveInput: Vector2`, `SetMoveInputForTest(Vector2)`, `SetJumpInputForTest(bool)` — test seams. |
-| **Collaborators** | `BalanceController.SetFacingDirection`, `CharacterState` (jump gate), `CameraFollow` (movement direction). |
+| **What** | MonoBehaviour on Hips; reads player input, applies camera-relative horizontal forces and jump impulses, and snapshots the current desired locomotion intent for the director. |
+| **Why** | Separates input-to-force translation from balance and gait execution concerns while exposing a neutral desired-input view for the locomotion coordinator. |
+| **Public Surface** | `CurrentMoveInput: Vector2`, `CurrentDesiredInput`, `SetMoveInputForTest(Vector2)`, `SetJumpInputForTest(bool)` — test and coordination seams. |
+| **Collaborators** | `CharacterState` (jump gate), `CameraFollow` (movement direction), `LocomotionDirector` (desired-input and jump-intent snapshot). |
 | **Phase** | 3B |
+
+### `Character.LocomotionDirector` — `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; reads `PlayerMovement` desired input plus live locomotion observations, decides the current support-recovery state, and publishes body-support and leg-command frames each FixedUpdate. |
+| **Why** | Establishes the first real runtime locomotion owner in the single-voice roadmap while keeping `BalanceController` and `LegAnimator` as explicit executors. |
+| **Public Surface** | `HasCommandFrame: bool`, `IsPassThroughMode: bool`; internal snapshots for current desired input, observation, support command, and left/right leg commands. |
+| **Collaborators** | Reads `PlayerMovement`, `BalanceController`, `CharacterState`, optional `LocomotionCollapseDetector`, optional `LegAnimator`, and the Hips `Rigidbody`; publishes support commands into `BalanceController` and leg command frames into `LegAnimator`. |
+| **Phase** | Unified locomotion roadmap C1.3-C1.4 |
+
+### `Character.Locomotion Contracts` — `Assets/Scripts/Character/Locomotion/*.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Internal readonly contract types: `DesiredInput`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, plus `LocomotionLeg` and `LegCommandMode`. |
+| **Why** | Establishes the thin, test-backed handoff boundary used by `LocomotionDirector` to publish explicit support and gait commands into the legacy executors. |
+| **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)` and `LegCommandOutput.Disabled(LocomotionLeg)` seed pass-through and disabled command frames. |
+| **Collaborators** | Sits between `PlayerMovement`, `BalanceController`, `CharacterState`, `LegAnimator`, and `LocomotionDirector`. |
+| **Phase** | Unified locomotion roadmap C1.2-C1.4 |
 
 ### `Character.CharacterState` — `Assets/Scripts/Character/CharacterState.cs`
 
@@ -130,7 +152,7 @@
 | **What** | MonoBehaviour on Hips; FSM with states `Standing / Moving / Airborne / Fallen / GettingUp`. |
 | **Why** | Centralises state logic so LegAnimator, ArmAnimator, and BalanceController can all read a single authoritative state. |
 | **Public Surface** | `CurrentState: CharacterStateType`, `OnStateChanged` event, `SetStateForTest(CharacterStateType)` — test seam. |
-| **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
+| **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input), `LocomotionDirector` (observation snapshot), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
 | **Phase** | 3C |
 
 ### `Character.LocomotionCollapseDetector` — `Assets/Scripts/Character/LocomotionCollapseDetector.cs`
@@ -147,11 +169,11 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; drives UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values in a sinusoidal walk cycle based on move input. |
-| **Why** | Ragdoll characters need procedural leg animation — no keyframe rigs, just physics-driven joint targets. |
-| **Public Surface** | `Phase: float`, `SmoothedInputMag: float` — read by `ArmAnimator` for counter-swing. |
-| **Collaborators** | `PlayerMovement` (input), `CharacterState` (state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`). |
-| **Key design** | Supports both legacy local-frame swing and a world-space swing path. Current field default in code is `_useWorldSpaceSwing = false`. Angular velocity spin gate at 8 rad/s. Phase resets on restart/sharp turn to prevent leg snap. |
+| **What** | MonoBehaviour on Hips; consumes explicit left and right leg command frames and applies UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values, while retaining a pass-through gait planner for the current roadmap slice. |
+| **Why** | Ragdoll characters still need procedural joint targets, but locomotion intent ownership now lives in `LocomotionDirector` rather than inside the animator's FixedUpdate loop. |
+| **Public Surface** | `Phase: float`, `SmoothedInputMag: float`, `StepAngleDegrees`, `KneeAngleDegrees` — read by `ArmAnimator` and diagnostics; internal command-frame seams are consumed by `LocomotionDirector`. |
+| **Collaborators** | `CharacterState` (state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`), `LocomotionDirector` (publishes explicit command frames and requests pass-through planning during migration). |
+| **Key design** | Supports both legacy local-frame swing and a world-space swing path. Current field default in code is `_useWorldSpaceSwing = false`. Angular velocity spin gate at 8 rad/s. Command frames apply immediately and suppress late writes on non-ambulatory frames to keep timing stable. |
 | **Phase** | 3E |
 
 ### `Character.ArmAnimator` — `Assets/Scripts/Character/ArmAnimator.cs`

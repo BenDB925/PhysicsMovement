@@ -87,6 +87,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(upperLegL, Is.Not.Null, "UpperLeg_L joint not found on PlayerRagdoll hierarchy.");
             Assert.That(lowerLegL, Is.Not.Null, "LowerLeg_L joint not found on PlayerRagdoll hierarchy.");
 
+            LogBaseline(
+                nameof(AfterStart_LegJointSprings_AreNonZero),
+                $"upperLegL={upperLegL.slerpDrive.positionSpring:F0} upperLegR={upperLegR.slerpDrive.positionSpring:F0} " +
+                $"lowerLegL={lowerLegL.slerpDrive.positionSpring:F0} lowerLegR={lowerLegR.slerpDrive.positionSpring:F0}");
+
             Assert.That(upperLegL.slerpDrive.positionSpring, Is.GreaterThanOrEqualTo(MinLegSpringAfterStart),
                 $"UpperLeg_L spring={upperLegL.slerpDrive.positionSpring} after settle — must be >= {MinLegSpringAfterStart}. " +
                 $"Likely cause: CaptureBaselineDrives() captured spring=0 before RagdollSetup.Awake ran, " +
@@ -139,6 +144,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 new Vector3(startPos.x, 0f, startPos.z),
                 new Vector3(endPos.x, 0f, endPos.z));
 
+            LogBaseline(
+                nameof(HoldingMoveInput_For5Seconds_CharacterMovesForward),
+                $"displacement={displacement:F2}m start=({startPos.x:F2},{startPos.z:F2}) end=({endPos.x:F2},{endPos.z:F2})");
+
             Assert.That(displacement, Is.GreaterThanOrEqualTo(MinDisplacementMetres),
                 $"After 5s of move input, horizontal displacement was only {displacement:F2}m " +
                 $"(minimum expected: {MinDisplacementMetres}m). Character may be frozen, " +
@@ -181,6 +190,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 peakRotation = Mathf.Max(peakRotation, Mathf.Abs(xAngle));
             }
             movement.SetMoveInputForTest(Vector2.zero);
+
+            LogBaseline(
+                nameof(HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate),
+                $"upperLegLPeakRotation={peakRotation:F1}deg");
 
             Assert.That(peakRotation, Is.GreaterThanOrEqualTo(MinPeakLegRotationDeg),
                 $"UpperLeg_L peak rotation during 5s walk was only {peakRotation:F1}° " +
@@ -244,6 +257,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Allow up to 10% of active frames to have both legs simultaneously forward
             // (natural at the crossover). More than that indicates synchronised gait.
             float syncFraction = activeFrames > 0 ? (float)bothForwardFrames / activeFrames : 0f;
+
+            LogBaseline(
+                nameof(HoldingMoveInput_For5Seconds_LegsAlternate_NotBothPeakingTogether),
+                $"bothForwardFrames={bothForwardFrames} activeFrames={activeFrames} syncFraction={syncFraction:P1}");
+
             Assert.That(syncFraction, Is.LessThan(0.10f),
                 $"Both upper legs were simultaneously forward for {syncFraction:P0} of active frames " +
                 $"({bothForwardFrames}/{activeFrames}). Expected < 10% — legs should alternate. " +
@@ -277,6 +295,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 if (j.gameObject.name == name) return j;
             }
             return null;
+        }
+
+        private static void LogBaseline(string scenario, string summary)
+        {
+            Debug.Log($"[C1.1 Baseline][GaitOutcome] {scenario} {summary}");
         }
     }
 }

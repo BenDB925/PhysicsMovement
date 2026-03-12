@@ -90,6 +90,7 @@ namespace PhysicsDrivenMovement.Character
     /// Lifecycle: Awake (cache joints + siblings), FixedUpdate (advance phase, apply rotations).
     /// Collaborators: <see cref="PlayerMovement"/>, <see cref="CharacterState"/>, <see cref="Rigidbody"/>.
     /// </summary>
+    [DefaultExecutionOrder(-50)]
     public class LegAnimator : MonoBehaviour
     {
         // ── Serialized Gait Fields ──────────────────────────────────────────
@@ -129,13 +130,6 @@ namespace PhysicsDrivenMovement.Character
                  "   movement resumes, preventing a snap to full gait amplitude.\n" +
                  "Higher = faster transition; 0 = no smoothing. Typical: 3–8.")]
         private float _idleBlendSpeed = 5f;
-
-        [SerializeField, Range(0f, 180f)]
-        [Tooltip("Suppress leg swing when hips are more than this many degrees from the input direction. " +
-                 "Prevents leg tangle on sharp turns (e.g. 180° reversal). " +
-                 "Keep high (≥90°) for smooth straight-line walking — lower values cause gait " +
-                 "stalls when leg forces nudge the hips slightly off-axis mid-stride. Default 90°.")]
-        private float _yawAlignThresholdDeg = 90f;
 
         // DESIGN: _swingAxis and _kneeAxis are specified in ConfigurableJoint targetRotation
         //         space, which maps joint.axis (the primary hinge) to the Z component of the
@@ -332,6 +326,13 @@ namespace PhysicsDrivenMovement.Character
 
         private int _recoveryCooldownFrameCounter;
 
+        private DesiredInput _commandDesiredInput;
+        private LocomotionObservation _commandObservation;
+        private LegCommandOutput _leftLegCommand;
+        private LegCommandOutput _rightLegCommand;
+        private bool _hasCommandFrame;
+        private bool _suppressIncomingCommandFrame;
+
         // ── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -347,6 +348,10 @@ namespace PhysicsDrivenMovement.Character
         /// can blend their effects in/out in sync with the leg gait amplitude.
         /// </summary>
         public float SmoothedInputMag => _smoothedInputMag;
+
+        internal float StepAngleDegrees => _stepAngle;
+
+        internal float KneeAngleDegrees => _kneeAngle;
 
         /// <summary>
         /// True while the stuck-leg recovery pose is being actively applied.
@@ -506,30 +511,27 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            // STEP 0: Reset _worldSwingAxis so it never retains a stale value from a
-            //         previous frame. ApplyWorldSpaceSwing will set this to a fresh value
-            //         when the world-space path executes; it remains Vector3.zero for
-            //         all other paths (idle, fallen, local-space fallback).
-            //         DESIGN: Without this reset, frames where the early-exit (fallen/idle)
-            //         path runs would leave _worldSwingAxis at the last active-gait value,
-            //         causing the debug log to show a frozen non-zero axis while gaitFwd
-            //         shows zero — the "stale axis" bug seen in the runtime debug log.
             _worldSwingAxis = Vector3.zero;
             _isGaitBiasedForward = false;
 
-            // STEP 1: Gate on missing dependencies — skip gracefully.
             if (_playerMovement == null || _characterState == null)
             {
                 return;
             }
 
-            // STEP 2: When the character is in a non-ambulatory state, reset all four
-            //         leg joints to Quaternion.identity immediately and exit early.
-            //         This covers both Fallen (limp) and GettingUp (recovery) states.
-            //         Phase and smoothed input scale are also reset to zero so the next
-            //         standing gait starts cleanly.
             CharacterStateType state = _characterState.CurrentState;
             if (state == CharacterStateType.Fallen || state == CharacterStateType.GettingUp)
+            {
+                _suppressIncomingCommandFrame = true;
+                _phase = 0f;
+                _smoothedInputMag = 0f;
+                SetAllLegTargetsToIdentity();
+                return;
+            }
+
+            _suppressIncomingCommandFrame = false;
+
+            if (!_hasCommandFrame)
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
@@ -537,297 +539,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 3: Gate gait on move input OR actual horizontal velocity.
-            //         We use input as a binary gate but also check real velocity so that
-            //         legs continue to animate while the body coasts after key release.
-            //         Without the velocity check, inputMagnitude drops to zero the frame
-            //         the key is released, SetAllLegTargetsToIdentity() fires, and the
-            //         legs snap to rest even though the body is still sliding forward.
-            float inputMagnitude = _playerMovement.CurrentMoveInput.magnitude;
-
-            float horizontalSpeedGate = 0f;
-            if (_hipsRigidbody != null)
-            {
-                Vector3 hVelGate = _hipsRigidbody.linearVelocity;
-                horizontalSpeedGate = new Vector3(hVelGate.x, 0f, hVelGate.z).magnitude;
-            }
-
-            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.02f;
-
-            // STEP 3c (Phase 3F2): Suppress gait phase advancement while airborne.
-            //          Legs shouldn't keep cycling mid-air — force isMoving = false
-            //          when CharacterState is Airborne. The spring scaling itself is
-            //          handled reactively via OnCharacterStateChanged; this suppresses
-            //          the gait cycle so legs don't flap mid-jump.
-            if (_isAirborne)
-            {
-                isMoving = false;
-            }
-
-            // STEP 3d (Phase 3T — GAP-2 angular velocity gate):
-            //          Suppress gait when the hips are spinning rapidly in yaw.
-            //          High angular velocity means leg joint targets fight the rotational
-            //          momentum and can cross over, tangling for 1–2 seconds post-spin.
-            //          We use hysteresis to avoid premature re-engagement:
-            //            • Suppress immediately when |angVel.y| > threshold.
-            //            • Re-enable only after |angVel.y| < threshold * 0.5 for 5 consecutive frames.
-            if (_hipsRigidbody != null)
-            {
-                float absAngVelY = Mathf.Abs(_hipsRigidbody.angularVelocity.y);
-                if (absAngVelY > _angularVelocityGaitThreshold)
-                {
-                    isMoving = false;
-                    _spinSuppressFrames = 0; // reset hysteresis counter while still spinning fast
-                }
-                else if (absAngVelY < _angularVelocityGaitThreshold * 0.5f)
-                {
-                    // Angular velocity is below the low hysteresis band — increment counter.
-                    // Only re-enable gait once the counter reaches 5 consecutive frames.
-                    if (_spinSuppressFrames < 5)
-                    {
-                        _spinSuppressFrames++;
-                        isMoving = false; // still suppressed until hysteresis satisfied
-                    }
-                    // When _spinSuppressFrames >= 5, isMoving is determined by input/velocity above.
-                }
-                else
-                {
-                    // In the intermediate band (between threshold*0.5 and threshold): keep suppressed.
-                    _spinSuppressFrames = 0;
-                    isMoving = false;
-                }
-            }
-
-            // STEP 3b-yaw: Yaw alignment gate removed (was comparing raw stick input against
-            //              hips forward, which is incorrect with a camera-relative movement
-            //              system — raw stick input is not a world direction). BC's yaw torque
-            //              (with ±170° clamp) handles turning without this gate. The original
-            //              concern about leg tangle on 180° turns is handled by BC committing
-            //              to a rotation direction before reaching full stride.
-
-            // STEP 3b: Phase reset on movement restart or sharp direction change.
-            //          If we were stopped (smoothedInputMag near 0) and now have input,
-            //          snap phase to 0 so legs restart from neutral — avoids launching
-            //          into a large arc mid-stride and clipping the ground.
-            //          Also reset on sharp direction change (dot < 0.5 = >60° turn).
-            Vector2 currentInputDir = inputMagnitude > 0.01f
-                ? _playerMovement.CurrentMoveInput.normalized
-                : Vector2.zero;
-
-            bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
-            bool sharpTurn  = _prevInputDir.sqrMagnitude > 0.01f
-                && currentInputDir.sqrMagnitude > 0.01f
-                && Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
-
-            if (restarting || sharpTurn)
-            {
-                _phase = 0f;
-                _smoothedInputMag = 0f;
-            }
-
-            _prevInputDir = currentInputDir;
-            _wasMoving    = isMoving;
-
-            if (_recoveryCooldownFrameCounter > 0)
-            {
-                _recoveryCooldownFrameCounter--;
-            }
-
-            // ── STEP 3E: Stuck-Leg Recovery (Option D) ────────────────────────────────
-            //   Detection: character is stuck when ALL of the following are true for
-            //   _stuckFrameThreshold consecutive frames:
-            //     - SmoothedInputMag > 0.5 (actively trying to move)
-            //     - horizontalSpeedGate < _stuckSpeedThreshold (not actually moving)
-            //     - CharacterState is Standing or Moving (not Fallen/GettingUp/Airborne)
-            //   Recovery: drive both UpperLeg joints to forward-split pose (AngleAxis(-30f, _swingAxis))
-            //   with spring multiplier _recoverySpringMultiplier for _recoveryFrames frames,
-            //   then restore spring and resume normal gait.
-
-            bool stateAllowsRecovery = state == CharacterStateType.Standing ||
-                                       state == CharacterStateType.Moving;
-
-            if (!_isRecovering)
-            {
-                // Update stuck counter.
-                bool stuckCondition = _smoothedInputMag > 0.5f
-                    && horizontalSpeedGate < _stuckSpeedThreshold
-                    && _recoveryCooldownFrameCounter <= 0
-                    && stateAllowsRecovery;
-
-                if (stuckCondition)
-                {
-                    _stuckFrameCounter++;
-                }
-                else
-                {
-                    _stuckFrameCounter = 0;
-                }
-
-                // Trigger recovery when stuck long enough.
-                if (_stuckFrameCounter >= _stuckFrameThreshold && stateAllowsRecovery)
-                {
-                    _isRecovering = true;
-                    _recoveryFrameCounter = _recoveryFrames;
-                    _stuckFrameCounter = 0;
-                    SetLegSpringMultiplier(_recoverySpringMultiplier);
-                }
-            }
-
-            if (_isRecovering)
-            {
-                // Apply forward-split recovery pose to both UpperLeg joints.
-                Quaternion recoveryPose = Quaternion.AngleAxis(-30f, _swingAxis);
-                if (_upperLegL != null) { _upperLegL.targetRotation = recoveryPose; }
-                if (_upperLegR != null) { _upperLegR.targetRotation = recoveryPose; }
-
-                _recoveryFrameCounter--;
-                if (_recoveryFrameCounter <= 0)
-                {
-                    // Recovery complete: restore spring and resume normal gait.
-                    _isRecovering = false;
-                    _stuckFrameCounter = 0;
-                    _recoveryCooldownFrameCounter = RecoveryCooldownFrames;
-                    SetLegSpringMultiplier(1f);
-                }
-
-                // Skip normal gait this frame — recovery pose is already applied.
-                return;
-            }
-
-            // ────────────────────────────────────────────────────────────────────────────────
-            if (isMoving)
-            {
-                // STEP 4a: MOVING — advance phase accumulator based on actual speed.
-                //          effectiveCycles = max(_stepFrequency, horizontalSpeed × _stepFrequencyScale)
-                //          This ensures:
-                //            • At idle (zero velocity, non-zero input) we get _stepFrequency cycles/sec
-                //              (default 0 = stationary legs until the body actually moves).
-                //            • At 2 m/s with scale 1.5 → 3 cycles/sec.
-                //            • Legs never outrun or lag the body.
-                //          Re-use horizontalSpeedGate computed above (same value, already cached).
-                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
-                _phase += effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
-
-                // Wrap phase to [0, 2π) to prevent float overflow over time.
-                if (_phase >= 2f * Mathf.PI)
-                {
-                    _phase -= 2f * Mathf.PI;
-                }
-
-                // STEP 4b: Ramp up the smoothed input magnitude toward the actual value.
-                //          This is the anti-pop mechanism: instead of the gait amplitude
-                //          snapping to full value on frame 1 of resumed movement, it ramps
-                //          up smoothly. We use inputMagnitude (not speed) as the target here
-                //          so the ramp works even at zero actual velocity (starting to push).
-                float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
-                // Use whichever is higher — input magnitude or normalised velocity — as the
-                // amplitude target. This ensures legs animate at full amplitude when coasting
-                // with no key held, matching the visual expectation that moving = legs move.
-                float velocityMag01 = Mathf.Clamp01(horizontalSpeedGate / 2f); // normalise ~0–1 at 2 m/s max
-                float amplitudeTarget = Mathf.Max(inputMagnitude, velocityMag01);
-                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, amplitudeTarget, t);
-
-                // STEP 5: Compute sinusoidal upper-leg swing angles with optional lift boost.
-                //         Left leg uses phase directly; right leg is offset by π (half-cycle)
-                //         so they always swing in opposite directions — the alternating gait.
-                //         We scale amplitude by _smoothedInputMag to get the anti-pop ramp.
-                //
-                //         _upperLegLiftBoost adds extra upward bias to the forward-swinging leg
-                //         (whichever has sin > 0). This biases the knee toward the chest rather
-                //         than simply swinging the leg forward flat, for a high, deliberate stride.
-                float sinL = Mathf.Sin(_phase);
-                float sinR = Mathf.Sin(_phase + Mathf.PI);
-
-                float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
-                float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
-
-                float leftSwingDeg  = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
-                float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
-
-                // STEP 5b: Stranded-foot forward bias.
-                //   When BOTH feet are simultaneously behind the hips (dot with hip forward < 0)
-                //   and the player has active movement input, the normal alternating gait's
-                //   backward phase pushes already-stranded feet further back — a self-reinforcing
-                //   stuck loop. Bias both swing targets forward by the current gait amplitude
-                //   (stepAngle × smoothedInputMag) so the backward phase bottoms out at 0° (neutral)
-                //   instead of -stepAngle. This is the minimum shift needed to stop reinforcing
-                //   the stuck state: the forward phase is enhanced while the backward phase
-                //   becomes neutral. Within 1–2 gait cycles at least one foot replants in front,
-                //   the condition clears, and normal gait resumes (visible as a brief stumble).
-                //   Detection uses actual foot world positions (body-aware) measured against
-                //   the commanded travel heading when available, with hips forward as a fallback.
-                //   The bias magnitude uses the existing stepAngle and smoothedInputMag
-                //   (no new magic numbers).
-                if (inputMagnitude > 0.01f && _footL != null && _footR != null)
-                {
-                    bool leftBehind = IsFootBehindHips(_footL);
-                    bool rightBehind = IsFootBehindHips(_footR);
-                    if (leftBehind && rightBehind)
-                    {
-                        float strandedBias = _stepAngle * _smoothedInputMag;
-                        leftSwingDeg += strandedBias;
-                        rightSwingDeg += strandedBias;
-                        _isGaitBiasedForward = true;
-                    }
-                }
-
-                // STEP 6: Compute lower-leg knee-bend angle.
-                //         The knee holds a constant positive bend during gait so the character
-                //         looks dynamically flexed rather than stiff-legged.
-                float kneeBendDeg = _kneeAngle * _smoothedInputMag;
-
-                // STEP 7: Apply computed rotations to joint targetRotations.
-                if (_useWorldSpaceSwing)
-                {
-                    ApplyWorldSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
-                }
-                else
-                {
-                    ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
-                }
-            }
-            else
-            {
-                // STEP 4b: IDLE — set joints to identity, decay phase, and snap smoothed scale.
-                //
-                //          JOINT RESET: Set all four joint targetRotations directly to
-                //          Quaternion.identity every idle frame.  The joint's internal spring
-                //          drive then smoothly returns the physical limb to its rest angle.
-                //
-                //          PHASE DECAY: Move the phase toward 0 by a fixed amount per frame.
-                //          At speed 5 and dt 0.01 the phase shrinks by ~0.16 rad/frame,
-                //          clearing a full cycle (2π ≈ 6.28 rad) in ~40 frames / 0.4 s.
-                //          This ensures that when input next resumes, the phase is near 0 and
-                //          the first computed rotation is small, reducing the visual pop even
-                //          further on top of the smoothed-input ramp.
-                //
-                //          SMOOTH SCALE DECAY: Lerp _smoothedInputMag toward 0 rather than
-                //          snapping. This prevents mid-stride leg snap when key is released —
-                //          legs finish their current arc naturally before returning to rest.
-                float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
-                _phase = Mathf.Max(0f, _phase - decayStep);
-                float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
-                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
-
-                // Only reset joints to identity once smoothed magnitude is negligible.
-                if (_smoothedInputMag < 0.01f)
-                {
-                    _smoothedInputMag = 0f;
-                    SetAllLegTargetsToIdentity();
-                }
-                else
-                {
-                    // Continue driving joints at decaying amplitude so legs land smoothly.
-                    float sinL = Mathf.Sin(_phase);
-                    float sinR = Mathf.Sin(_phase + Mathf.PI);
-                    float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
-                    float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
-                    float leftSwingDeg  = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
-                    float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
-                    float kneeBendDeg   = _kneeAngle * _smoothedInputMag;
-                    ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
-                }
-            }
+            ApplyCommandFrame();
 
             // STEP 8: Debug logging — write one line every 10 FixedUpdate frames when enabled.
             if (_debugLog)
@@ -839,6 +551,320 @@ namespace PhysicsDrivenMovement.Character
                     WriteDebugLogLine();
                 }
             }
+        }
+
+        internal void BuildPassThroughCommands(
+            DesiredInput desiredInput,
+            LocomotionObservation observation,
+            out LegCommandOutput leftCommand,
+            out LegCommandOutput rightCommand)
+        {
+            if (_suppressIncomingCommandFrame)
+            {
+                leftCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
+                rightCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
+                return;
+            }
+
+            CharacterStateType state = observation.CharacterState;
+            if (state == CharacterStateType.Fallen ||
+                state == CharacterStateType.GettingUp ||
+                observation.IsLocomotionCollapsed)
+            {
+                _phase = 0f;
+                _smoothedInputMag = 0f;
+                _prevInputDir = Vector2.zero;
+                _wasMoving = false;
+                _stuckFrameCounter = 0;
+                leftCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
+                rightCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
+                return;
+            }
+
+            float inputMagnitude = desiredInput.MoveMagnitude;
+            float horizontalSpeedGate = observation.PlanarSpeed;
+            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.02f;
+
+            if (_isAirborne || state == CharacterStateType.Airborne)
+            {
+                isMoving = false;
+            }
+
+            float absAngVelY = Mathf.Abs(observation.AngularVelocity.y);
+            if (absAngVelY > _angularVelocityGaitThreshold)
+            {
+                isMoving = false;
+                _spinSuppressFrames = 0;
+            }
+            else if (absAngVelY < _angularVelocityGaitThreshold * 0.5f)
+            {
+                if (_spinSuppressFrames < 5)
+                {
+                    _spinSuppressFrames++;
+                    isMoving = false;
+                }
+            }
+            else
+            {
+                _spinSuppressFrames = 0;
+                isMoving = false;
+            }
+
+            Vector2 currentInputDir = inputMagnitude > 0.01f
+                ? desiredInput.MoveInput.normalized
+                : Vector2.zero;
+
+            bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
+            bool sharpTurn = _prevInputDir.sqrMagnitude > 0.01f &&
+                             currentInputDir.sqrMagnitude > 0.01f &&
+                             Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
+            if (restarting || sharpTurn)
+            {
+                _phase = 0f;
+                _smoothedInputMag = 0f;
+            }
+
+            _prevInputDir = currentInputDir;
+            _wasMoving = isMoving;
+
+            if (_recoveryCooldownFrameCounter > 0)
+            {
+                _recoveryCooldownFrameCounter--;
+            }
+
+            bool stateAllowsRecovery = state == CharacterStateType.Standing ||
+                                       state == CharacterStateType.Moving;
+
+            if (!_isRecovering)
+            {
+                bool stuckCondition = _smoothedInputMag > 0.5f &&
+                                      horizontalSpeedGate < _stuckSpeedThreshold &&
+                                      _recoveryCooldownFrameCounter <= 0 &&
+                                      stateAllowsRecovery;
+
+                if (stuckCondition)
+                {
+                    _stuckFrameCounter++;
+                }
+                else
+                {
+                    _stuckFrameCounter = 0;
+                }
+
+                if (_stuckFrameCounter >= _stuckFrameThreshold && stateAllowsRecovery)
+                {
+                    _isRecovering = true;
+                    _recoveryFrameCounter = _recoveryFrames;
+                    _stuckFrameCounter = 0;
+                    SetLegSpringMultiplier(_recoverySpringMultiplier);
+                }
+            }
+
+            Vector3 gaitReferenceDirection = desiredInput.MoveWorldDirection.sqrMagnitude > 0.0001f
+                ? desiredInput.MoveWorldDirection
+                : observation.BodyForward;
+
+            if (_isRecovering)
+            {
+                leftCommand = new LegCommandOutput(
+                    LocomotionLeg.Left,
+                    LegCommandMode.HoldPose,
+                    _phase,
+                    -30f,
+                    0f,
+                    1f,
+                    gaitReferenceDirection);
+                rightCommand = new LegCommandOutput(
+                    LocomotionLeg.Right,
+                    LegCommandMode.HoldPose,
+                    _phase + Mathf.PI,
+                    -30f,
+                    0f,
+                    1f,
+                    gaitReferenceDirection);
+
+                _recoveryFrameCounter--;
+                if (_recoveryFrameCounter <= 0)
+                {
+                    _isRecovering = false;
+                    _stuckFrameCounter = 0;
+                    _recoveryCooldownFrameCounter = RecoveryCooldownFrames;
+                    SetLegSpringMultiplier(1f);
+                }
+
+                return;
+            }
+
+            if (isMoving)
+            {
+                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
+                _phase += effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
+                if (_phase >= 2f * Mathf.PI)
+                {
+                    _phase -= 2f * Mathf.PI;
+                }
+
+                float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
+                float velocityMag01 = Mathf.Clamp01(horizontalSpeedGate / 2f);
+                float amplitudeTarget = Mathf.Max(inputMagnitude, velocityMag01);
+                _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, amplitudeTarget, t);
+
+                float sinL = Mathf.Sin(_phase);
+                float sinR = Mathf.Sin(_phase + Mathf.PI);
+                float liftBoostL = sinL > 0f ? sinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
+                float liftBoostR = sinR > 0f ? sinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
+                float leftSwingDeg = sinL * _stepAngle * _smoothedInputMag + liftBoostL;
+                float rightSwingDeg = sinR * _stepAngle * _smoothedInputMag + liftBoostR;
+
+                if (desiredInput.HasMoveIntent && _footL != null && _footR != null)
+                {
+                    bool leftBehind = IsFootBehindHips(_footL, gaitReferenceDirection);
+                    bool rightBehind = IsFootBehindHips(_footR, gaitReferenceDirection);
+                    if (leftBehind && rightBehind)
+                    {
+                        float strandedBias = _stepAngle * _smoothedInputMag;
+                        leftSwingDeg += strandedBias;
+                        rightSwingDeg += strandedBias;
+                        _isGaitBiasedForward = true;
+                    }
+                }
+
+                float kneeBendDeg = _kneeAngle * _smoothedInputMag;
+                leftCommand = new LegCommandOutput(
+                    LocomotionLeg.Left,
+                    LegCommandMode.Cycle,
+                    _phase,
+                    leftSwingDeg,
+                    kneeBendDeg,
+                    _smoothedInputMag,
+                    gaitReferenceDirection);
+                rightCommand = new LegCommandOutput(
+                    LocomotionLeg.Right,
+                    LegCommandMode.Cycle,
+                    _phase + Mathf.PI,
+                    rightSwingDeg,
+                    kneeBendDeg,
+                    _smoothedInputMag,
+                    gaitReferenceDirection);
+                return;
+            }
+
+            float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
+            _phase = Mathf.Max(0f, _phase - decayStep);
+            float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
+            _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
+
+            if (_smoothedInputMag < 0.01f)
+            {
+                _smoothedInputMag = 0f;
+                leftCommand = new LegCommandOutput(
+                    LocomotionLeg.Left,
+                    LegCommandMode.HoldPose,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    gaitReferenceDirection);
+                rightCommand = new LegCommandOutput(
+                    LocomotionLeg.Right,
+                    LegCommandMode.HoldPose,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                    gaitReferenceDirection);
+                return;
+            }
+
+            float idleSinL = Mathf.Sin(_phase);
+            float idleSinR = Mathf.Sin(_phase + Mathf.PI);
+            float idleLiftBoostL = idleSinL > 0f ? idleSinL * _upperLegLiftBoost * _smoothedInputMag : 0f;
+            float idleLiftBoostR = idleSinR > 0f ? idleSinR * _upperLegLiftBoost * _smoothedInputMag : 0f;
+            float idleLeftSwingDeg = idleSinL * _stepAngle * _smoothedInputMag + idleLiftBoostL;
+            float idleRightSwingDeg = idleSinR * _stepAngle * _smoothedInputMag + idleLiftBoostR;
+            float idleKneeBendDeg = _kneeAngle * _smoothedInputMag;
+
+            leftCommand = new LegCommandOutput(
+                LocomotionLeg.Left,
+                LegCommandMode.Cycle,
+                _phase,
+                idleLeftSwingDeg,
+                idleKneeBendDeg,
+                _smoothedInputMag,
+                gaitReferenceDirection);
+            rightCommand = new LegCommandOutput(
+                LocomotionLeg.Right,
+                LegCommandMode.Cycle,
+                _phase + Mathf.PI,
+                idleRightSwingDeg,
+                idleKneeBendDeg,
+                _smoothedInputMag,
+                gaitReferenceDirection);
+        }
+
+        internal void SetCommandFrame(
+            DesiredInput desiredInput,
+            LocomotionObservation observation,
+            LegCommandOutput leftCommand,
+            LegCommandOutput rightCommand)
+        {
+            if (_suppressIncomingCommandFrame)
+            {
+                return;
+            }
+
+            _commandDesiredInput = desiredInput;
+            _commandObservation = observation;
+            _leftLegCommand = leftCommand;
+            _rightLegCommand = rightCommand;
+            _hasCommandFrame = true;
+            ApplyCommandFrame();
+        }
+
+        internal void ClearCommandFrame()
+        {
+            _commandDesiredInput = default;
+            _commandObservation = default;
+            _leftLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
+            _rightLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
+            _hasCommandFrame = false;
+            _suppressIncomingCommandFrame = false;
+            _phase = 0f;
+            _smoothedInputMag = 0f;
+            _prevInputDir = Vector2.zero;
+            _wasMoving = false;
+            _stuckFrameCounter = 0;
+            _isRecovering = false;
+            _recoveryFrameCounter = 0;
+            _recoveryCooldownFrameCounter = 0;
+            _isGaitBiasedForward = false;
+            SetLegSpringMultiplier(1f);
+            SetAllLegTargetsToIdentity();
+        }
+
+        private void ApplyCommandFrame()
+        {
+            if (_leftLegCommand.Mode == LegCommandMode.Disabled && _rightLegCommand.Mode == LegCommandMode.Disabled)
+            {
+                SetAllLegTargetsToIdentity();
+                return;
+            }
+
+            float leftSwingDeg = _leftLegCommand.Mode == LegCommandMode.Disabled
+                ? 0f
+                : _leftLegCommand.SwingAngleDegrees;
+            float rightSwingDeg = _rightLegCommand.Mode == LegCommandMode.Disabled
+                ? 0f
+                : _rightLegCommand.SwingAngleDegrees;
+            float kneeBendDeg = Mathf.Max(_leftLegCommand.KneeAngleDegrees, _rightLegCommand.KneeAngleDegrees);
+
+            if (_useWorldSpaceSwing)
+            {
+                ApplyWorldSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
+                return;
+            }
+
+            ApplyLocalSpaceSwing(leftSwingDeg, rightSwingDeg, kneeBendDeg);
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -874,14 +900,11 @@ namespace PhysicsDrivenMovement.Character
         /// of (foot − hips) with that reference direction is negative.
         /// Returns false if the transform is null or the reference direction is degenerate.
         /// </summary>
-        private bool IsFootBehindHips(Transform footTransform)
+        private bool IsFootBehindHips(Transform footTransform, Vector3 referenceDirection)
         {
             if (footTransform == null) return false;
 
             Vector3 hipToFoot = footTransform.position - transform.position;
-            Vector3 referenceDirection = _playerMovement != null
-                ? _playerMovement.CurrentMoveWorldDirection
-                : Vector3.zero;
 
             if (referenceDirection.sqrMagnitude >= 0.0001f)
             {
@@ -919,7 +942,7 @@ namespace PhysicsDrivenMovement.Character
             //         proxy for actual movement direction regardless of torso pitch).
             //         Fallback: project CurrentMoveInput (XZ) when velocity is near zero
             //         (e.g. just starting to move).
-            Vector3 gaitForward = GetWorldGaitForward();
+            Vector3 gaitForward = GetWorldGaitForward(_commandDesiredInput, _commandObservation);
 
             // STEP B: Build the world-space swing axis.
             //         Cross(up, forward) gives the correct right-hand axis so that a positive
@@ -1026,7 +1049,7 @@ namespace PhysicsDrivenMovement.Character
         /// the XZ plane when velocity magnitude is below the threshold (e.g. start of motion).
         /// Returns <see cref="Vector3.zero"/> if neither source has a usable direction.
         /// </summary>
-        private Vector3 GetWorldGaitForward()
+        private Vector3 GetWorldGaitForward(DesiredInput desiredInput, LocomotionObservation observation)
         {
             // DESIGN: Velocity is the best proxy for actual movement direction because it is
             // already in world space and naturally accounts for camera yaw, slopes, and any
@@ -1047,14 +1070,7 @@ namespace PhysicsDrivenMovement.Character
             // returning zero because no fallback was attempted.
             const float VelocityThreshold = 0.05f;
 
-            Vector3 horizontalVel = Vector3.zero;
-            if (_hipsRigidbody != null)
-            {
-                horizontalVel = new Vector3(
-                    _hipsRigidbody.linearVelocity.x,
-                    0f,
-                    _hipsRigidbody.linearVelocity.z);
-            }
+            Vector3 horizontalVel = observation.PlanarVelocity;
 
             if (horizontalVel.magnitude >= VelocityThreshold)
             {
@@ -1068,14 +1084,9 @@ namespace PhysicsDrivenMovement.Character
             // CurrentMoveInput is a raw 2D input; without camera transform it maps X→world-X,
             // Y→world-Z. This is an approximation sufficient for tests and the zero-velocity
             // start-of-movement window. The velocity path takes over once the body is moving.
-            if (_playerMovement != null)
+            if (desiredInput.HasMoveIntent)
             {
-                Vector2 moveInput = _playerMovement.CurrentMoveInput;
-                if (moveInput.magnitude > 0.01f)
-                {
-                    Vector3 inputDir = new Vector3(moveInput.x, 0f, moveInput.y);
-                    return inputDir.normalized;
-                }
+                return desiredInput.MoveWorldDirection;
             }
 
             return Vector3.zero;
@@ -1154,11 +1165,9 @@ namespace PhysicsDrivenMovement.Character
                 yawAngularVelocity = _hipsRigidbody.angularVelocity.y;
             }
 
-            float inputMagnitude = _playerMovement != null ? _playerMovement.CurrentMoveInput.magnitude : 0f;
-            CharacterStateType currentState = _characterState != null
-                ? _characterState.CurrentState
-                : CharacterStateType.Standing;
-            Vector3 gf = GetWorldGaitForward();
+            float inputMagnitude = _commandDesiredInput.MoveMagnitude;
+            CharacterStateType currentState = _commandObservation.CharacterState;
+            Vector3 gf = GetWorldGaitForward(_commandDesiredInput, _commandObservation);
 
             Vector3 ulActual = _upperLegL != null ? _upperLegL.transform.localEulerAngles : Vector3.zero;
             Vector3 llActual = _lowerLegL != null ? _lowerLegL.transform.localEulerAngles : Vector3.zero;

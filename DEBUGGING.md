@@ -1,164 +1,171 @@
-# DEBUGGING.md — Physics Character Debugging Playbook
+# DEBUGGING.md — PhysicsDrivenMovementDemo Debugging Playbook
 
-*Hard-won lessons from building a ragdoll brawler. Read this before spinning up agents.*
-
----
-
-## The Golden Rules
-
-1. **Visual first, agent second.** Open the editor and look before writing code. Half the bugs are tuning, not logic.
-2. **Outcome-based tests catch real bugs. Input-based tests don't.** "targetRotation was set" is not the same as "the leg moved."
-3. **One system at a time.** Disable components to isolate. Is it the legs? Is it the balance? Is it both fighting?
-4. **Real runtime data beats guessing.** If you've sent two agents and it's still broken, add logging and look at the numbers.
+*Living document. Update this file whenever a debugging workflow, test pattern, logging tactic, or bug pattern proves useful more than once.*
 
 ---
 
-## Step-by-Step Debugging Protocol
+## Core Rules
 
-### Step 1 — Look first
-Before writing any code or sending any agent:
-- Open the scene in Play Mode
-- Move the character around
-- Describe exactly what you see: which body part, which direction, what phase of movement
-
-**Good:** "lower legs drag on the floor when moving, but first step looks correct"
-**Bad:** "walking looks wrong"
-
-### Step 2 — Try the Inspector
-Many bugs are just wrong default values. Try live tuning before spinning up an agent:
-- **Lean too much?** Try `BalanceController → P: 2000` (default was too low)
-- **Legs not lifting?** Try `LegAnimator → Knee Angle: 55°`, `Step Angle: 50°`
-- **Legs cycling wrong speed?** Try `Step Frequency Scale: 1.5–2.5`
-- **Steps too snappy/floaty?** Try `Idle Blend Speed: 3–8`
-
-If tuning fixes it → note the values and update the defaults in code. No agent needed.
-If tuning doesn't fix it → it's a code bug. Move to Step 3.
-
-### Step 3 — Isolate the system
-Disable components one at a time to find the culprit:
-- **Disable LegAnimator** — does the lean/issue go away? If yes: LegAnimator is causing it.
-- **Disable BalanceController** — do the legs move correctly? If yes: BC is fighting LA.
-- **Disable PlayerMovement** — does the character stand upright at rest? If no: BC upright gain is too weak.
-
-The two systems most likely to fight each other: **BalanceController vs LegAnimator** (they both touch leg joints — BC must defer to LA).
-
-### Step 4 — Add debug logging
-If you can't figure it out visually, ask an agent to add a `DEBUG_GAIT` define or a `[SerializeField] bool _debugLog` flag, then log:
-
-**For leg problems:**
-```
-LowerLeg_L world Y: {pos.y:F3}  |  gaitForward: {gaitForward}  |  cyclesPerSec: {rate:F2}
-```
-
-**For lean/balance problems:**
-```
-Hips pitch: {angle:F1}°  |  PD torque: {torque.magnitude:F0} Nm  |  velocity: {vel.magnitude:F2} m/s
-```
-
-Log every 10 FixedUpdate frames (not every frame — too spammy). Output goes to `Logs/debug_gait.txt` or just the Unity Console.
-
-**Then:** Run the game, reproduce the bug, paste the log or share the file. Real numbers will tell you exactly what's happening.
-
-### Step 5 — Write a failing test BEFORE the fix
-Once you know what's broken, write a test that fails because of the bug:
-- The test must use the **full component stack** (RagdollSetup → BalanceController → PlayerMovement → CharacterState → LegAnimator)
-- BalanceController must be **fully active** — don't disable it via test seams, that hides the real problem
-- Assert an **outcome** (world position, angular displacement) not an input (targetRotation value)
-- If the test passes with the bug still present → the test is too weak, tighten the threshold
-
-### Step 6 — Send the agent
-Now write the agent brief with:
-- Exact root cause (from Steps 1–4)
-- Specific files to read (CODING_STANDARDS.md + .copilot-instructions.md first, always)
-- The failing test as the acceptance criterion
-- Commit message format
-- `--timeout-seconds 1800` for anything touching PlayMode tests
+1. **If behavior is broken and tests are green, write the failing test first.** A bug that players can see should leave behind a test that can fail for the same reason.
+2. **Prefer outcome-based tests over implementation-based tests.** Test what the system does in the world, not whether an internal field, setter, or helper method changed.
+3. **If you cannot yet write the right failing test, add logging before guessing.** Unknown failure modes need evidence.
+4. **Start broad, then drill down.** First prove the whole feature is broken. Then add smaller outcome checks only if they help localize the fault.
+5. **Isolate one system at a time.** Disable or bypass subsystems temporarily to find the boundary where the bug appears.
+6. **Record what worked.** When a new trick or pattern pays off, add it here so the next debugging pass starts higher.
 
 ---
 
-## Known Bug Patterns
+## Investigation Record Rule
 
-### "Legs dragging / not lifting"
-**Most likely causes (in order):**
-1. BalanceController overwriting leg joint SLERP drives every frame → fix: `_deferLegJointsToAnimator = true`
-2. Wrong rotation axis — `Euler(x,0,0)` when joint needs Z axis (check `joint.axis` in RagdollSetup)
-3. Spring too weak to beat gravity → lower leg spring needs ~1200 Nm/rad minimum
-4. `RotationDriveMode` not set to Slerp — `targetRotation` only works with Slerp mode
-5. Lower legs catching on the floor collider → disable lower leg/ground layer collision
-
-**Quick test:** Select LowerLeg_L in hierarchy during Play Mode. Watch the local rotation in the Inspector. Is it changing? If yes → spring issue. If no → the targetRotation isn't being set or BC is overriding it.
-
-### "Too much forward lean during movement"
-**Most likely causes:**
-1. `BalanceController._kP` too low — needs ~2000 to counteract move force (default 800 was insufficient)
-2. Move force too high relative to upright correction — try `PlayerMovement.MoveForce: 150–200`
-3. BC and LA fighting → leg forces destabilising the torso
-
-**Quick test:** Set `P = 2000`, `Move Force = 150` in Inspector. If lean reduces significantly → just wrong defaults.
-
-### "Tap dancing / legs cycling with no forward movement"
-**Cause:** Step frequency was fixed (not velocity-scaled) — legs cycled at constant rate regardless of actual speed.
-**Fix:** Use velocity-scaled gait — `effectiveCycles = max(minFreq, speed × _stepFrequencyScale)`.
-
-### "Correct first step, then feet get left behind"
-**Cause:** Body acceleration outpaces gait cycle. Fix: velocity-scaled frequency (above) or reduce Move Force.
-
-### "Tests pass but visually broken"
-**Cause:** Tests are isolating systems that fight each other in reality. 
-**Fix:** Full-stack tests with BC fully active. If the test only passes with BC disabled → the fix is incomplete.
+- Treat the nearest task plan or chapter doc as the parent record for the investigation.
+- If no parent record exists and the debugging task is more than a one-shot check, create one under `Plans/` or the user-specified folder before the notes sprawl.
+- Keep the parent record current with the active symptom, current next step, blockers, and links to any child work-package docs or bug sheets.
+- Create a dedicated bug sheet once the investigation crosses the rollover thresholds in `Plans/README.md`, or whenever raw logs or telemetry would clutter the parent record.
+- Put failed hypotheses and experiment outcomes in the bug sheet so future agents do not retry them blindly.
 
 ---
 
-## Test Quality Checklist
+## Default Debugging Workflow
 
-Before committing any new test, ask:
+### Step 1 - Observe the symptom
+Before changing code:
+- Reproduce the issue in the fastest trustworthy path: scene, focused test, or both.
+- Describe the visible behavior precisely: what is wrong, when it happens, and what the player would notice.
+- If the issue looks like tuning rather than logic, try live Inspector changes first. If tuning fixes it, update the defaults in code and note the new baseline here.
 
-- [ ] Would this test have caught the bug that prompted it?
-- [ ] Is BC fully active during this test (not disabled via seam)?
-- [ ] Am I asserting a world-space outcome (position, angle) not just a setter call?
-- [ ] Have I simulated enough frames? (80+ for gait tests at 100Hz)
-- [ ] Is the threshold tight enough to catch a regression but loose enough to not be flaky?
+### Step 2 - Decide whether you can already test it
+- **If yes:** write or strengthen a failing test before changing code.
+- **If no:** add targeted logging or instrumentation until the failure is clear enough to test.
 
-**The dragging-feet test:** `LowerLeg world Y > spawn Y + 0.05m at some point in 80 frames` — this is the canonical example. A broken joint scores ~0m, a working one scores 0.1–0.2m.
+### Step 3 - Write the right failing test
+- Start with the broadest trustworthy outcome assertion you can support.
+- Prefer end-to-end or full-loop tests when multiple runtime systems interact.
+- If the broad test fails but does not localize the bug, add one or two narrower **outcome** assertions beneath it.
+- Avoid tests that only assert internal intent, such as target rotations, flags, or setter calls, unless there is no measurable external effect.
 
----
+Examples:
+- **Strong:** "character travels at least X meters in 10 seconds"
+- **Stronger diagnostic pair:** "character moves forward" plus "lower leg clears Y meters off the floor at least once"
+- **Weak:** "LegAnimator wrote targetRotation Z"
+- **Strong:** "character regains upright pose within N frames"
+- **Weak:** "CharacterState entered GettingUp"
 
-## Agent Brief Template
+### Step 4 - Add logging when the cause is unclear
+- Log real runtime quantities that separate the leading hypotheses.
+- Include frame count, time, current state, or phase in each line.
+- Sample every 5-10 FixedUpdate frames, not every frame.
+- Compare a good run to a bad run when possible.
+- Use gated logging (`DEBUG_*`, `[SerializeField] bool`, temporary defines) so it can be disabled cleanly after the investigation.
 
-```
-MANDATORY FIRST STEPS: Read CODING_STANDARDS.md, then .copilot-instructions.md, then AGENT_TEST_RUNNING.md, then [relevant scripts].
+### Step 5 - Isolate the layer
+- Temporarily disable or bypass one suspect subsystem at a time.
+- Ask which layer should absorb the fix: input, state machine, balance, gait, collision, environment data, or tests.
+- If the issue disappears only when a neighboring system is removed, the bug is likely at the boundary between them.
 
-ROOT CAUSE: [exact diagnosis from debugging steps above]
+### Step 6 - Fix the narrowest correct layer
+- Fix the first layer where the behavior becomes wrong.
+- Do not patch symptoms downstream if the source is clearly upstream.
+- If the fix is "just a better default," keep the stronger regression test anyway.
 
-FIX: [specific change — file, method, what to change]
-
-ACCEPTANCE CRITERION: [the failing test that must now pass, with BC fully active]
-
-Run tests: powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended
-
-All [N] existing tests must pass.
-Commit: '[description] (N passing)'
-Report: [what changed, test count, what to look for visually]
-```
-
----
-
-## Inspector Quick Reference (Good Starting Values)
-
-| Component | Field | Good Default | Notes |
-|-----------|-------|-------------|-------|
-| BalanceController | P | 2000 | 800 causes lean under move force |
-| BalanceController | D | 200 | Keep P/D ratio ~10:1 |
-| BalanceController | Defer Leg Joints To Animator | ✅ | Must be on when LegAnimator present |
-| LegAnimator | Step Angle | 50° | Upper leg swing amplitude |
-| LegAnimator | Knee Angle | 55° | Dial back once walking looks right |
-| LegAnimator | Step Frequency Scale | 1.5 | Cycles per m/s |
-| LegAnimator | Upper Leg Lift Boost | 15° | Extra upward bias on forward leg |
-| LegAnimator | Idle Blend Speed | 5 | Transition speed at stop/start |
-| LegAnimator | Use World Space Swing | ✅ | Must be on for correct stepping |
-| PlayerMovement | Move Force | 150–200 | Higher values cause lean |
-| RagdollSetup | Lower/Upper Leg Spring | 1200 | Minimum to beat gravity |
+### Step 7 - Verify and capture the learning
+- Run focused verification first, then widen coverage if the change crosses system boundaries.
+- Keep outcome-based assertions in place after the fix; they are the long-term protection.
+- When the investigation reveals a reusable tactic, threshold, or failure pattern, update this document and any relevant instructions.
 
 ---
 
-*Created 2026-02-22 after a full day of debugging. Update this file whenever a new bug pattern is solved.*
+## Test Design Checklist
+
+Before keeping a new test, ask:
+
+- [ ] Would this test have failed on the real bug I just saw?
+- [ ] Am I asserting an outcome in world space or over time, not just an implementation detail?
+- [ ] If multiple systems interact here, am I exercising the real stack rather than a convenient seam?
+- [ ] Have I simulated enough frames or seconds for the behavior to appear?
+- [ ] Is the threshold tight enough to catch regressions but loose enough to avoid flakiness?
+- [ ] If I added a narrower diagnostic assertion, is there still a broader whole-system assertion above it?
+
+---
+
+## Logging Checklist
+
+Before adding logs, ask:
+
+- [ ] Which competing explanations am I trying to separate?
+- [ ] Which 2-4 numbers will actually distinguish them?
+- [ ] Am I logging infrequently enough to keep the output readable?
+- [ ] Can I compare against a known-good run?
+- [ ] Is the logging gated so it can stay in the codebase safely or be removed cleanly?
+
+---
+
+## Current Repo Patterns
+
+### "Tests pass but the game still looks wrong"
+**Most likely issue:** the tests are proving that inputs were applied, not that the feature actually worked.
+
+**Fix:** add an outcome-based test at the level the player would notice first, then add one lower-level outcome assertion only if you need localization.
+
+### "Whole-system test is too broad to diagnose"
+**Best next step:** keep the broad outcome assertion, then add one or two smaller outcome checks one layer down.
+
+Examples:
+- movement distance + limb clearance
+- recovery time + hips tilt
+- jump apex + grounded transition
+
+### "I cannot tell what is wrong well enough to write the test"
+**Best next step:** add targeted logging before changing code.
+
+Useful physics-style signals:
+- position / height
+- tilt / angle error
+- velocity / angular velocity
+- grounded or contact state
+- state machine state
+- forces / torques / drive strength
+- progress through a course or task
+
+### "A feature only works when another system is disabled"
+**Most likely issue:** the bug lives at the integration boundary, not fully inside either system in isolation.
+
+**Fix:** keep the real stack active in the regression test and diagnose the ownership or ordering conflict.
+
+---
+
+## Repo-Specific Examples
+
+### Walking / locomotion
+Prefer:
+- distance travelled in a time window
+- whether the character stays upright while moving
+- whether limbs clear a minimum threshold during gait
+
+Avoid as the only assertion:
+- exact `targetRotation` values
+- exact phase accumulator values
+- whether a movement method was called
+
+### Recovery / balance
+Prefer:
+- upright recovery within N frames
+- hips or torso tilt below a threshold after stabilization
+- standing height or grounded state regained
+
+Avoid as the only assertion:
+- torque was applied
+- a state transition fired
+
+### Jump / airborne behavior
+Prefer:
+- leaves the ground
+- reaches an apex
+- returns to grounded state in a stable posture
+
+Avoid as the only assertion:
+- jump input flag consumed
+- impulse method invoked
+
+---
+
+*This is a living document. When a clever debugging approach, log shape, or stronger regression test proves itself, add it here.*

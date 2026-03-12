@@ -355,8 +355,9 @@ namespace PhysicsDrivenMovement.Editor
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
-            // STEP 4c: Add ArmAnimator, PlayerMovement, then CharacterState.
-            // Order matters: CharacterState.Awake caches PlayerMovement via GetComponent.
+            // STEP 4c: Add ArmAnimator, PlayerMovement, CharacterState, then LocomotionDirector.
+            // Order matters: CharacterState.Awake caches PlayerMovement via GetComponent,
+            // and the director should sit on the same Hips root as the legacy executors.
             rootGO.AddComponent<ArmAnimator>();
 
             // STEP 4d: Add and configure PlayerMovement with production-tuned values.
@@ -369,6 +370,13 @@ namespace PhysicsDrivenMovement.Editor
             }
 
             rootGO.AddComponent<CharacterState>();
+            LocomotionDirector director = rootGO.AddComponent<LocomotionDirector>();
+            {
+                using var so = new SerializedObject(director);
+                so.FindProperty("_passThroughMode").boolValue = true;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+
             rootGO.AddComponent<DebugPushForce>();
 
             // STEP 4e: Add GroundSensor to both feet and assign the Environment LayerMask.

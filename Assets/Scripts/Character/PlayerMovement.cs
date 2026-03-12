@@ -91,6 +91,13 @@ namespace PhysicsDrivenMovement.Character
         private bool _jumpPressedThisFrame;
 
         /// <summary>
+        /// Latest jump intent sampled for the current physics step before TryApplyJump consumes it.
+        /// This lets higher-level coordination systems observe the same jump intent without
+        /// changing the existing jump execution path.
+        /// </summary>
+        private bool _jumpRequestedThisPhysicsStep;
+
+        /// <summary>
         /// Override flag set by <see cref="SetJumpInputForTest"/>. When true,
         /// FixedUpdate reads <see cref="_jumpPressedThisFrame"/> directly and does not
         /// poll the Input System for the jump button.
@@ -122,6 +129,9 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        internal DesiredInput CurrentDesiredInput =>
+            new DesiredInput(_currentMoveInput, CurrentMoveWorldDirection, CurrentFacingDirection, _jumpRequestedThisPhysicsStep);
+
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
         /// FixedUpdate will not overwrite this value while the override is active.
@@ -148,6 +158,7 @@ namespace PhysicsDrivenMovement.Character
         public void SetJumpInputForTest(bool pressed)
         {
             _jumpPressedThisFrame = pressed;
+            _jumpRequestedThisPhysicsStep = pressed;
             _overrideJumpInput = true;
         }
 
@@ -220,6 +231,8 @@ namespace PhysicsDrivenMovement.Character
                 _jumpPressedThisFrame = _inputActions != null &&
                                         _inputActions.Player.Jump.WasPressedThisFrame();
             }
+
+            _jumpRequestedThisPhysicsStep = _jumpPressedThisFrame;
 
             // STEP 2: Early-out when required dependencies are missing.
             if (_rb == null || _balance == null)
@@ -424,8 +437,6 @@ namespace PhysicsDrivenMovement.Character
                     _currentFacingDirection.Normalize();
                 }
             }
-
-            _balance.SetFacingDirection(_currentFacingDirection);
         }
 
         private bool ShouldSuppressLocomotion()

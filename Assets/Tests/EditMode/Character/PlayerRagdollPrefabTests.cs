@@ -61,5 +61,6 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     $"GroundSensor on '{sensor.gameObject.name}' must include Environment layer ({GameSettings.LayerEnvironment}) in _groundLayers.");
             }
         }
+
     }
 }

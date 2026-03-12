@@ -26,6 +26,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private BalanceController _balance;
         private PlayerMovement _movement;
         private CharacterState _characterState;
+        private LocomotionDirector _director;
         private float _savedFixedDeltaTime;
         private int _savedSolverIterations;
         private int _savedSolverVelocityIterations;
@@ -55,6 +56,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _balance = _player.GetComponent<BalanceController>();
             _movement = _player.GetComponent<PlayerMovement>();
             _characterState = _player.GetComponent<CharacterState>();
+            _director = _player.GetComponent<LocomotionDirector>();
 
             Assert.That(_hipsBody, Is.Not.Null);
             Assert.That(_balance, Is.Not.Null);
@@ -170,6 +172,36 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Vector3 settledFacing = GetTargetFacingForward();
             Assert.That(Vector3.Angle(settledFacing, Vector3.right), Is.LessThan(5f));
+        }
+
+        [UnityTest]
+        public IEnumerator WithDirectorDisabled_MoveInputReportsDesiredIntent_ButDoesNotRetargetBalanceFacing()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for the Chapter 1 ownership path.");
+
+            _director.enabled = false;
+            Vector3 facingBefore = GetTargetFacingForward();
+
+            _movement.SetMoveInputForTest(Vector2.right);
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+
+            object desiredInput = GetNonPublicProperty<object>(_movement, "CurrentDesiredInput");
+            bool hasMoveIntent = GetNonPublicProperty<bool>(desiredInput, "HasMoveIntent");
+            Vector3 moveWorldDirection = GetNonPublicProperty<Vector3>(desiredInput, "MoveWorldDirection");
+            Vector3 facingAfter = GetTargetFacingForward();
+
+            Assert.That(hasMoveIntent, Is.True,
+                "PlayerMovement should still report move intent even when the director is disabled.");
+            Assert.That(Vector3.Dot(moveWorldDirection, Vector3.right), Is.GreaterThan(0.99f),
+                "PlayerMovement should continue reporting the desired move world direction.");
+            Assert.That(Vector3.Angle(facingBefore, facingAfter), Is.LessThan(1f),
+                "With LocomotionDirector disabled, raw move input should not retarget BalanceController directly. " +
+                "PlayerMovement should report intent only.");
         }
 
         [UnityTest]
@@ -300,6 +332,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             field.SetValue(instance, value);
+        }
+
+        private static T GetNonPublicProperty<T>(object instance, string propertyName)
+        {
+            PropertyInfo property = instance.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (property == null)
+            {
+                throw new InvalidOperationException(
+                    $"Missing property '{propertyName}' on {instance.GetType().Name}.");
+            }
+
+            object value = property.GetValue(instance);
+            if (value == null)
+            {
+                throw new InvalidOperationException(
+                    $"Property '{propertyName}' on {instance.GetType().Name} returned null.");
+            }
+
+            return (T)value;
         }
     }
 }

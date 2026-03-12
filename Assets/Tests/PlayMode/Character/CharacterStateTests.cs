@@ -79,10 +79,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
-        [UnityTest]
-        public IEnumerator Awake_WhenComponentInitializes_CurrentStateStartsStanding()
+        [Test]
+        public void Awake_WhenComponentInitializes_CurrentStateStartsStanding()
         {
-            yield return null;
             Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Standing),
                 "CharacterState must initialize to Standing for deterministic startup.");
         }

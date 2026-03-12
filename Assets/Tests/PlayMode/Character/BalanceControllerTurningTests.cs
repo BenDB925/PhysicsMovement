@@ -23,6 +23,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private PlayerMovement _movement;
         private CharacterState _characterState;
         private LegAnimator _legAnimator;
+        private LocomotionDirector _director;
         private ArmAnimator _armAnimator;
         private RagdollSetup _ragdollSetup;
         private Rigidbody _hipsRb;
@@ -211,6 +212,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_balance.IsGrounded, Is.False);
             Assert.That(_balance.IsFallen, Is.True);
         }
+        [UnityTest]
+        public IEnumerator WhenDirectorDisabled_RapidInputTurn_DoesNotEnterSnapRecovery()
+        {
+            yield return SpawnTurningCharacter(Quaternion.identity);
+
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for the Chapter 1 ownership path.");
+
+            _director.enabled = false;
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitPhysicsFrames(2);
+
+            _movement.SetMoveInputForTest(Vector2.right);
+            yield return WaitPhysicsFrames(2);
+
+            Assert.That(_balance.IsInSnapRecovery, Is.False,
+                "With LocomotionDirector disabled, BalanceController should not infer snap-recovery from raw movement input. " +
+                "Support recovery must come from the director-owned support command.");
+        }
 
         [UnityTest]
         public IEnumerator Fallen_UprightTorqueStillApplied_AidsRecovery()
@@ -387,6 +409,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _movement = _instance.GetComponent<PlayerMovement>();
             _characterState = _instance.GetComponent<CharacterState>();
             _legAnimator = _instance.GetComponent<LegAnimator>();
+            _director = _instance.GetComponent<LocomotionDirector>();
             _armAnimator = _instance.GetComponent<ArmAnimator>();
             _ragdollSetup = _instance.GetComponent<RagdollSetup>();
             _hipsRb = _instance.GetComponent<Rigidbody>();
@@ -395,6 +418,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
             Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing LegAnimator.");
+            Assert.That(_director, Is.Not.Null, "PlayerRagdoll prefab is missing LocomotionDirector.");
             Assert.That(_armAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing ArmAnimator.");
             Assert.That(_ragdollSetup, Is.Not.Null, "PlayerRagdoll prefab is missing RagdollSetup.");
             Assert.That(_hipsRb, Is.Not.Null, "PlayerRagdoll prefab is missing the hips Rigidbody.");

@@ -131,6 +131,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 }
             }
 
+            LogBaseline(
+                nameof(AfterFullSpinThenForwardInput_NoCrossoverTangle),
+                $"crossoverFrames={crossoverFrames} forwardFrames={ForwardFrames}");
+
             // Assert 1: crossover frame count < MaxCrossoverFrames.
             Assert.That(crossoverFrames, Is.LessThanOrEqualTo(MaxCrossoverFrames),
                 $"Legs crossed over (both >30°) for {crossoverFrames} frames out of {ForwardFrames}. " +
@@ -176,6 +180,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Assert 1: displacement ≥ 0.8 m.
             Vector3 disp  = _hipsGO.transform.position - posAtForwardStart;
             float   hDisp = new Vector3(disp.x, 0f, disp.z).magnitude;
+
+            LogBaseline(
+                nameof(AfterFullSpinThenForwardInput_DisplacementRecoveredWithin2s),
+                $"horizontalDisplacement={hDisp:F3}m yawAngularVelocityAtFrame150={angVelAtFrame150:F3}radPerSec");
+
             Assert.That(hDisp, Is.GreaterThanOrEqualTo(MinDisplacement),
                 $"Character must travel ≥ {MinDisplacement} m forward after spin. " +
                 $"Got {hDisp:F3} m. Leg tangle may be causing movement stall.");
@@ -202,6 +211,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 yield return new WaitForFixedUpdate();
             }
+        }
+
+        private static void LogBaseline(string scenario, string summary)
+        {
+            Debug.Log($"[C1.1 Baseline][SpinRecovery] {scenario} {summary}");
         }
 
         // ── Rig Construction ──────────────────────────────────────────────────
