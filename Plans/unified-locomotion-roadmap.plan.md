@@ -3,19 +3,19 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Begin Chapter 5 (Recast Balance As Body Support) now that Chapter 4 is complete.
+- Current next step: Begin Chapter 6 (Turn Recovery, Stumbles, And Catch Steps) now that Chapter 5 is complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, 3, and 4 are complete. Chapter 5 is next.
-- Chapter 4 delivered: `StepTarget` contract, `StepPlanner` with turn/braking/catch-step differentiation, and visual debug draw.
-- Next: begin Chapter 5 (Recast Balance As Body Support).
+- Chapters 1, 2, 3, 4, and 5 are complete. Chapter 6 is next.
+- Chapter 5 delivered: BalanceController is now a pure executor of BodySupportCommand; director-owned height maintenance, COM lean offset, documented precedence chain, `SetFacingDirection` marked obsolete, and grouped Inspector fields.
+- Next: begin Chapter 6 (Turn Recovery, Stumbles, And Catch Steps).
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 and C4.2 completion notes.
-- `Assets/Scripts/Character/Locomotion/StepPlanner.cs`: Chapter 4 step planner computing world-space step targets.
-- `Assets/Scripts/Character/Locomotion/StepTarget.cs`: Chapter 4 step target contract.
+- `Plans/unified-locomotion-roadmap/05-body-support.md`: completed Chapter 5 work package with C5.1-C5.5 completion notes.
+- `Assets/Scripts/Character/BalanceController.cs`: Chapter 5 executor with precedence documentation and header-grouped fields.
+- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director now owns height maintenance and COM lean intent.
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
 
 ## Child docs
@@ -23,7 +23,7 @@
 - [x] Chapter 2: Build A Better World Model (`Plans/unified-locomotion-roadmap/02-world-model.md`)
 - [x] Chapter 3: Replace Cycle-Only Gait With Leg States (`Plans/unified-locomotion-roadmap/03-leg-states.md`)
 - [x] Chapter 4: Add Step Planning And Foot Placement (`Plans/unified-locomotion-roadmap/04-step-planning.md`)
-- [ ] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
+- [x] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
 - [ ] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
 - [ ] Chapter 7: Terrain And Contact Robustness (`Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`)
 - [ ] Chapter 8: Expressive Motion And Feel (`Plans/unified-locomotion-roadmap/08-expressive-motion-and-feel.md`)
@@ -80,3 +80,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C4.4 braking stride/timing shortening. Added `BrakingStrideScale=0.35` and `BrakingTimingScale=0.25` constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportional to residual planar speed when `Braking` active. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
 - 2026-03-13: Completed C4.5 catch-step planning. Added `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20` constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral, and shorten timing when `StumbleRecovery` active, all scaled by support urgency (1 - SupportQuality). 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.
 - 2026-03-13: Completed C4.6 visual debug draw. Added `_debugStepTargetDraw` toggle to `LocomotionDirector` that draws per-leg step target markers (cross + confidence circle + timing pillar) in Scene view. Left=blue, right=green-yellow. No new tests (debug-draw-only). Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `b81e8cb`. Chapter 4 is now complete.
+- 2026-03-13: Completed Chapter 5 (Recast Balance As Body Support). C5.1 added `HeightMaintenanceScale` to `BodySupportCommand` (`6e21e34`). C5.2 moved height maintenance ownership to `LocomotionDirector` and gated startup assist by command scale (`0d17aa4`). C5.3 populated `DesiredLeanDegrees` from turn severity and added COM lean offset in `BalanceController` (`c5b85c4`). C5.4 documented override precedence chain, marked `SetFacingDirection` obsolete, documented yaw dual-gate rationale (`fc531e0`). C5.5 grouped serialized fields with `[Header]` attributes and fixed indentation (`92dd123`). Chapter 5 gate: EditMode 58/58, PlayMode 42/42. No new regressions.

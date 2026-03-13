@@ -129,11 +129,11 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on the Hips; applies a PD torque every FixedUpdate to execute the current body-support command and maintain upright plus yaw alignment. |
-| **Why** | Active ragdolls need continuous corrective torque to counteract gravity and perturbations, but locomotion-specific support intent now comes from `LocomotionDirector` instead of local turn heuristics. |
-| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `SetFacingDirection(Vector3)` — compatibility/manual seam; the runtime support-command path is consumed internally from `LocomotionDirector`. |
-| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector`; uses `CharacterState` only for fallen/get-up yaw suppression; feeds diagnostics through fallen/grounded state. |
-| **Phase** | 2C |
+| **What** | MonoBehaviour on the Hips; pure executor that applies PD torque every FixedUpdate to carry out the current `BodySupportCommand` — upright, yaw, height maintenance, and COM lean alignment. |
+| **Why** | Active ragdolls need continuous corrective torque to counteract gravity and perturbations. All locomotion-specific support intent now comes exclusively from `LocomotionDirector` via `BodySupportCommand`; the controller no longer introduces independent locomotion heuristics. |
+| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `StandingHipsHeight: float`, `SetFacingDirection(Vector3)` [Obsolete — kept for test compatibility]. The runtime support-command path is consumed internally from `LocomotionDirector`. |
+| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector` (upright/yaw/stabilization strength, height maintenance scale, desired lean degrees); uses `CharacterState` only for fallen/get-up yaw suppression; feeds diagnostics through fallen/grounded state. |
+| **Phase** | Unified locomotion roadmap C5 |
 
 ### `Character.PlayerMovement` — `Assets/Scripts/Character/PlayerMovement.cs`
 
