@@ -2,6 +2,17 @@
 
 Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)
 
+## Quick Load
+
+- C4.1 is complete: `StepTarget` contract added and threaded through `LegCommandOutput`. All call sites use `StepTarget.Invalid` as a placeholder until the planner produces real targets.
+- Next active slice is C4.2 (Basic Planner): create a `StepPlanner` class that computes step targets from speed, heading, COM drift, and turn severity.
+- The verification surface is the Chapter 3 PlayMode gate plus new step-planning EditMode tests.
+
+## Read More When
+
+- Continue into the work packages when adding planner logic, turn-specific widening, braking steps, or debug draw.
+- Continue into the verification gate when running regression checks after step-planning changes.
+
 ## Read this chapter when
 
 - introducing explicit step target data or foothold planning
@@ -20,12 +31,15 @@ Decide where each step should land based on movement goals and support needs.
 
 - Assets/Scripts/Character/LegAnimator.cs
 - Assets/Scripts/Character/BalanceController.cs
-- New step planning files under Assets/Scripts/Character/
+- Assets/Scripts/Character/Locomotion/StepTarget.cs
+- Assets/Scripts/Character/Locomotion/StepPlanner.cs (C4.2+)
+- Assets/Scripts/Character/Locomotion/LegCommandOutput.cs
 
 ## Work packages
 
 1. C4.1 Step target contract:
    - Add world-space step target data: landing position, desired timing, width bias, braking bias, and confidence.
+   - 2026-03-13: Complete. Added `StepTarget` readonly struct under `Assets/Scripts/Character/Locomotion/` with `LandingPosition`, `DesiredTiming`, `WidthBias`, `BrakingBias`, `Confidence`, and `IsValid`. `LegCommandOutput` constructor now takes `StepTarget` instead of `Vector3`; legacy `FootTarget` property preserved. All 10 `LegAnimator` call sites updated to `StepTarget.Invalid`. 4 new EditMode contract tests, reflection-based PlayMode test helper updated. Verification: EditMode 20/20, PlayMode 82 (79 passed, 3 ignored, 0 failed).
 2. C4.2 Basic planner:
    - Compute target from desired speed, heading, current COM drift, and turn severity.
 3. C4.3 Turn-specific planning:
@@ -39,9 +53,10 @@ Decide where each step should land based on movement goals and support needs.
 
 ## Verification gate
 
+- Assets/Tests/EditMode/Character/LocomotionContractsTests.cs
 - Assets/Tests/PlayMode/Character/GaitOutcomeTests.cs
-- Assets/Tests/PlayMode/Character/LapCourseTests.cs
-- Assets/Tests/PlayMode/Character/ForwardRunDiagnosticTests.cs
+- Assets/Tests/PlayMode/Character/LegAnimatorTests.cs
+- Assets/Tests/PlayMode/Character/LocomotionDirectorTests.cs
 - Assets/Tests/PlayMode/Character/MovementQualityTests.cs
 
 ## Exit criteria

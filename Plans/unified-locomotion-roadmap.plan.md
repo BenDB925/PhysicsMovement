@@ -3,19 +3,19 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Start Chapter 4 (Step Planning And Foot Placement) now that Chapter 3 is complete.
+- Current next step: Implement C4.2 (basic step planner) now that C4.1 contract is complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, and 3 are complete. Chapter 3 completion gate: PlayMode `82 total, 79 passed, 3 ignored, 0 failed`; EditMode `32/32`.
-- C3.5 failure handling resolved a confidence-cratering issue during sharp turns by guaranteeing a hard floor at the exit threshold when `hasTurnAsymmetry` is true, so walking-phase fallback latches release immediately on turn recognition.
-- Next: start Chapter 4 (Step Planning And Foot Placement).
+- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1 (step target contract) complete, C4.2 (basic planner) next.
+- C4.1 added `StepTarget` readonly struct and threaded it through `LegCommandOutput`; all call sites pass `StepTarget.Invalid` until the planner produces real targets.
+- Next: implement C4.2 basic step planner.
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/03-leg-states.md`: completed Chapter 3 work package with all C3.1-C3.5 completion notes.
+- `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 completion notes.
+- `Assets/Scripts/Character/Locomotion/StepTarget.cs`: Chapter 4 step target contract.
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
-- `Plans/unified-locomotion-roadmap/04-step-planning.md`: Chapter 4 plan doc (next active chapter).
 
 ## Child docs
 - [x] Chapter 1: Define The Single Voice (`Plans/unified-locomotion-roadmap/01-single-voice.md`)
@@ -73,3 +73,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-12: Started Chapter 3 C3.4 by splitting `LegAnimator` pass-through planning into per-leg turn/recovery reasons so sharp turns now give the outside leg `TurnSupport`, the inside leg an override cadence, and catch-step ownership to one selected recovery leg instead of mirroring stumble recovery across both legs. Focused verification passed via `LocomotionDirectorTests` (`11/11`), EditMode seam coverage (`19/19`), isolated `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`), and pairwise PlayMode combinations (`69/72`, `62/65`, and `63/66` all green aside from the expected ignores). The remaining blocker is the larger four-fixture mixed slice, which still shows order-sensitive `LowerLeg_WhenWalking_FeetAlternate` and `SharpTurn90_NoFallenTransition` reds.
 - 2026-03-13: Closed the C3.4 mixed-slice blocker. Prefab-backed PlayMode fixtures now switch to a fresh runtime scene via `PlayModeSceneIsolation.ResetToEmptyScene()` before instantiating their rigs, which stopped scene bleed from earlier scene-loading tests. `LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate()` now measures hips-relative lower-leg forward lead and separated peak timing instead of strict world-position crossing. The full mixed Chapter 3 PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, so the next open Chapter 3 work is C3.5 failure handling.
 - 2026-03-13: Completed C3.5 failure handling. Root cause: during walking `IsComOutsideSupport=true` craters confidence to 0, latching fallback blend; during the turn `PlantedConfidence=0.000` meant the planted-floor couldn't unlatch it. Fix: guaranteed a hard confidence floor at exit threshold during recognized sharp turns (`hasTurnAsymmetry`). Chapter 3 complete: PlayMode `82 total, 79 passed, 3 ignored, 0 failed`; EditMode `32/32`.
+- 2026-03-13: Completed C4.1 step target contract. Added `StepTarget` readonly struct with `LandingPosition`, `DesiredTiming`, `WidthBias`, `BrakingBias`, `Confidence`, `IsValid`. Threaded through `LegCommandOutput`; all 10 `LegAnimator` call sites pass `StepTarget.Invalid`. 4 new EditMode contract tests. Verification: EditMode 20/20, PlayMode 82 (79 passed, 3 ignored, 0 failed).
