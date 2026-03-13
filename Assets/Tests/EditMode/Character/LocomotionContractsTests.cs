@@ -33,6 +33,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string LegCommandModeTypeName = "PhysicsDrivenMovement.Character.LegCommandMode";
         private const string StepTargetTypeName = "PhysicsDrivenMovement.Character.StepTarget";
         private const string StepPlannerTypeName = "PhysicsDrivenMovement.Character.StepPlanner";
+        private const string RecoverySituationTypeName = "PhysicsDrivenMovement.Character.RecoverySituation";
+        private const string RecoveryStateTypeName = "PhysicsDrivenMovement.Character.RecoveryState";
 
         private static Assembly CharacterAssembly => typeof(PlayerMovement).Assembly;
 
@@ -60,6 +62,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 LegCommandModeTypeName,
                 StepTargetTypeName,
                 StepPlannerTypeName,
+                RecoverySituationTypeName,
+                RecoveryStateTypeName,
             };
 
             // Act / Assert
@@ -430,6 +434,9 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Arrange
             Type commandType = RequireType(BodySupportCommandTypeName);
 
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object noneEnum = Enum.Parse(situationType, "None");
+
             // Act — construct with explicit heightMaintenanceScale = 2.5
             object boosted = CreateInstance(commandType,
                 Vector3.forward,    // facingDirection
@@ -441,13 +448,14 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 1f,                 // stabilizationStrengthScale
                 0f,                 // recoveryBlend
                 0f,                 // recoveryKdBlend
-                2.5f);              // heightMaintenanceScale
+                2.5f,               // heightMaintenanceScale
+                noneEnum);          // recoverySituation
 
             // Act — construct with negative heightMaintenanceScale (should clamp to 0)
             object clamped = CreateInstance(commandType,
                 Vector3.forward, Vector3.up, Vector3.forward,
                 0f, 1f, 1f, 1f, 0f, 0f,
-                -1f);
+                -1f, noneEnum);
 
             // Assert
             float boostedScale = GetPropertyValue<float>(boosted, "HeightMaintenanceScale");
@@ -464,6 +472,9 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Arrange
             Type commandType = RequireType(BodySupportCommandTypeName);
 
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object noneEnum = Enum.Parse(situationType, "None");
+
             // Act — construct with nonzero desiredLeanDegrees
             object command = CreateInstance(commandType,
                 Vector3.forward,    // facingDirection
@@ -475,7 +486,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 1f,                 // stabilizationStrengthScale
                 0f,                 // recoveryBlend
                 0f,                 // recoveryKdBlend
-                1f);                // heightMaintenanceScale
+                1f,                 // heightMaintenanceScale
+                noneEnum);          // recoverySituation
 
             // Assert
             float leanDegrees = GetPropertyValue<float>(command, "DesiredLeanDegrees");
@@ -1484,6 +1496,240 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 gaitReferenceDirection,
                 stepFrequency,
             };
+        }
+
+        // ── C6.1: RecoverySituation enum tests ──────────────────────────
+
+        [Test]
+        public void RecoverySituation_EnumValues_ContainExpectedSituationsInPriorityOrder()
+        {
+            // Arrange
+            Type situationType = RequireType(RecoverySituationTypeName);
+
+            // Act
+            string[] names = Enum.GetNames(situationType);
+            Array values = Enum.GetValues(situationType);
+
+            // Assert — six named situations in ascending priority order.
+            Assert.That(names, Has.Length.EqualTo(6));
+            Assert.That(names, Is.EquivalentTo(new[] { "None", "HardTurn", "Reversal", "Slip", "NearFall", "Stumble" }));
+            // Verify ascending integer order matches declared priority.
+            int previousValue = -1;
+            foreach (object val in values)
+            {
+                int intVal = (int)val;
+                Assert.That(intVal, Is.GreaterThan(previousValue),
+                    $"RecoverySituation values should be in ascending priority order, but {val} ({intVal}) is not > {previousValue}.");
+                previousValue = intVal;
+            }
+        }
+
+        // ── C6.1: RecoveryState struct tests ─────────────────────────────
+
+        [Test]
+        public void RecoveryState_Inactive_IsNotActiveAndHasZeroBlend()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            FieldInfo inactiveField = stateType.GetField("Inactive",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(inactiveField, Is.Not.Null, "RecoveryState should expose a static Inactive field.");
+
+            // Act
+            object inactive = inactiveField.GetValue(null);
+
+            // Assert
+            bool isActive = GetPropertyValue<bool>(inactive, "IsActive");
+            float blend = GetPropertyValue<float>(inactive, "Blend");
+            Assert.That(isActive, Is.False, "Inactive state should not be active.");
+            Assert.That(blend, Is.EqualTo(0f).Within(0.001f), "Inactive state should have zero blend.");
+        }
+
+        [Test]
+        public void RecoveryState_Tick_DecrementsFramesAndExpiresAtZero()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object hardTurn = Enum.Parse(situationType, "HardTurn");
+
+            // Create a recovery state with 2 frames remaining.
+            object state = CreateInstance(stateType, hardTurn, 2, 10, 0.5f, 0.3f);
+
+            // Act — tick once.
+            MethodInfo tickMethod = RequireInstanceMethod(stateType, "Tick");
+            object ticked = tickMethod.Invoke(state, null);
+
+            // Assert — 1 frame remaining, still active.
+            int framesRemaining = GetPropertyValue<int>(ticked, "FramesRemaining");
+            bool isActive = GetPropertyValue<bool>(ticked, "IsActive");
+            Assert.That(framesRemaining, Is.EqualTo(1));
+            Assert.That(isActive, Is.True);
+
+            // Act — tick again to 0.
+            object expired = tickMethod.Invoke(ticked, null);
+
+            // Assert — should be Inactive.
+            bool expiredActive = GetPropertyValue<bool>(expired, "IsActive");
+            Assert.That(expiredActive, Is.False, "RecoveryState should become inactive after ticking to 0.");
+        }
+
+        [Test]
+        public void RecoveryState_Enter_HigherPriorityUpgradesCurrentSituation()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object hardTurn = Enum.Parse(situationType, "HardTurn");
+            object nearFall = Enum.Parse(situationType, "NearFall");
+
+            // Start with a HardTurn recovery at 5 frames remaining.
+            object current = CreateInstance(stateType, hardTurn, 5, 10, 0.3f, 0.4f);
+
+            // Act — enter with a higher priority NearFall.
+            MethodInfo enterMethod = stateType.GetMethod("Enter",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(enterMethod, Is.Not.Null, "RecoveryState should expose an Enter method.");
+            object upgraded = enterMethod.Invoke(current, new object[] { nearFall, 15, 0.8f, 0.6f });
+
+            // Assert — situation should be NearFall with the new duration.
+            object situation = GetPropertyValue<object>(upgraded, "Situation");
+            int frames = GetPropertyValue<int>(upgraded, "FramesRemaining");
+            Assert.That(situation.ToString(), Is.EqualTo("NearFall"));
+            Assert.That(frames, Is.EqualTo(15));
+        }
+
+        [Test]
+        public void RecoveryState_Enter_LowerPriorityDoesNotDowngrade()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object nearFall = Enum.Parse(situationType, "NearFall");
+            object hardTurn = Enum.Parse(situationType, "HardTurn");
+
+            // Start with a NearFall recovery at 8 frames remaining.
+            object current = CreateInstance(stateType, nearFall, 8, 15, 0.7f, 0.5f);
+
+            // Act — try to downgrade with a lower priority HardTurn.
+            MethodInfo enterMethod = stateType.GetMethod("Enter",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            object unchanged = enterMethod.Invoke(current, new object[] { hardTurn, 20, 0.3f, 0.4f });
+
+            // Assert — should keep NearFall with original frames.
+            object situation = GetPropertyValue<object>(unchanged, "Situation");
+            int frames = GetPropertyValue<int>(unchanged, "FramesRemaining");
+            Assert.That(situation.ToString(), Is.EqualTo("NearFall"));
+            Assert.That(frames, Is.EqualTo(8));
+        }
+
+        [Test]
+        public void RecoveryState_Enter_SameSituationExtendsIfLongerWindow()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object slip = Enum.Parse(situationType, "Slip");
+
+            // Start with a Slip recovery at 3 frames remaining out of 10.
+            object current = CreateInstance(stateType, slip, 3, 10, 0.5f, 0.2f);
+
+            // Act — re-enter same Slip with 8 frames.
+            MethodInfo enterMethod = stateType.GetMethod("Enter",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            object extended = enterMethod.Invoke(current, new object[] { slip, 8, 0.6f, 0.3f });
+
+            // Assert — should extend to 8 frames with new severity.
+            int frames = GetPropertyValue<int>(extended, "FramesRemaining");
+            float severity = GetPropertyValue<float>(extended, "EntrySeverity");
+            Assert.That(frames, Is.EqualTo(8));
+            Assert.That(severity, Is.EqualTo(0.6f).Within(0.001f));
+        }
+
+        [Test]
+        public void RecoveryState_Blend_RampsCorrectlyOverDuration()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object stumble = Enum.Parse(situationType, "Stumble");
+
+            // Create with 10 frames remaining out of 10 total.
+            object state = CreateInstance(stateType, stumble, 10, 10, 0.9f, 0.8f);
+
+            // Act / Assert — blend should be 1.0 at start.
+            float blendFull = GetPropertyValue<float>(state, "Blend");
+            Assert.That(blendFull, Is.EqualTo(1f).Within(0.01f));
+
+            // Tick down to 5 frames remaining.
+            MethodInfo tickMethod = RequireInstanceMethod(stateType, "Tick");
+            object halfway = state;
+            for (int i = 0; i < 5; i++)
+            {
+                halfway = tickMethod.Invoke(halfway, null);
+            }
+
+            float blendHalf = GetPropertyValue<float>(halfway, "Blend");
+            Assert.That(blendHalf, Is.EqualTo(0.5f).Within(0.01f));
+        }
+
+        // ── C6.1: BodySupportCommand RecoverySituation propagation ──────
+
+        [Test]
+        public void BodySupportCommand_RecoverySituation_DefaultsToNone()
+        {
+            // Arrange / Act
+            Type commandType = RequireType(BodySupportCommandTypeName);
+
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object noneEnum = Enum.Parse(situationType, "None");
+
+            // Create with explicit None recovery situation (reflection requires all params).
+            object command = CreateInstance(
+                commandType,
+                Vector3.forward,   // facingDirection
+                Vector3.up,        // uprightDirection
+                Vector3.forward,   // travelDirection
+                0f,                // desiredLeanDegrees
+                1f,                // uprightStrengthScale
+                1f,                // yawStrengthScale
+                1f,                // stabilizationStrengthScale
+                0f,                // recoveryBlend
+                0f,                // recoveryKdBlend
+                1f,                // heightMaintenanceScale
+                noneEnum);         // recoverySituation
+
+            // Assert
+            object situation = GetPropertyValue<object>(command, "RecoverySituation");
+            Assert.That(situation.ToString(), Is.EqualTo("None"));
+        }
+
+        [Test]
+        public void BodySupportCommand_RecoverySituation_PropagatesWhenSet()
+        {
+            // Arrange
+            Type commandType = RequireType(BodySupportCommandTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object nearFall = Enum.Parse(situationType, "NearFall");
+
+            // Act
+            object command = CreateInstance(
+                commandType,
+                Vector3.forward,   // facingDirection
+                Vector3.up,        // uprightDirection
+                Vector3.forward,   // travelDirection
+                0f,                // desiredLeanDegrees
+                1f,                // uprightStrengthScale
+                1f,                // yawStrengthScale
+                1f,                // stabilizationStrengthScale
+                0.5f,              // recoveryBlend
+                0.3f,              // recoveryKdBlend
+                1f,                // heightMaintenanceScale
+                nearFall);         // recoverySituation
+
+            // Assert
+            object situation = GetPropertyValue<object>(command, "RecoverySituation");
+            Assert.That(situation.ToString(), Is.EqualTo("NearFall"));
         }
 
         private static object InvokeComputeSwingTarget(object planner, object[] args)

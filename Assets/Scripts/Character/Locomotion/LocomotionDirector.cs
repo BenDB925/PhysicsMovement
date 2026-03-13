@@ -113,7 +113,7 @@ namespace PhysicsDrivenMovement.Character
         private Vector3 _currentPredictedDriftDirection;
         private string _currentObservationTelemetryLine;
         private float _nextObservationTelemetryTime;
-        private int _recoveryFramesRemaining;
+        private RecoveryState _currentRecoveryState;
 
         public bool HasCommandFrame { get; private set; }
 
@@ -196,7 +196,7 @@ namespace PhysicsDrivenMovement.Character
             _currentPredictedDriftDirection = Vector3.zero;
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
-            _recoveryFramesRemaining = 0;
+            _currentRecoveryState = RecoveryState.Inactive;
             _supportObservationFilter = null;
             ResetOutputs();
         }
@@ -399,9 +399,9 @@ namespace PhysicsDrivenMovement.Character
             float turnRisk = _currentDesiredInput.HasMoveIntent ? _currentObservation.TurnSeverity : 0f;
             float turnSupportRisk = Mathf.Clamp01(turnRisk * supportRisk);
 
-            // STEP 2: Promote the observation risk into the support recovery window instead of relying on raw direction history.
+            // STEP 2: Classify the current situation and promote observation risk into the typed recovery state.
             UpdateObservationRecoveryState(supportRisk);
-            int recoveryFramesThisStep = _recoveryFramesRemaining;
+            int recoveryFramesThisStep = _currentRecoveryState.FramesRemaining;
             float recoveryBlend = ComputeRecoveryBlend(recoveryFramesThisStep);
 
             int kdStartOffset = _balanceController.SnapRecoveryDurationFrames - _balanceController.SnapRecoveryKdDurationFrames;
@@ -430,7 +430,8 @@ namespace PhysicsDrivenMovement.Character
                 stabilizationStrengthScale,
                 recoveryBlend,
                 recoveryKdBlend,
-                heightMaintenanceScale: heightMaintenanceScale);
+                heightMaintenanceScale: heightMaintenanceScale,
+                recoverySituation: _currentRecoveryState.Situation);
 
             // STEP 4: Keep the existing pass-through leg-command seam until the dedicated gait slices replace it.
             if (_legAnimator != null && _passThroughMode)
@@ -447,10 +448,10 @@ namespace PhysicsDrivenMovement.Character
                 _rightLegCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
             }
 
-            // STEP 5: Advance the recovery countdown after publishing the command frame for this step.
-            if (recoveryFramesThisStep > 0)
+            // STEP 5: Advance the recovery state after publishing the command frame for this step.
+            if (_currentRecoveryState.IsActive)
             {
-                _recoveryFramesRemaining = recoveryFramesThisStep - 1;
+                _currentRecoveryState = _currentRecoveryState.Tick();
             }
         }
 
@@ -465,35 +466,99 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 2: Refresh the recovery window whenever the observation model reports a risky turn or support failure.
-            if (ShouldEnterObservationRecovery(supportRisk))
+            // STEP 2: Classify the current situation and enter/extend the recovery state if warranted.
+            RecoverySituation situation = ClassifyRecoverySituation(supportRisk);
+            if (situation != RecoverySituation.None)
             {
-                _recoveryFramesRemaining = Mathf.Max(
-                    _recoveryFramesRemaining,
-                    _balanceController.SnapRecoveryDurationFrames);
+                int duration = GetRecoveryDuration(situation);
+                _currentRecoveryState = _currentRecoveryState.Enter(
+                    situation,
+                    duration,
+                    supportRisk,
+                    _currentObservation.TurnSeverity);
             }
         }
 
-        private bool ShouldEnterObservationRecovery(float supportRisk)
+        /// <summary>
+        /// Classifies the current observation into a named recovery situation.
+        /// Returns <see cref="RecoverySituation.None"/> when no recovery is needed.
+        /// Priority order (highest first): Stumble, NearFall, Slip, Reversal, HardTurn.
+        /// </summary>
+        private RecoverySituation ClassifyRecoverySituation(float supportRisk)
         {
-            // STEP 1: Sharp-turn recovery should start once the observation model reports both heading demand and weak support.
-            bool turnRiskExceedsThreshold = _currentObservation.TurnSeverity >= _turnRecoveryThreshold;
+            LocomotionObservation obs = _currentObservation;
+
+            // STEP 1: Confirmed collapse watchdog → Stumble (highest priority).
+            if (obs.IsLocomotionCollapsed)
+            {
+                return RecoverySituation.Stumble;
+            }
+
+            // STEP 2: Critical support deficit without collapse → NearFall.
+            // Uses a higher threshold than the general recovery entry to catch
+            // the pre-collapse regime where an aggressive catch-step can still save the character.
+            const float NearFallSupportRiskThreshold = 0.7f;
+            if (supportRisk >= NearFallSupportRiskThreshold && obs.SupportQuality < 0.3f)
+            {
+                return RecoverySituation.NearFall;
+            }
+
+            // STEP 3: High slip estimate while support is compromised → Slip.
+            const float SlipThreshold = 0.4f;
+            if (obs.SlipEstimate >= SlipThreshold && supportRisk >= _supportRiskRecoveryThreshold)
+            {
+                return RecoverySituation.Slip;
+            }
+
+            // STEP 4: Near-180° reversal with degraded support → Reversal.
+            const float ReversalTurnSeverityThreshold = 0.85f;
+            if (obs.TurnSeverity >= ReversalTurnSeverityThreshold &&
+                supportRisk >= _supportRiskRecoveryThreshold)
+            {
+                return RecoverySituation.Reversal;
+            }
+
+            // STEP 5: Sharp turn with combined risk → HardTurn.
+            bool turnRiskExceedsThreshold = obs.TurnSeverity >= _turnRecoveryThreshold;
             bool supportRiskExceedsThreshold = supportRisk >= _supportRiskRecoveryThreshold;
 
-            // STEP 2: COM-outside-support and watchdog collapse are immediate observation-level recovery signals.
-            if (_currentObservation.IsLocomotionCollapsed)
-            {
-                return true;
-            }
-
-            if (_currentObservation.IsComOutsideSupport &&
-                _currentObservation.ContactConfidence > 0f &&
+            if (obs.IsComOutsideSupport &&
+                obs.ContactConfidence > 0f &&
                 turnRiskExceedsThreshold)
             {
-                return true;
+                return RecoverySituation.HardTurn;
             }
 
-            return turnRiskExceedsThreshold && supportRiskExceedsThreshold;
+            if (turnRiskExceedsThreshold && supportRiskExceedsThreshold)
+            {
+                return RecoverySituation.HardTurn;
+            }
+
+            return RecoverySituation.None;
+        }
+
+        /// <summary>
+        /// Returns the recovery duration in physics frames for a given situation.
+        /// Situations with longer expected resolution get more time.
+        /// </summary>
+        private int GetRecoveryDuration(RecoverySituation situation)
+        {
+            int baseFrames = _balanceController.SnapRecoveryDurationFrames;
+            switch (situation)
+            {
+                case RecoverySituation.HardTurn:
+                    return baseFrames;
+                case RecoverySituation.Reversal:
+                    return Mathf.RoundToInt(baseFrames * 1.3f);
+                case RecoverySituation.Slip:
+                    return Mathf.RoundToInt(baseFrames * 1.2f);
+                case RecoverySituation.NearFall:
+                    return Mathf.RoundToInt(baseFrames * 1.5f);
+                case RecoverySituation.Stumble:
+                    return Mathf.RoundToInt(baseFrames * 1.5f);
+                default:
+                    return baseFrames;
+            }
         }
 
         private float ComputeSupportRisk(LocomotionObservation observation)
@@ -685,7 +750,7 @@ namespace PhysicsDrivenMovement.Character
             _currentPredictedDriftDirection = Vector3.zero;
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
-            _recoveryFramesRemaining = 0;
+            _currentRecoveryState = RecoveryState.Inactive;
             HasCommandFrame = false;
         }
 

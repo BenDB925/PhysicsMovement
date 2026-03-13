@@ -5,7 +5,8 @@ namespace PhysicsDrivenMovement.Character
     /// <summary>
     /// Support command emitted for body-level execution systems such as BalanceController.
     /// It describes the intended facing, upright bias, and support strength without committing
-    /// to any specific actuator implementation yet.
+    /// to any specific actuator implementation yet. Includes the classified recovery situation
+    /// so executors can adapt their response without re-deriving the cause.
     /// </summary>
     internal readonly struct BodySupportCommand
     {
@@ -21,7 +22,8 @@ namespace PhysicsDrivenMovement.Character
             float stabilizationStrengthScale,
             float recoveryBlend,
             float recoveryKdBlend,
-            float heightMaintenanceScale = 1f)
+            float heightMaintenanceScale = 1f,
+            RecoverySituation recoverySituation = RecoverySituation.None)
         {
             // STEP 1: Normalize the command frame so executors can consume a stable facing/up basis.
             FacingDirection = NormalizePlanarDirection(facingDirection, Vector3.forward);
@@ -36,6 +38,7 @@ namespace PhysicsDrivenMovement.Character
             HeightMaintenanceScale = Mathf.Max(0f, heightMaintenanceScale);
             RecoveryBlend = Mathf.Clamp01(recoveryBlend);
             RecoveryKdBlend = Mathf.Clamp01(recoveryKdBlend);
+            RecoverySituation = recoverySituation;
         }
 
         public Vector3 FacingDirection { get; }
@@ -61,6 +64,9 @@ namespace PhysicsDrivenMovement.Character
         public float RecoveryBlend { get; }
 
         public float RecoveryKdBlend { get; }
+
+        /// <summary>The classified recovery situation driving this command, or None for normal locomotion.</summary>
+        public RecoverySituation RecoverySituation { get; }
 
         public static BodySupportCommand PassThrough(Vector3 facingDirection)
         {
