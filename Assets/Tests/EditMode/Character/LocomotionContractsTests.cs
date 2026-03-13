@@ -1191,6 +1191,141 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "DefaultCadence at 2.5 m/s should produce a full-length stride with no braking shortening.");
         }
 
+        // ── C4.5 Catch-step planning tests ──────────────────────────────────────
+
+        [Test]
+        public void StepPlanner_CatchStep_LongerStrideThanDefaultCadence()
+        {
+            // Arrange — StumbleRecovery catch-step at low support quality should produce
+            //           a longer stride than DefaultCadence at the same speed and quality.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] catchArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object catchResult = InvokeComputeSwingTarget(planner, catchArgs);
+
+            // Assert
+            float defaultZ = GetPropertyValue<Vector3>(defaultResult, "LandingPosition").z;
+            float catchZ = GetPropertyValue<Vector3>(catchResult, "LandingPosition").z;
+            Assert.That(catchZ, Is.GreaterThan(defaultZ),
+                "Catch-step stride should extend beyond default cadence to recapture support.");
+        }
+
+        [Test]
+        public void StepPlanner_CatchStep_WiderLateralThanDefaultCadence()
+        {
+            // Arrange — StumbleRecovery catch-step should widen the lateral offset
+            //           compared to DefaultCadence at the same support quality.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] catchArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object catchResult = InvokeComputeSwingTarget(planner, catchArgs);
+
+            // Assert — Left leg has negative X lateral offset; catch-step should be more negative (wider out).
+            float defaultX = GetPropertyValue<Vector3>(defaultResult, "LandingPosition").x;
+            float catchX = GetPropertyValue<Vector3>(catchResult, "LandingPosition").x;
+            Assert.That(catchX, Is.LessThan(defaultX),
+                "Left-leg catch-step should step wider (more negative X) than default cadence.");
+        }
+
+        [Test]
+        public void StepPlanner_CatchStep_ShorterTimingThanDefaultCadence()
+        {
+            // Arrange — StumbleRecovery catch-step should shorten landing timing
+            //           compared to DefaultCadence to anchor the foot sooner.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] catchArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object catchResult = InvokeComputeSwingTarget(planner, catchArgs);
+
+            // Assert
+            float defaultTiming = GetPropertyValue<float>(defaultResult, "DesiredTiming");
+            float catchTiming = GetPropertyValue<float>(catchResult, "DesiredTiming");
+            Assert.That(catchTiming, Is.LessThan(defaultTiming),
+                "Catch-step timing should be shorter than default cadence to anchor sooner.");
+        }
+
+        [Test]
+        public void StepPlanner_CatchStep_LowerSupportQualityProducesMoreAggressiveStep()
+        {
+            // Arrange — at lower support quality the catch-step stride and lateral
+            //           adjustments should be more aggressive (wider, farther).
+            object planner = CreateStepPlannerInstance();
+            object[] mildArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.7f,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f);
+            object[] severArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.2f,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f);
+
+            // Act
+            object mildResult = InvokeComputeSwingTarget(planner, mildArgs);
+            object severResult = InvokeComputeSwingTarget(planner, severArgs);
+
+            // Assert — lower support quality → larger stride and wider lateral
+            Vector3 mildLanding = GetPropertyValue<Vector3>(mildResult, "LandingPosition");
+            Vector3 severLanding = GetPropertyValue<Vector3>(severResult, "LandingPosition");
+            Assert.That(severLanding.z, Is.GreaterThan(mildLanding.z),
+                "Lower support quality should produce a farther catch-step stride.");
+            Assert.That(severLanding.x, Is.LessThan(mildLanding.x),
+                "Lower support quality should produce a wider (more negative X for left leg) catch-step.");
+        }
+
         // ── StepPlanner test helpers ────────────────────────────────────────────
 
         private static object CreateStepPlannerInstance()

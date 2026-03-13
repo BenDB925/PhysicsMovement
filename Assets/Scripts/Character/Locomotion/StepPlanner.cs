@@ -47,6 +47,16 @@ namespace PhysicsDrivenMovement.Character
         private const float BrakingStrideScale = 0.35f;
         private const float BrakingTimingScale = 0.25f;
 
+        // STEP 3d: Catch-step differentiation (C4.5).
+        //          When support quality drops and the leg enters a StumbleRecovery catch-step,
+        //          the planner extends stride, widens the lateral offset, and shortens timing
+        //          to plant a broader, farther anchor that recaptures support.
+        //          All three scale with support urgency (1 - SupportQuality) so a mild dip
+        //          produces a small correction while a near-airborne catch-step reaches aggressively.
+        private const float CatchStepStrideScale = 0.30f;
+        private const float CatchStepWidenScale = 0.12f;
+        private const float CatchStepTimingScale = 0.20f;
+
         // STEP 4: COM drift compensation — when the COM leads or trails the support center,
         //         the step target shifts to recapture balance.
         private const float DriftCompensationScale = 0.35f;
@@ -82,15 +92,17 @@ namespace PhysicsDrivenMovement.Character
                 return StepTarget.Invalid;
             }
 
-            // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3)
-            //         and braking intent (C4.4).
+            // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3),
+            //         braking intent (C4.4), and catch-step urgency (C4.5).
             float planarSpeed = observation.PlanarSpeed;
             float strideOffset = ComputeStrideOffset(planarSpeed);
             strideOffset = ApplyTurnStrideAdjustment(strideOffset, transitionReason, observation.TurnSeverity);
             strideOffset = ApplyBrakingStrideAdjustment(strideOffset, transitionReason, planarSpeed);
+            strideOffset = ApplyCatchStepStrideAdjustment(strideOffset, transitionReason, observation.SupportQuality);
 
-            // STEP 3: Compute lateral offset based on which leg.
+            // STEP 3: Compute lateral offset based on which leg, widened for catch-steps (C4.5).
             float lateralOffset = ComputeLateralOffset(leg);
+            lateralOffset = ApplyCatchStepLateralAdjustment(lateralOffset, transitionReason, observation.SupportQuality);
 
             // STEP 4: Compute drift compensation from velocity.
             Vector3 driftCompensation = ComputeDriftCompensation(
@@ -109,9 +121,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 6: Compute timing, biases, and confidence.
             //         C4.3: Outside turn leg gets extended timing for the wider arc.
             //         C4.4: Braking leg gets shortened timing for quicker plant.
+            //         C4.5: Catch-step leg gets shortened timing to anchor sooner.
             float desiredTiming = ComputeDesiredTiming(legPhase, stepFrequency);
             desiredTiming = ApplyTurnTimingAdjustment(desiredTiming, transitionReason, observation.TurnSeverity);
             desiredTiming = ApplyBrakingTimingAdjustment(desiredTiming, transitionReason, planarSpeed);
+            desiredTiming = ApplyCatchStepTimingAdjustment(desiredTiming, transitionReason, observation.SupportQuality);
             float widthBias = ComputeWidthBias(leg, observation.TurnSeverity,
                 gaitReferenceDirection, observation.BodyForward);
             float brakingBias = ComputeBrakingBias(desiredInput, planarSpeed);
@@ -290,6 +304,56 @@ namespace PhysicsDrivenMovement.Character
 
             float speedFactor = Mathf.Clamp01(planarSpeed / 3f);
             return baseTiming * (1f - BrakingTimingScale * speedFactor);
+        }
+
+        private static float ApplyCatchStepStrideAdjustment(
+            float baseStride,
+            LegStateTransitionReason reason,
+            float supportQuality)
+        {
+            // STEP 3d: Catch-step (StumbleRecovery) extends stride so the recovery foot
+            //          lands farther forward, providing a wider base to arrest the fall.
+            //          The extension scales with support urgency (1 - SupportQuality).
+            if (reason != LegStateTransitionReason.StumbleRecovery)
+            {
+                return baseStride;
+            }
+
+            float urgency = 1f - Mathf.Clamp01(supportQuality);
+            return baseStride + baseStride * CatchStepStrideScale * urgency;
+        }
+
+        private static float ApplyCatchStepLateralAdjustment(
+            float baseLateral,
+            LegStateTransitionReason reason,
+            float supportQuality)
+        {
+            // STEP 3d: Catch-step widens the lateral offset (away from center) to broaden
+            //          the support polygon. The sign of baseLateral already encodes left/right.
+            if (reason != LegStateTransitionReason.StumbleRecovery)
+            {
+                return baseLateral;
+            }
+
+            float urgency = 1f - Mathf.Clamp01(supportQuality);
+            float widen = CatchStepWidenScale * urgency;
+            return baseLateral + Mathf.Sign(baseLateral) * widen;
+        }
+
+        private static float ApplyCatchStepTimingAdjustment(
+            float baseTiming,
+            LegStateTransitionReason reason,
+            float supportQuality)
+        {
+            // STEP 3d: Catch-step shortens timing so the recovery foot plants sooner,
+            //          anchoring the body before the fall progresses.
+            if (reason != LegStateTransitionReason.StumbleRecovery)
+            {
+                return baseTiming;
+            }
+
+            float urgency = 1f - Mathf.Clamp01(supportQuality);
+            return baseTiming * (1f - CatchStepTimingScale * urgency);
         }
     }
 }
