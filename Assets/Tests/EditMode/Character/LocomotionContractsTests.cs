@@ -459,6 +459,31 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void BodySupportCommand_ConstructedWithLeanDegrees_PreservesLeanValue()
+        {
+            // Arrange
+            Type commandType = RequireType(BodySupportCommandTypeName);
+
+            // Act — construct with nonzero desiredLeanDegrees
+            object command = CreateInstance(commandType,
+                Vector3.forward,    // facingDirection
+                Vector3.up,         // uprightDirection
+                Vector3.forward,    // travelDirection
+                7.5f,               // desiredLeanDegrees
+                1f,                 // uprightStrengthScale
+                1f,                 // yawStrengthScale
+                1f,                 // stabilizationStrengthScale
+                0f,                 // recoveryBlend
+                0f,                 // recoveryKdBlend
+                1f);                // heightMaintenanceScale
+
+            // Assert
+            float leanDegrees = GetPropertyValue<float>(command, "DesiredLeanDegrees");
+            Assert.That(leanDegrees, Is.EqualTo(7.5f).Within(0.0001f),
+                "DesiredLeanDegrees should be preserved on construction.");
+        }
+
+        [Test]
         public void LegStateFrame_ConstructedWithExplicitRole_PreservesLegStateAndTransitionReason()
         {
             // Arrange

@@ -66,6 +66,10 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Additional COM-stabilization scale applied as support risk rises so weak support receives stronger body support.")]
         private float _supportRiskStabilizationBoost = 0.75f;
 
+        [SerializeField, Range(0f, 15f)]
+        [Tooltip("Maximum lean angle (degrees) the director requests during turns. Scales with turn severity so the COM target shifts toward the turn.")]
+        private float _maxTurnLeanDegrees = 5f;
+
         [Header("Debug Visibility")]
         [SerializeField]
         [Tooltip("Draws the current support geometry, COM offset, and predicted drift direction in the Scene view while the game is running.")]
@@ -412,12 +416,15 @@ namespace PhysicsDrivenMovement.Character
             float uprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
             float stabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
             float heightMaintenanceScale = ComputeHeightMaintenanceScale();
+            float desiredLeanDegrees = _currentDesiredInput.HasMoveIntent
+                ? _currentObservation.TurnSeverity * _maxTurnLeanDegrees
+                : 0f;
 
             _currentBodySupportCommand = new BodySupportCommand(
                 supportFacing,
                 Vector3.up,
                 supportTravel,
-                0f,
+                desiredLeanDegrees,
                 uprightStrengthScale,
                 yawStrengthScale,
                 stabilizationStrengthScale,

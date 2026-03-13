@@ -209,6 +209,11 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Horizontal velocity damping for COM stabilization. Reduces oscillation.")]
         private float _comStabilizationDamping = 60f;
 
+        [SerializeField, Range(0f, 0.5f)]
+        [Tooltip("Maximum horizontal COM target shift (meters) when DesiredLeanDegrees is at its peak. " +
+                 "The shift nudges the stabilization target toward the facing direction during turns.")]
+        private float _maxComLeanOffset = 0.12f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -619,12 +624,29 @@ namespace PhysicsDrivenMovement.Character
                 uprightAngle);
 
             // STEP 3.6: COM-over-feet horizontal stabilization.
-            // When grounded or near standing height, pulls the hips back toward the
-            // midpoint of the feet to prevent topple that rotational PD torque alone
-            // cannot correct.
+            // DESIGN: The COM target is always the feet midpoint. The director controls
+            // stabilization gain via StabilizationStrengthScale and can request a small
+            // horizontal shift via DesiredLeanDegrees to let the character lean into turns.
+            // If future step-planning work needs an explicit target position, add a
+            // ComTargetOffset field to BodySupportCommand rather than computing it here.
             if (_enableComStabilization && effectivelyGrounded && _footL != null && _footR != null)
             {
                 Vector3 feetCenter = (_footL.transform.position + _footR.transform.position) * 0.5f;
+
+                // STEP 3.6b: Shift the stabilization target toward the facing direction
+                // when the director requests lean (e.g. during turns).
+                float leanDegrees = _currentBodySupportCommand.DesiredLeanDegrees;
+                if (leanDegrees > 0f && _maxComLeanOffset > 0f)
+                {
+                    float leanFraction = Mathf.Clamp01(leanDegrees / 15f);
+                    Vector3 facingXZ = Vector3.ProjectOnPlane(
+                        _currentBodySupportCommand.FacingDirection, Vector3.up);
+                    if (facingXZ.sqrMagnitude > 0.0001f)
+                    {
+                        feetCenter += facingXZ.normalized * (leanFraction * _maxComLeanOffset);
+                    }
+                }
+
                 Vector3 hipsPos = _rb.position;
                 Vector3 horizontalOffset = new Vector3(
                     hipsPos.x - feetCenter.x,
