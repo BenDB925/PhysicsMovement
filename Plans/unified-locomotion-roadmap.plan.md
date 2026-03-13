@@ -3,17 +3,18 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Implement C4.2 (basic step planner) now that C4.1 contract is complete.
+- Current next step: Implement C4.3 (turn-specific step planning) now that C4.2 basic planner is complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1 (step target contract) complete, C4.2 (basic planner) next.
-- C4.1 added `StepTarget` readonly struct and threaded it through `LegCommandOutput`; all call sites pass `StepTarget.Invalid` until the planner produces real targets.
-- Next: implement C4.2 basic step planner.
+- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1 and C4.2 complete, C4.3 (turn-specific planning) next.
+- C4.2 added `StepPlanner` internal class wired into `LegAnimator.BuildPassThroughCommands()` moving path; computes stride, lateral offset, drift compensation, turn width bias, braking bias, timing, and confidence for swing-like legs.
+- Next: implement C4.3 turn-specific step differentiation.
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 completion notes.
+- `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 and C4.2 completion notes.
+- `Assets/Scripts/Character/Locomotion/StepPlanner.cs`: Chapter 4 step planner computing world-space step targets.
 - `Assets/Scripts/Character/Locomotion/StepTarget.cs`: Chapter 4 step target contract.
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
 
@@ -74,3 +75,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Closed the C3.4 mixed-slice blocker. Prefab-backed PlayMode fixtures now switch to a fresh runtime scene via `PlayModeSceneIsolation.ResetToEmptyScene()` before instantiating their rigs, which stopped scene bleed from earlier scene-loading tests. `LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate()` now measures hips-relative lower-leg forward lead and separated peak timing instead of strict world-position crossing. The full mixed Chapter 3 PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, so the next open Chapter 3 work is C3.5 failure handling.
 - 2026-03-13: Completed C3.5 failure handling. Root cause: during walking `IsComOutsideSupport=true` craters confidence to 0, latching fallback blend; during the turn `PlantedConfidence=0.000` meant the planted-floor couldn't unlatch it. Fix: guaranteed a hard confidence floor at exit threshold during recognized sharp turns (`hasTurnAsymmetry`). Chapter 3 complete: PlayMode `82 total, 79 passed, 3 ignored, 0 failed`; EditMode `32/32`.
 - 2026-03-13: Completed C4.1 step target contract. Added `StepTarget` readonly struct with `LandingPosition`, `DesiredTiming`, `WidthBias`, `BrakingBias`, `Confidence`, `IsValid`. Threaded through `LegCommandOutput`; all 10 `LegAnimator` call sites pass `StepTarget.Invalid`. 4 new EditMode contract tests. Verification: EditMode 20/20, PlayMode 82 (79 passed, 3 ignored, 0 failed).
+- 2026-03-13: Completed C4.2 basic step planner. Added internal `StepPlanner` class under `Assets/Scripts/Character/Locomotion/`. Wired into `LegAnimator.BuildPassThroughCommands()` moving path so swing-like legs now get computed step targets with stride, lateral offset, drift compensation, turn width bias, braking bias, timing, and confidence. Recovery/idle/falling paths still use `StepTarget.Invalid`. 7 new EditMode tests. Verification: EditMode 43/43, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `0866f63`.

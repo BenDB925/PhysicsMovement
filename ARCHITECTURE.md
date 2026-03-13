@@ -159,11 +159,11 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | Internal locomotion types now cover the command/observation contracts (`DesiredInput`, `FootContactObservation`, `SupportObservation`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, `LocomotionLeg`, `LegCommandMode`), the Chapter 3 leg-role contracts (`LegStateType`, `LegStateTransitionReason`, `LegStateFrame`), the new `LegStateMachine` per-leg controller, the Chapter 4 `StepTarget` step-planning contract, the shared Chapter 2 sensor helpers (`SupportGeometry`, `LocomotionSensorSnapshot`, `LocomotionSensorAggregator`), and the C2.3 `SupportObservationFilter` that stabilizes planted/unplanted support confidence over time. |
+| **What** | Internal locomotion types now cover the command/observation contracts (`DesiredInput`, `FootContactObservation`, `SupportObservation`, `LocomotionObservation`, `BodySupportCommand`, `LegCommandOutput`, `LocomotionLeg`, `LegCommandMode`), the Chapter 3 leg-role contracts (`LegStateType`, `LegStateTransitionReason`, `LegStateFrame`), the new `LegStateMachine` per-leg controller, the Chapter 4 `StepTarget` step-planning contract, the Chapter 4 `StepPlanner` that computes world-space step targets from locomotion observations, the shared Chapter 2 sensor helpers (`SupportGeometry`, `LocomotionSensorSnapshot`, `LocomotionSensorAggregator`), and the C2.3 `SupportObservationFilter` that stabilizes planted/unplanted support confidence over time. |
 | **Why** | Keeps one test-backed handoff boundary for director-owned commands while centralizing raw foot-contact, hips-motion, yaw-rate, support-geometry sampling, confidence filtering, explicit leg-state labels, step-target planning data, and the new left/right controller timing so support and gait decisions are expressed in locomotion language instead of repeated transform math or one-frame sensor noise. |
 | **Public Surface** | Internal to `PhysicsDrivenMovement.Character`; neutral helpers such as `BodySupportCommand.PassThrough(...)`, `LegCommandOutput.Disabled(LocomotionLeg)`, `LegCommandOutput.State`, `LegCommandOutput.TransitionReason`, `LegStateMachine.SyncFromLegacyPhase(...)`, `StepTarget.Invalid`, and support-geometry classification methods seed the current migration slice without widening public APIs. |
 | **Collaborators** | Sits between `GroundSensor`, `PlayerMovement`, `BalanceController`, `CharacterState`, `LocomotionCollapseDetector`, `LegAnimator`, and `LocomotionDirector`. |
-| **Phase** | Unified locomotion roadmap C1.2-C4.1 |
+| **Phase** | Unified locomotion roadmap C1.2-C4.2 |
 
 ### `Character.CharacterState` — `Assets/Scripts/Character/CharacterState.cs`
 
