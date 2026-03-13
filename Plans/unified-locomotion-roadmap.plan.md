@@ -3,23 +3,24 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Start Chapter 3 C3.5 failure handling now that the C3.4 asymmetry slice and its mixed PlayMode gate are green.
-- Active blockers: None on the current Chapter 3 asymmetry gate. C3.5 fallback behavior is still open implementation work.
+- Current next step: Start Chapter 4 (Step Planning And Foot Placement) now that Chapter 3 is complete.
+- Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1 and 2 are complete, Chapter 3 C3.4 is now complete, and C3.5 remains the next open locomotion slice.
-- The former mixed C3.4 blocker is resolved: the four-fixture PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` now passes `78 passed, 3 ignored, 0 failed` after isolating prefab-backed PlayMode fixtures onto fresh runtime scenes and updating the lower-leg alternation test to measure hips-relative lead instead of brittle world-position crossing.
-- Open Chapter 3 for C3.5 fallback behavior next, and use `LOCOMOTION_BASELINES.md` only when comparing known pre-existing reds such as the two isolated `MovementQualityTests` failures.
+- Chapters 1, 2, and 3 are complete. Chapter 3 completion gate: PlayMode `82 total, 79 passed, 3 ignored, 0 failed`; EditMode `32/32`.
+- C3.5 failure handling resolved a confidence-cratering issue during sharp turns by guaranteeing a hard floor at the exit threshold when `hasTurnAsymmetry` is true, so walking-phase fallback latches release immediately on turn recognition.
+- Next: start Chapter 4 (Step Planning And Foot Placement).
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/03-leg-states.md`: active Chapter 3 work package with C3.4 completion notes and the remaining C3.5 work.
+- `Plans/unified-locomotion-roadmap/03-leg-states.md`: completed Chapter 3 work package with all C3.1-C3.5 completion notes.
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
+- `Plans/unified-locomotion-roadmap/04-step-planning.md`: Chapter 4 plan doc (next active chapter).
 
 ## Child docs
 - [x] Chapter 1: Define The Single Voice (`Plans/unified-locomotion-roadmap/01-single-voice.md`)
 - [x] Chapter 2: Build A Better World Model (`Plans/unified-locomotion-roadmap/02-world-model.md`)
-- [ ] Chapter 3: Replace Cycle-Only Gait With Leg States (`Plans/unified-locomotion-roadmap/03-leg-states.md`)
+- [x] Chapter 3: Replace Cycle-Only Gait With Leg States (`Plans/unified-locomotion-roadmap/03-leg-states.md`)
 - [ ] Chapter 4: Add Step Planning And Foot Placement (`Plans/unified-locomotion-roadmap/04-step-planning.md`)
 - [ ] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
 - [ ] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
@@ -30,8 +31,8 @@
 ## Work packages
 1. [x] Clean Chapter 1 authority boundaries and lock the pre-director baseline.
 2. [x] Promote a stable locomotion world model through Chapter 2.
-3. [ ] Finish Chapter 3 gait-state migration with C3.4 state-aware asymmetry and C3.5 failure handling.
-4. [ ] Execute Chapters 4 through 8 in order once the Chapter 3 bridge is stable enough to build on.
+3. [x] Finish Chapter 3 gait-state migration with C3.1-C3.5.
+4. [ ] Execute Chapters 4 through 8 in order now that the Chapter 3 bridge is stable.
 5. [ ] Keep Chapter 9 validation, telemetry, and baseline artifacts current throughout the roadmap.
 
 ## Target Runtime Authority Model
@@ -71,3 +72,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-12: Completed Chapter 3 C3.3 by giving `LegAnimator` dedicated `RecoveryStep` timing and stronger `CatchStep` execution, clearing the focused `LegAnimatorTests` slice (`58 passed, 3 ignored, 0 failed`) and the broader mixed Chapter 3 gate (`77 passed, 3 ignored, 0 failed`). A separate `MovementQualityTests` rerun stayed at the same two known pre-existing reds.
 - 2026-03-12: Started Chapter 3 C3.4 by splitting `LegAnimator` pass-through planning into per-leg turn/recovery reasons so sharp turns now give the outside leg `TurnSupport`, the inside leg an override cadence, and catch-step ownership to one selected recovery leg instead of mirroring stumble recovery across both legs. Focused verification passed via `LocomotionDirectorTests` (`11/11`), EditMode seam coverage (`19/19`), isolated `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`), and pairwise PlayMode combinations (`69/72`, `62/65`, and `63/66` all green aside from the expected ignores). The remaining blocker is the larger four-fixture mixed slice, which still shows order-sensitive `LowerLeg_WhenWalking_FeetAlternate` and `SharpTurn90_NoFallenTransition` reds.
 - 2026-03-13: Closed the C3.4 mixed-slice blocker. Prefab-backed PlayMode fixtures now switch to a fresh runtime scene via `PlayModeSceneIsolation.ResetToEmptyScene()` before instantiating their rigs, which stopped scene bleed from earlier scene-loading tests. `LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate()` now measures hips-relative lower-leg forward lead and separated peak timing instead of strict world-position crossing. The full mixed Chapter 3 PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, so the next open Chapter 3 work is C3.5 failure handling.
+- 2026-03-13: Completed C3.5 failure handling. Root cause: during walking `IsComOutsideSupport=true` craters confidence to 0, latching fallback blend; during the turn `PlantedConfidence=0.000` meant the planted-floor couldn't unlatch it. Fix: guaranteed a hard confidence floor at exit threshold during recognized sharp turns (`hasTurnAsymmetry`). Chapter 3 complete: PlayMode `82 total, 79 passed, 3 ignored, 0 failed`; EditMode `32/32`.

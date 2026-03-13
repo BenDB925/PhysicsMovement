@@ -4,10 +4,10 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 ## Quick Load
 
-- Use this chapter for gait-state migration: replace mirrored phase-only cadence with explicit per-leg state labels, transition reasons, and eventually state-driven execution.
-- Completed work so far covers C3.1 explicit state/reason contracts, C3.2 per-leg controller timing, C3.3 animator bridge execution, and C3.4 state-aware asymmetry. C3.5 failure handling is now the remaining open Chapter 3 slice.
+- Chapter 3 is complete. All five work packages (C3.1-C3.5) have passed their verification gates.
+- Use this chapter for reference when future gait-state changes build on the explicit per-leg state labels, transition reasons, and state-driven execution model.
 - The main verification surface is `LocomotionContractsTests`, `LocomotionDirectorTests`, `LegAnimatorTests`, `GaitOutcomeTests`, and `StumbleStutterRegressionTests`.
-- Read Chapter 1 first if a gait-state change also moves ownership boundaries, and coordinate with Chapter 2 when new state transitions depend on observation-model signals.
+- The Chapter 3 completion gate was `82 total, 79 passed, 3 ignored, 0 failed` in PlayMode and `32/32 passed` in EditMode.
 
 ## Read More When
 
@@ -65,6 +65,9 @@ Move from pure phase-offset gait to explicit per-leg state roles.
    - 2026-03-13: The full mixed PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, closing the remaining C3.4 blocker.
 5. C3.5 Failure handling:
    - If state machine confidence is low, degrade gracefully to stable fallback gait rather than hard snapping.
+   - 2026-03-13: Complete. `ComputeStateMachineConfidence` restructured into four explicit steps with the planted-confidence floor applied AFTER all penalties (STEP 4). During recognized sharp turns (`hasTurnAsymmetry`), the floor is guaranteed at least the exit threshold so walking-phase fallback latches release immediately when the turn is recognized. Developing-turn gate softens COM-outside-support penalty, and turn-attenuation reduces the unexplained-asymmetry penalty proportionally to turn severity.
+   - 2026-03-13: Root cause from diagnostic logging: during normal walking, `IsComOutsideSupport=true` craters confidence to 0 (latch triggers). During the turn, `PlantedConfidence=0.000` on most frames so the planted-floor cannot unlatch. The fix guarantees a hard floor at exit threshold during recognized turns so the state machine stays confident enough for turn-specific leg roles.
+   - 2026-03-13: Verification passed via both target tests (`SharpTurn_TurnSupport` + `ConvergesTowardMirroredFallback`), the full Chapter 3 PlayMode gate (`79 passed, 3 ignored, 0 failed`), and full EditMode suite (`32/32`).
 
 ## Verification gate
 
