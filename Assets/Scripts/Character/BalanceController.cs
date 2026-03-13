@@ -24,8 +24,7 @@ namespace PhysicsDrivenMovement.Character
         // - Lift off ground → IsGrounded = false, balance torque reduces: ✗ (pending in-editor verification)
 
         // ─── Serialised Fields ──────────────────────────────────────────────
-
-        [SerializeField, Range(0f, 5000f)]
+        [Header("Upright PD Gains")]        [SerializeField, Range(0f, 5000f)]
         [Tooltip("Proportional gain for the upright (pitch + roll) correction torque. " +
                  "Higher = snappier recovery, lower = softer wobble. " +
                  "Only affects pitch and roll axes; yaw is controlled by _kPYaw separately. " +
@@ -39,6 +38,7 @@ namespace PhysicsDrivenMovement.Character
                  "Default 200: maintains 10:1 P/D ratio with _kP = 2000 (raised from 80).")]
         private float _kD = 200f;
 
+        [Header("Yaw Control")]
         [SerializeField, Range(0f, 2000f)]
         [Tooltip("Proportional gain for the yaw correction torque (rotation around world Y). " +
                  "Controls how quickly the character turns to face the desired direction. " +
@@ -100,6 +100,7 @@ namespace PhysicsDrivenMovement.Character
                  "character regains full stability before the next turn.")]
         private int _snapRecoveryKdDurationFrames = 100;
 
+        [Header("Fallen Thresholds")]
         [SerializeField, Range(0f, 90f)]
         [Tooltip("World-up deviation in degrees at which the character enters the fallen state. " +
              "Use a higher value than exit threshold to avoid chatter near the boundary.")]
@@ -110,13 +111,14 @@ namespace PhysicsDrivenMovement.Character
              "Use a lower value than enter threshold to provide hysteresis.")]
         private float _fallenExitAngleThreshold = 55f;
 
-           [SerializeField]
-           [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
-                  "to help recover from seated startup poses.")]
-           private bool _enableStartupStandAssist = false;
+        [Header("Startup Stand Assist")]
+        [SerializeField]
+        [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
+                 "to help recover from seated startup poses.")]
+        private bool _enableStartupStandAssist = false;
 
-           [SerializeField, Range(0f, 5f)]
-           [Tooltip("How long after first ground contact the startup stand assist is allowed to run.")]
+        [SerializeField, Range(0f, 5f)]
+        [Tooltip("How long after first ground contact the startup stand assist is allowed to run.")]
         private float _startupStandAssistDuration = 4f;
 
         [SerializeField]
@@ -131,18 +133,18 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Minimum persistent assist scale while seated/fallen so lift remains physically meaningful.")]
         private float _persistentSeatedRecoveryMinAssistScale = 0.55f;
 
-           [SerializeField, Range(0f, 2f)]
-           [Tooltip("Target minimum hips world height for startup stand assist. " +
-                  "Assist applies only when current height is below this value.")]
+        [SerializeField, Range(0f, 2f)]
+        [Tooltip("Target minimum hips world height for startup stand assist. " +
+                 "Assist applies only when current height is below this value.")]
         private float _startupAssistTargetHeight = 0.9f;
 
-           [SerializeField, Range(0f, 2000f)]
-           [Tooltip("Maximum upward force (Newtons) applied by startup stand assist.")]
+        [SerializeField, Range(0f, 2000f)]
+        [Tooltip("Maximum upward force (Newtons) applied by startup stand assist.")]
         private float _startupStandAssistForce = 1200f;
 
-           [SerializeField, Range(0.05f, 1f)]
-           [Tooltip("Height error range used to scale stand assist force from 0 to max.")]
-           private float _startupAssistHeightRange = 0.35f;
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Height error range used to scale stand assist force from 0 to max.")]
+        private float _startupAssistHeightRange = 0.35f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("How strongly assist force follows current hips-up direction (0 = world up, 1 = hips up).")]
@@ -164,8 +166,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Fraction of startup assist force routed through leg rigidbodies (rest is applied at hips).")]
         private float _startupAssistLegForceFraction = 0.8f;
 
-        // ─── LegAnimator Cooperation ────────────────────────────────────────
-
+        [Header("LegAnimator Cooperation")]
         [SerializeField]
         [Tooltip("When true and a LegAnimator component exists on this GameObject, " +
                  "BalanceController will NOT apply direct forces or modify SLERP drives on the four " +
@@ -174,8 +175,7 @@ namespace PhysicsDrivenMovement.Character
                  "This eliminates the fighting-systems bug where BC forces override LA targetRotation. " +
                  "Disable only for debugging purposes.")]
         private bool _deferLegJointsToAnimator = true;
-
-        [SerializeField]
+        [Header("Debug")]        [SerializeField]
         [Tooltip("Log state transitions (Standing ↔ Fallen) to the console. " +
                  "Disable in production builds.")]
         private bool _debugStateTransitions = false;
