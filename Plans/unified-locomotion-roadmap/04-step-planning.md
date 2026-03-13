@@ -4,8 +4,8 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 ## Quick Load
 
-- C4.1, C4.2, and C4.3 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, and turn-specific stride/timing differentiation for inside/outside legs.
-- Next active slice is C4.4 (Braking and reversal steps): add explicit braking step logic for stop and reversal entries.
+- C4.1, C4.2, C4.3, and C4.4 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, turn-specific stride/timing differentiation, and braking stride/timing shortening.
+- Next active slice is C4.5 (Catch-step planning): prioritize wider or farther catch-step when support quality drops.
 - The verification surface is the Chapter 3 PlayMode gate plus StepPlanner EditMode tests.
 
 ## Read More When
@@ -48,6 +48,7 @@ Decide where each step should land based on movement goals and support needs.
    - 2026-03-13: Complete. `StepPlanner.ComputeSwingTarget` now accepts `LegStateTransitionReason` to differentiate outside (TurnSupport: +20% stride, +25% timing) and inside (SpeedUp: -15% stride) turn legs, both scaled by `TurnSeverity`. Inside shortening gated at severity > 0.1 to avoid noise. `LegAnimator` call sites pass per-leg transition reasons. 4 new EditMode tests. Verification: EditMode 47/47, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `9fb37c4`.
 4. C4.4 Braking and reversal steps:
    - Add explicit braking step logic for stop and reversal entries.
+   - 2026-03-13: Complete. Added `BrakingStrideScale` (0.35) and `BrakingTimingScale` (0.25) constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportionally to residual planar speed when `LegStateTransitionReason.Braking` is active. Both chained after turn adjustments in `ComputeSwingTarget`. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
 5. C4.5 Catch-step planning:
    - When support quality drops, prioritize wider or farther catch-step instead of normal cadence.
 6. C4.6 Visual debug:

@@ -3,14 +3,14 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Implement C4.4 (braking and reversal steps) now that C4.3 turn-specific planning is complete.
+- Current next step: Implement C4.5 (catch-step planning) now that C4.4 braking steps are complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1, C4.2, and C4.3 complete, C4.4 (braking/reversal steps) next.
-- C4.3 added turn-specific stride/timing differentiation: outside leg (TurnSupport) gets +20% stride and +25% timing, inside leg (SpeedUp) gets -15% stride, all scaled by TurnSeverity.
-- Next: implement C4.4 braking and reversal step logic.
+- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1, C4.2, C4.3, and C4.4 complete, C4.5 (catch-step planning) next.
+- C4.4 added braking stride/timing shortening: `BrakingStrideScale=0.35`, `BrakingTimingScale=0.25`, both proportional to residual planar speed.
+- Next: implement C4.5 catch-step planning (wider/farther catch-step when support quality drops).
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 and C4.2 completion notes.
@@ -77,3 +77,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C4.1 step target contract. Added `StepTarget` readonly struct with `LandingPosition`, `DesiredTiming`, `WidthBias`, `BrakingBias`, `Confidence`, `IsValid`. Threaded through `LegCommandOutput`; all 10 `LegAnimator` call sites pass `StepTarget.Invalid`. 4 new EditMode contract tests. Verification: EditMode 20/20, PlayMode 82 (79 passed, 3 ignored, 0 failed).
 - 2026-03-13: Completed C4.2 basic step planner. Added internal `StepPlanner` class under `Assets/Scripts/Character/Locomotion/`. Wired into `LegAnimator.BuildPassThroughCommands()` moving path so swing-like legs now get computed step targets with stride, lateral offset, drift compensation, turn width bias, braking bias, timing, and confidence. Recovery/idle/falling paths still use `StepTarget.Invalid`. 7 new EditMode tests. Verification: EditMode 43/43, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `0866f63`.
 - 2026-03-13: Completed C4.3 turn-specific step planning. `StepPlanner.ComputeSwingTarget` now accepts `LegStateTransitionReason` to differentiate outside (TurnSupport: +20% stride, +25% timing) and inside (SpeedUp: -15% stride) turn legs, both scaled by `TurnSeverity`. 4 new EditMode tests. Verification: EditMode 47/47, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `9fb37c4`.
+- 2026-03-13: Completed C4.4 braking stride/timing shortening. Added `BrakingStrideScale=0.35` and `BrakingTimingScale=0.25` constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportional to residual planar speed when `Braking` active. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
