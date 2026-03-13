@@ -421,7 +421,8 @@ namespace PhysicsDrivenMovement.Character
                 yawStrengthScale,
                 stabilizationStrengthScale,
                 recoveryBlend,
-                recoveryKdBlend);
+                recoveryKdBlend,
+                heightMaintenanceScale: 1f);
 
             // STEP 4: Keep the existing pass-through leg-command seam until the dedicated gait slices replace it.
             if (_legAnimator != null && _passThroughMode)

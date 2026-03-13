@@ -20,7 +20,8 @@ namespace PhysicsDrivenMovement.Character
             float yawStrengthScale,
             float stabilizationStrengthScale,
             float recoveryBlend,
-            float recoveryKdBlend)
+            float recoveryKdBlend,
+            float heightMaintenanceScale = 1f)
         {
             // STEP 1: Normalize the command frame so executors can consume a stable facing/up basis.
             FacingDirection = NormalizePlanarDirection(facingDirection, Vector3.forward);
@@ -32,6 +33,7 @@ namespace PhysicsDrivenMovement.Character
             UprightStrengthScale = Mathf.Max(0f, uprightStrengthScale);
             YawStrengthScale = Mathf.Max(0f, yawStrengthScale);
             StabilizationStrengthScale = Mathf.Max(0f, stabilizationStrengthScale);
+            HeightMaintenanceScale = Mathf.Max(0f, heightMaintenanceScale);
             RecoveryBlend = Mathf.Clamp01(recoveryBlend);
             RecoveryKdBlend = Mathf.Clamp01(recoveryKdBlend);
         }
@@ -49,6 +51,12 @@ namespace PhysicsDrivenMovement.Character
         public float YawStrengthScale { get; }
 
         public float StabilizationStrengthScale { get; }
+
+        /// <summary>
+        /// Multiplier for vertical height-maintenance force that keeps the hips at standing
+        /// height. Values above 1 boost height recovery; 0 disables height maintenance.
+        /// </summary>
+        public float HeightMaintenanceScale { get; }
 
         public float RecoveryBlend { get; }
 

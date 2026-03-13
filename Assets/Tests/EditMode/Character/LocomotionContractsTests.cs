@@ -410,6 +410,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             float uprightStrengthScale = GetPropertyValue<float>(command, "UprightStrengthScale");
             float yawStrengthScale = GetPropertyValue<float>(command, "YawStrengthScale");
             float stabilizationStrengthScale = GetPropertyValue<float>(command, "StabilizationStrengthScale");
+            float heightMaintenanceScale = GetPropertyValue<float>(command, "HeightMaintenanceScale");
             float desiredLeanDegrees = GetPropertyValue<float>(command, "DesiredLeanDegrees");
 
             // Assert
@@ -418,7 +419,43 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(uprightStrengthScale, Is.EqualTo(1f).Within(0.0001f));
             Assert.That(yawStrengthScale, Is.EqualTo(1f).Within(0.0001f));
             Assert.That(stabilizationStrengthScale, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(heightMaintenanceScale, Is.EqualTo(1f).Within(0.0001f),
+                "PassThrough should default HeightMaintenanceScale to 1 for parity.");
             Assert.That(desiredLeanDegrees, Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [Test]
+        public void BodySupportCommand_ConstructedWithExplicitHeightScale_ClampsAndPreservesScale()
+        {
+            // Arrange
+            Type commandType = RequireType(BodySupportCommandTypeName);
+
+            // Act — construct with explicit heightMaintenanceScale = 2.5
+            object boosted = CreateInstance(commandType,
+                Vector3.forward,    // facingDirection
+                Vector3.up,         // uprightDirection
+                Vector3.forward,    // travelDirection
+                0f,                 // desiredLeanDegrees
+                1f,                 // uprightStrengthScale
+                1f,                 // yawStrengthScale
+                1f,                 // stabilizationStrengthScale
+                0f,                 // recoveryBlend
+                0f,                 // recoveryKdBlend
+                2.5f);              // heightMaintenanceScale
+
+            // Act — construct with negative heightMaintenanceScale (should clamp to 0)
+            object clamped = CreateInstance(commandType,
+                Vector3.forward, Vector3.up, Vector3.forward,
+                0f, 1f, 1f, 1f, 0f, 0f,
+                -1f);
+
+            // Assert
+            float boostedScale = GetPropertyValue<float>(boosted, "HeightMaintenanceScale");
+            float clampedScale = GetPropertyValue<float>(clamped, "HeightMaintenanceScale");
+            Assert.That(boostedScale, Is.EqualTo(2.5f).Within(0.0001f),
+                "Explicit HeightMaintenanceScale should be preserved.");
+            Assert.That(clampedScale, Is.EqualTo(0f).Within(0.0001f),
+                "Negative HeightMaintenanceScale should be clamped to 0.");
         }
 
         [Test]

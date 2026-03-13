@@ -638,13 +638,16 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3.7: Height maintenance.
             // When near ground, pushes hips up toward standing height to prevent the
             // character from settling into a seated basin-of-attraction.
+            // HeightMaintenanceScale from the director command modulates the force
+            // so the locomotion plan can boost or suppress height recovery.
             if (_enableHeightMaintenance && effectivelyGrounded)
             {
                 float hipsHeightError = _standingHipsHeight - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
-                    float heightForce = hipsHeightError * _heightMaintenanceStrength
-                                        - _rb.linearVelocity.y * _heightMaintenanceDamping;
+                    float heightScale = _currentBodySupportCommand.HeightMaintenanceScale;
+                    float heightForce = hipsHeightError * (_heightMaintenanceStrength * heightScale)
+                                        - _rb.linearVelocity.y * (_heightMaintenanceDamping * heightScale);
                     heightForce = Mathf.Max(0f, heightForce);
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
                 }
