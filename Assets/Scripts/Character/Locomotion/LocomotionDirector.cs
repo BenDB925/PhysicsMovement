@@ -409,16 +409,29 @@ namespace PhysicsDrivenMovement.Character
             int kdFrames = recoveryFramesAfterSupport - kdStartOffset;
             float recoveryKdBlend = ComputeRecoveryBlend(kdFrames);
 
-            // STEP 3: Map observation severity onto the existing support-command surface so executors stay unchanged.
+            // STEP 3: Map observation severity onto the support-command surface, with per-situation
+            // response profiles blended in while recovery is active.
             Vector3 supportFacing = GetSupportFacingDirection();
             Vector3 supportTravel = GetSupportTravelDirection(supportFacing);
-            float yawStrengthScale = Mathf.Lerp(1f, _minimumRiskYawStrengthScale, turnSupportRisk);
-            float uprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
-            float stabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
+            float baseYawStrengthScale = Mathf.Lerp(1f, _minimumRiskYawStrengthScale, turnSupportRisk);
+            float baseUprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
+            float baseStabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
             float heightMaintenanceScale = ComputeHeightMaintenanceScale();
-            float desiredLeanDegrees = _currentDesiredInput.HasMoveIntent
+            float baseLeanDegrees = _currentDesiredInput.HasMoveIntent
                 ? _currentObservation.TurnSeverity * _maxTurnLeanDegrees
                 : 0f;
+
+            // Apply per-situation response profile blended by the current recovery envelope.
+            RecoveryResponseProfile profile = RecoveryResponseProfile.For(_currentRecoveryState.Situation);
+            float uprightStrengthScale = Mathf.Lerp(baseUprightStrengthScale,
+                baseUprightStrengthScale * profile.UprightBoostMultiplier, recoveryBlend);
+            float yawStrengthScale = Mathf.Max(
+                Mathf.Lerp(baseYawStrengthScale, profile.MinYawStrengthScale, recoveryBlend),
+                profile.MinYawStrengthScale * recoveryBlend);
+            float stabilizationStrengthScale = Mathf.Lerp(baseStabilizationStrengthScale,
+                baseStabilizationStrengthScale * profile.StabilizationBoostMultiplier, recoveryBlend);
+            float desiredLeanDegrees = Mathf.Lerp(baseLeanDegrees,
+                baseLeanDegrees * profile.LeanDegreesMultiplier, recoveryBlend);
 
             _currentBodySupportCommand = new BodySupportCommand(
                 supportFacing,

@@ -35,6 +35,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string StepPlannerTypeName = "PhysicsDrivenMovement.Character.StepPlanner";
         private const string RecoverySituationTypeName = "PhysicsDrivenMovement.Character.RecoverySituation";
         private const string RecoveryStateTypeName = "PhysicsDrivenMovement.Character.RecoveryState";
+        private const string RecoveryResponseProfileTypeName = "PhysicsDrivenMovement.Character.RecoveryResponseProfile";
 
         private static Assembly CharacterAssembly => typeof(PlayerMovement).Assembly;
 
@@ -64,6 +65,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 StepPlannerTypeName,
                 RecoverySituationTypeName,
                 RecoveryStateTypeName,
+                RecoveryResponseProfileTypeName,
             };
 
             // Act / Assert
@@ -1732,6 +1734,130 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(situation.ToString(), Is.EqualTo("NearFall"));
         }
 
+        // --- RecoveryResponseProfile tests (C6.2) ---
+
+        [Test]
+        public void RecoveryResponseProfile_Neutral_HasIdentityMultipliers()
+        {
+            // Arrange
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            PropertyInfo neutralProp = profileType.GetProperty("Neutral",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(neutralProp, Is.Not.Null);
+
+            // Act
+            object neutral = neutralProp.GetValue(null);
+
+            // Assert
+            Assert.That(GetFieldValue<float>(neutral, "UprightBoostMultiplier"), Is.EqualTo(1f));
+            Assert.That(GetFieldValue<float>(neutral, "MinYawStrengthScale"), Is.EqualTo(0f));
+            Assert.That(GetFieldValue<float>(neutral, "StabilizationBoostMultiplier"), Is.EqualTo(1f));
+            Assert.That(GetFieldValue<float>(neutral, "LeanDegreesMultiplier"), Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void RecoveryResponseProfile_ForNone_ReturnsNeutral()
+        {
+            // Arrange
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo forMethod = profileType.GetMethod("For",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(forMethod, Is.Not.Null);
+
+            // Act
+            object profile = forMethod.Invoke(null, new[] { Enum.Parse(situationType, "None") });
+
+            // Assert
+            Assert.That(GetFieldValue<float>(profile, "UprightBoostMultiplier"), Is.EqualTo(1f));
+            Assert.That(GetFieldValue<float>(profile, "StabilizationBoostMultiplier"), Is.EqualTo(1f));
+            Assert.That(GetFieldValue<float>(profile, "LeanDegreesMultiplier"), Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void RecoveryResponseProfile_HigherSeverity_HasStrongerUprightBoost()
+        {
+            // Arrange — compare HardTurn (lowest non-None) vs Stumble (highest)
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo forMethod = profileType.GetMethod("For",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Act
+            object hardTurnProfile = forMethod.Invoke(null, new[] { Enum.Parse(situationType, "HardTurn") });
+            object stumbleProfile = forMethod.Invoke(null, new[] { Enum.Parse(situationType, "Stumble") });
+
+            // Assert
+            float hardTurnUpright = GetFieldValue<float>(hardTurnProfile, "UprightBoostMultiplier");
+            float stumbleUpright = GetFieldValue<float>(stumbleProfile, "UprightBoostMultiplier");
+            Assert.That(stumbleUpright, Is.GreaterThan(hardTurnUpright),
+                "Stumble should have a stronger upright boost multiplier than HardTurn.");
+        }
+
+        [Test]
+        public void RecoveryResponseProfile_Stumble_SuppressesLeanCompletely()
+        {
+            // Arrange
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo forMethod = profileType.GetMethod("For",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Act
+            object stumbleProfile = forMethod.Invoke(null, new[] { Enum.Parse(situationType, "Stumble") });
+
+            // Assert
+            float leanMul = GetFieldValue<float>(stumbleProfile, "LeanDegreesMultiplier");
+            Assert.That(leanMul, Is.EqualTo(0f), "Stumble recovery should fully suppress lean.");
+        }
+
+        [Test]
+        public void RecoveryResponseProfile_HardTurn_IncreasesLean()
+        {
+            // Arrange
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo forMethod = profileType.GetMethod("For",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Act
+            object hardTurnProfile = forMethod.Invoke(null, new[] { Enum.Parse(situationType, "HardTurn") });
+
+            // Assert
+            float leanMul = GetFieldValue<float>(hardTurnProfile, "LeanDegreesMultiplier");
+            Assert.That(leanMul, Is.GreaterThan(1f),
+                "HardTurn recovery should amplify lean to shift COM into the turn.");
+        }
+
+        [Test]
+        public void RecoveryResponseProfile_AllSituations_HaveValidMultipliers()
+        {
+            // Arrange
+            Type profileType = RequireType(RecoveryResponseProfileTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo forMethod = profileType.GetMethod("For",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Act / Assert
+            foreach (object situationValue in Enum.GetValues(situationType))
+            {
+                object profile = forMethod.Invoke(null, new[] { situationValue });
+                float upright = GetFieldValue<float>(profile, "UprightBoostMultiplier");
+                float yaw = GetFieldValue<float>(profile, "MinYawStrengthScale");
+                float stab = GetFieldValue<float>(profile, "StabilizationBoostMultiplier");
+                float lean = GetFieldValue<float>(profile, "LeanDegreesMultiplier");
+
+                Assert.That(upright, Is.GreaterThanOrEqualTo(0f),
+                    $"{situationValue}: UprightBoostMultiplier must be non-negative.");
+                Assert.That(yaw, Is.InRange(0f, 1f),
+                    $"{situationValue}: MinYawStrengthScale must be in [0,1].");
+                Assert.That(stab, Is.GreaterThanOrEqualTo(0f),
+                    $"{situationValue}: StabilizationBoostMultiplier must be non-negative.");
+                Assert.That(lean, Is.GreaterThanOrEqualTo(0f),
+                    $"{situationValue}: LeanDegreesMultiplier must be non-negative.");
+            }
+        }
+
         private static object InvokeComputeSwingTarget(object planner, object[] args)
         {
             Type plannerType = planner.GetType();
@@ -1892,6 +2018,18 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             object value = property.GetValue(instance);
             Assert.That(value, Is.Not.Null, $"Property '{propertyName}' should not be null.");
             return (T)value;
+        }
+
+        private static T GetFieldValue<T>(object instance, string fieldName)
+        {
+            FieldInfo field = instance.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            Assert.That(field, Is.Not.Null,
+                $"Expected type '{instance.GetType().FullName}' to expose field '{fieldName}'.");
+
+            return (T)field.GetValue(instance);
         }
     }
 }
