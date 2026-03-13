@@ -279,6 +279,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private float _phase;
 
+        // ── Smoothed target angles for frame-to-frame interpolation ─────────
+        private float _smoothedLeftSwingDeg;
+        private float _smoothedRightSwingDeg;
+        private float _smoothedLeftKneeDeg;
+        private float _smoothedRightKneeDeg;
+
         /// <summary>
         /// Smoothed version of the actual move input magnitude, in the range [0, 1].
         /// When input resumes after idle this value ramps up from 0 at a rate controlled
@@ -1001,6 +1007,10 @@ namespace PhysicsDrivenMovement.Character
             _suppressIncomingCommandFrame = false;
             _phase = 0f;
             _smoothedInputMag = 0f;
+            _smoothedLeftSwingDeg = 0f;
+            _smoothedRightSwingDeg = 0f;
+            _smoothedLeftKneeDeg = 0f;
+            _smoothedRightKneeDeg = 0f;
             _prevInputDir = Vector2.zero;
             _wasMoving = false;
             _stuckFrameCounter = 0;

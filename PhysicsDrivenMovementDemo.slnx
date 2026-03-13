@@ -13,10 +13,10 @@
   <Project Path="Unity.VisualStudio.Editor.csproj" />
   <Project Path="Unity.PerformanceTesting.csproj" />
   <Project Path="Unity.Networking.Transport.csproj" />
+  <Project Path="PhysicsDrivenMovement.Character.csproj" />
   <Project Path="Unity.Netcode.Editor.CodeGen.csproj" />
   <Project Path="Unity.Burst.CodeGen.csproj" />
   <Project Path="PhysicsDrivenMovement.Editor.csproj" />
-  <Project Path="PhysicsDrivenMovement.Character.csproj" />
   <Project Path="Unity.InputSystem.TestFramework.csproj" />
   <Project Path="Unity.Netcode.Editor.csproj" />
   <Project Path="Unity.Burst.Editor.csproj" />

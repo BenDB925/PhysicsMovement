@@ -346,6 +346,7 @@ namespace PhysicsDrivenMovement.Editor
                 so.FindProperty("_stepAngle").floatValue                = 60f;
                 so.FindProperty("_stepFrequencyScale").floatValue       = 0.1f;
                 so.FindProperty("_stepFrequency").floatValue            = 1.25f;
+                so.FindProperty("_targetSmoothSpeed").floatValue        = 12f;
                 // Swing/knee axis MUST be (1,0,0) — joint-local X is the hinge axis.
                 // (0,0,1) is wrong and breaks gait entirely.
                 var swingAxis = so.FindProperty("_swingAxis");
