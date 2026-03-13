@@ -411,6 +411,7 @@ namespace PhysicsDrivenMovement.Character
             float yawStrengthScale = Mathf.Lerp(1f, _minimumRiskYawStrengthScale, turnSupportRisk);
             float uprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
             float stabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
+            float heightMaintenanceScale = ComputeHeightMaintenanceScale();
 
             _currentBodySupportCommand = new BodySupportCommand(
                 supportFacing,
@@ -422,7 +423,7 @@ namespace PhysicsDrivenMovement.Character
                 stabilizationStrengthScale,
                 recoveryBlend,
                 recoveryKdBlend,
-                heightMaintenanceScale: 1f);
+                heightMaintenanceScale: heightMaintenanceScale);
 
             // STEP 4: Keep the existing pass-through leg-command seam until the dedicated gait slices replace it.
             if (_legAnimator != null && _passThroughMode)
@@ -510,6 +511,28 @@ namespace PhysicsDrivenMovement.Character
                 comOutsideRisk,
                 collapseRisk,
                 0f));
+        }
+
+        private float ComputeHeightMaintenanceScale()
+        {
+            // STEP 1: Compare hips height to the executor's standing target so the
+            // director can boost height recovery when the character is seated or low.
+            float standingHeight = _balanceController.StandingHipsHeight;
+            float hipsY = _hipsBody.position.y;
+            float deficit = standingHeight - hipsY;
+
+            if (deficit <= 0f)
+            {
+                return 1f;
+            }
+
+            // STEP 2: Scale linearly from 1.0 at standing height to a configurable
+            // maximum when the hips are well below the target. The range covers
+            // the typical seated-to-standing gap.
+            const float deficitRange = 0.4f;
+            const float maxBoost = 1.5f;
+            float t = Mathf.Clamp01(deficit / deficitRange);
+            return Mathf.Lerp(1f, maxBoost, t);
         }
 
         private Vector3 GetSupportFacingDirection()

@@ -310,6 +310,13 @@ namespace PhysicsDrivenMovement.Character
         internal int SnapRecoveryKdDurationFrames => _snapRecoveryKdDurationFrames;
 
         /// <summary>
+        /// Target world-space Y position for the hips when the character is standing upright.
+        /// Read by <see cref="LocomotionDirector"/> to compute height-deficit-based
+        /// <see cref="BodySupportCommand.HeightMaintenanceScale"/> values.
+        /// </summary>
+        public float StandingHipsHeight => _standingHipsHeight;
+
+        /// <summary>
         /// Test seam: directly override IsGrounded/IsFallen without needing GroundSensor components.
         /// FixedUpdate will not overwrite these values while the override is active.
         /// Do not call this from production code.
@@ -530,11 +537,15 @@ namespace PhysicsDrivenMovement.Character
             _wasFallen = nowFallen;
 
             // STEP 3.5: Apply startup stand assist while grounded and low.
+            // HeightMaintenanceScale from the director command gates and modulates the
+            // assist force so the locomotion plan controls height recovery authority.
             bool startupAssistActive = false;
             float startupAssistScale = 0f;
             bool persistentRecoveryActive = false;
+            float commandHeightScale = _currentBodySupportCommand.HeightMaintenanceScale;
 
             if (_enableStartupStandAssist &&
+                commandHeightScale > 0f &&
                 IsGrounded &&
                 _hasBeenGrounded)
             {
@@ -589,7 +600,7 @@ namespace PhysicsDrivenMovement.Character
                         startupAssistScale = assistScale;
 
                         Vector3 assistDirection = Vector3.Slerp(Vector3.up, _rb.transform.up, _startupAssistUseBodyUp).normalized;
-                        float assistForce = _startupStandAssistForce * assistScale;
+                        float assistForce = _startupStandAssistForce * assistScale * commandHeightScale;
                         ApplyStartupAssistForces(assistDirection, assistForce);
                     }
                 }

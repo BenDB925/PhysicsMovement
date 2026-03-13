@@ -161,5 +161,23 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(uprightBoost, Is.GreaterThan(0f));
             Assert.That(stabilizationBoost, Is.GreaterThan(0f));
         }
+
+        [Test]
+        public void PlayerRagdollPrefab_BalanceController_ExposesStandingHipsHeightForDirector()
+        {
+            // Arrange
+            GameObject prefabRoot = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            BalanceController balanceController = prefabRoot.GetComponent<BalanceController>();
+
+            // Act
+            float standingHeight = balanceController.StandingHipsHeight;
+
+            // Assert
+            Assert.That(prefabRoot, Is.Not.Null, "PlayerRagdoll prefab must exist.");
+            Assert.That(balanceController, Is.Not.Null,
+                "PlayerRagdoll prefab should include BalanceController on Hips.");
+            Assert.That(standingHeight, Is.GreaterThan(0.5f).And.LessThan(2f),
+                "StandingHipsHeight should be within a reasonable range for the ragdoll.");
+        }
     }
 }
