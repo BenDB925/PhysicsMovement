@@ -1044,6 +1044,153 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "Low turn severity should not trigger inside-leg stride shortening.");
         }
 
+        // ── StepPlanner braking step tests (C4.4) ────────────────────────────
+
+        [Test]
+        public void StepPlanner_Braking_ShorterStrideThanDefault()
+        {
+            // Arrange — braking leg (no move intent, body moving) should plant closer.
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] brakingArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: Vector2.zero, moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "Braking", turnSeverity: 0f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object brakingResult = InvokeComputeSwingTarget(planner, brakingArgs);
+
+            // Assert
+            Vector3 defaultLanding = GetPropertyValue<Vector3>(defaultResult, "LandingPosition");
+            Vector3 brakingLanding = GetPropertyValue<Vector3>(brakingResult, "LandingPosition");
+            Assert.That(brakingLanding.z, Is.LessThan(defaultLanding.z),
+                "Braking leg should have a shorter stride than default cadence.");
+        }
+
+        [Test]
+        public void StepPlanner_Braking_ShorterTimingThanDefault()
+        {
+            // Arrange — braking leg should touch down faster (shorter timing).
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] brakingArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: Vector2.zero, moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "Braking", turnSeverity: 0f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object brakingResult = InvokeComputeSwingTarget(planner, brakingArgs);
+
+            // Assert
+            float defaultTiming = GetPropertyValue<float>(defaultResult, "DesiredTiming");
+            float brakingTiming = GetPropertyValue<float>(brakingResult, "DesiredTiming");
+            Assert.That(brakingTiming, Is.LessThan(defaultTiming),
+                "Braking leg should have shorter desired timing for quicker plant.");
+        }
+
+        [Test]
+        public void StepPlanner_Braking_HigherSpeedScalesStronger()
+        {
+            // Arrange — at higher residual speed, the braking shortening ratio should be
+            //          stronger. Compare each braking stride against its own same-speed
+            //          default-cadence baseline to isolate the braking effect from the
+            //          base-stride speed scaling.
+            object planner = CreateStepPlannerInstance();
+
+            // Slow pair: DefaultCadence and Braking both at v=0.5
+            object[] slowDefaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 0.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] slowBrakingArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: Vector2.zero, moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 0.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "Braking", turnSeverity: 0f);
+
+            // Fast pair: DefaultCadence and Braking both at v=2.5
+            object[] fastDefaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+            object[] fastBrakingArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: Vector2.zero, moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "Braking", turnSeverity: 0f);
+
+            // Act
+            object slowDefault = InvokeComputeSwingTarget(planner, slowDefaultArgs);
+            object slowBraking = InvokeComputeSwingTarget(planner, slowBrakingArgs);
+            object fastDefault = InvokeComputeSwingTarget(planner, fastDefaultArgs);
+            object fastBraking = InvokeComputeSwingTarget(planner, fastBrakingArgs);
+
+            // Assert — the braking shortening fraction at high speed should exceed the fraction at low speed.
+            float slowDefaultZ = GetPropertyValue<Vector3>(slowDefault, "LandingPosition").z;
+            float slowBrakingZ = GetPropertyValue<Vector3>(slowBraking, "LandingPosition").z;
+            float fastDefaultZ = GetPropertyValue<Vector3>(fastDefault, "LandingPosition").z;
+            float fastBrakingZ = GetPropertyValue<Vector3>(fastBraking, "LandingPosition").z;
+
+            float slowFraction = (slowDefaultZ - slowBrakingZ) / Mathf.Max(slowDefaultZ, 0.001f);
+            float fastFraction = (fastDefaultZ - fastBrakingZ) / Mathf.Max(fastDefaultZ, 0.001f);
+            Assert.That(fastFraction, Is.GreaterThan(slowFraction),
+                "Higher residual speed should produce a stronger braking shortening ratio.");
+        }
+
+        [Test]
+        public void StepPlanner_DefaultCadence_NoBrakingAdjustment()
+        {
+            // Arrange — DefaultCadence at same speed should not trigger braking adjustment.
+            object planner = CreateStepPlannerInstance();
+            // Two identical calls with DefaultCadence to confirm no braking path activates.
+            object[] args = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2.5f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert — stride should be at the default value (no shortening).
+            // Base stride = 0.45 + 2.5 * 0.12 = 0.75. Hips at y=1, z=0 → landing z = 0 + 0.75.
+            Vector3 landing = GetPropertyValue<Vector3>(result, "LandingPosition");
+            Assert.That(landing.z, Is.GreaterThan(0.7f),
+                "DefaultCadence at 2.5 m/s should produce a full-length stride with no braking shortening.");
+        }
+
         // ── StepPlanner test helpers ────────────────────────────────────────────
 
         private static object CreateStepPlannerInstance()

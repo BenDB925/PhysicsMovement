@@ -38,6 +38,15 @@ namespace PhysicsDrivenMovement.Character
         private const float TurnStrideInsideScale = 0.15f;
         private const float TurnTimingOutsideScale = 0.25f;
 
+        // STEP 3c: Braking step differentiation (C4.4).
+        //          When the player releases input while the body is still moving, the
+        //          Braking transition reason tells the planner to shorten the stride so the
+        //          foot plants sooner, and reduce swing timing so the leg reaches the ground
+        //          faster. Both scale with the existing BrakingBias magnitude so the
+        //          effect ramps with residual speed.
+        private const float BrakingStrideScale = 0.35f;
+        private const float BrakingTimingScale = 0.25f;
+
         // STEP 4: COM drift compensation — when the COM leads or trails the support center,
         //         the step target shifts to recapture balance.
         private const float DriftCompensationScale = 0.35f;
@@ -73,10 +82,12 @@ namespace PhysicsDrivenMovement.Character
                 return StepTarget.Invalid;
             }
 
-            // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3).
+            // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3)
+            //         and braking intent (C4.4).
             float planarSpeed = observation.PlanarSpeed;
             float strideOffset = ComputeStrideOffset(planarSpeed);
             strideOffset = ApplyTurnStrideAdjustment(strideOffset, transitionReason, observation.TurnSeverity);
+            strideOffset = ApplyBrakingStrideAdjustment(strideOffset, transitionReason, planarSpeed);
 
             // STEP 3: Compute lateral offset based on which leg.
             float lateralOffset = ComputeLateralOffset(leg);
@@ -97,8 +108,10 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 6: Compute timing, biases, and confidence.
             //         C4.3: Outside turn leg gets extended timing for the wider arc.
+            //         C4.4: Braking leg gets shortened timing for quicker plant.
             float desiredTiming = ComputeDesiredTiming(legPhase, stepFrequency);
             desiredTiming = ApplyTurnTimingAdjustment(desiredTiming, transitionReason, observation.TurnSeverity);
+            desiredTiming = ApplyBrakingTimingAdjustment(desiredTiming, transitionReason, planarSpeed);
             float widthBias = ComputeWidthBias(leg, observation.TurnSeverity,
                 gaitReferenceDirection, observation.BodyForward);
             float brakingBias = ComputeBrakingBias(desiredInput, planarSpeed);
@@ -243,6 +256,40 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return baseTiming;
+        }
+
+        private static float ApplyBrakingStrideAdjustment(
+            float baseStride,
+            LegStateTransitionReason reason,
+            float planarSpeed)
+        {
+            // STEP 3c: When braking (no player input, body still moving) shorten the stride
+            //          so the foot plants closer, anchoring the deceleration. The shortening
+            //          scales with how fast the body is still moving (higher residual speed
+            //          → stronger shortening) and uses BrakingStrideScale as the ceiling.
+            if (reason != LegStateTransitionReason.Braking)
+            {
+                return baseStride;
+            }
+
+            float speedFactor = Mathf.Clamp01(planarSpeed / 3f);
+            return baseStride * (1f - BrakingStrideScale * speedFactor);
+        }
+
+        private static float ApplyBrakingTimingAdjustment(
+            float baseTiming,
+            LegStateTransitionReason reason,
+            float planarSpeed)
+        {
+            // STEP 3c: Braking steps also reduce swing timing so the foot reaches the ground
+            //          faster, producing a quicker plant. Scales with residual speed.
+            if (reason != LegStateTransitionReason.Braking)
+            {
+                return baseTiming;
+            }
+
+            float speedFactor = Mathf.Clamp01(planarSpeed / 3f);
+            return baseTiming * (1f - BrakingTimingScale * speedFactor);
         }
     }
 }
