@@ -4,8 +4,8 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 ## Quick Load
 
-- C4.1 through C4.5 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, turn-specific stride/timing differentiation, braking stride/timing shortening, and catch-step stride/lateral/timing adjustments.
-- Next active slice is C4.6 (Visual debug): draw planned and accepted footholds in scene debug mode.
+- C4.1 through C4.6 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, turn-specific stride/timing differentiation, braking stride/timing shortening, catch-step stride/lateral/timing adjustments, and visual debug draw for planned step targets.
+- Chapter 4 is complete. All work packages delivered and verified.
 - The verification surface is the Chapter 3 PlayMode gate plus StepPlanner EditMode tests.
 
 ## Read More When
@@ -54,6 +54,7 @@ Decide where each step should land based on movement goals and support needs.
    - 2026-03-13: Complete. Added `CatchStepStrideScale` (0.30), `CatchStepWidenScale` (0.12), and `CatchStepTimingScale` (0.20) constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral offset, and shorten timing when `StumbleRecovery` is active, all scaled by support urgency (`1 - SupportQuality`). Chained after braking adjustments in `ComputeSwingTarget`. 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.
 6. C4.6 Visual debug:
    - Draw planned footholds and accepted footholds in scene debug mode.
+   - 2026-03-13: Complete. Added `_debugStepTargetDraw` serialized toggle to `LocomotionDirector`. When enabled, draws per-leg step target markers in Scene view: cross + confidence-scaled circle at `LandingPosition` (color lerps from red at low confidence to base color at high), vertical pillar proportional to `DesiredTiming`. Left leg uses blue, right uses green-yellow. Reuses existing `DrawCross`, `DrawCircle` helpers. No new tests needed (debug-draw-only, no runtime behavior change). Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `b81e8cb`.
 
 ## Verification gate
 

@@ -3,14 +3,14 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Implement C4.6 (visual debug) now that C4.5 catch-step planning is complete.
+- Current next step: Begin Chapter 5 (Recast Balance As Body Support) now that Chapter 4 is complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1 through C4.5 complete, C4.6 (visual debug) next.
-- C4.5 added catch-step stride/lateral/timing adjustments: `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20`, all scaled by support urgency.
-- Next: implement C4.6 visual debug (draw planned and accepted footholds in scene debug mode).
+- Chapters 1, 2, 3, and 4 are complete. Chapter 5 is next.
+- Chapter 4 delivered: `StepTarget` contract, `StepPlanner` with turn/braking/catch-step differentiation, and visual debug draw.
+- Next: begin Chapter 5 (Recast Balance As Body Support).
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 and C4.2 completion notes.
@@ -22,7 +22,7 @@
 - [x] Chapter 1: Define The Single Voice (`Plans/unified-locomotion-roadmap/01-single-voice.md`)
 - [x] Chapter 2: Build A Better World Model (`Plans/unified-locomotion-roadmap/02-world-model.md`)
 - [x] Chapter 3: Replace Cycle-Only Gait With Leg States (`Plans/unified-locomotion-roadmap/03-leg-states.md`)
-- [ ] Chapter 4: Add Step Planning And Foot Placement (`Plans/unified-locomotion-roadmap/04-step-planning.md`)
+- [x] Chapter 4: Add Step Planning And Foot Placement (`Plans/unified-locomotion-roadmap/04-step-planning.md`)
 - [ ] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
 - [ ] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
 - [ ] Chapter 7: Terrain And Contact Robustness (`Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`)
@@ -79,3 +79,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C4.3 turn-specific step planning. `StepPlanner.ComputeSwingTarget` now accepts `LegStateTransitionReason` to differentiate outside (TurnSupport: +20% stride, +25% timing) and inside (SpeedUp: -15% stride) turn legs, both scaled by `TurnSeverity`. 4 new EditMode tests. Verification: EditMode 47/47, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `9fb37c4`.
 - 2026-03-13: Completed C4.4 braking stride/timing shortening. Added `BrakingStrideScale=0.35` and `BrakingTimingScale=0.25` constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportional to residual planar speed when `Braking` active. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
 - 2026-03-13: Completed C4.5 catch-step planning. Added `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20` constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral, and shorten timing when `StumbleRecovery` active, all scaled by support urgency (1 - SupportQuality). 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.
+- 2026-03-13: Completed C4.6 visual debug draw. Added `_debugStepTargetDraw` toggle to `LocomotionDirector` that draws per-leg step target markers (cross + confidence circle + timing pillar) in Scene view. Left=blue, right=green-yellow. No new tests (debug-draw-only). Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `b81e8cb`. Chapter 4 is now complete.
