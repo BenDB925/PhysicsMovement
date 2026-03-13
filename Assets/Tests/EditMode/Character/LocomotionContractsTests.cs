@@ -31,6 +31,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string LegCommandOutputTypeName = "PhysicsDrivenMovement.Character.LegCommandOutput";
         private const string LocomotionLegTypeName = "PhysicsDrivenMovement.Character.LocomotionLeg";
         private const string LegCommandModeTypeName = "PhysicsDrivenMovement.Character.LegCommandMode";
+        private const string StepTargetTypeName = "PhysicsDrivenMovement.Character.StepTarget";
 
         private static Assembly CharacterAssembly => typeof(PlayerMovement).Assembly;
 
@@ -56,6 +57,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 LegCommandOutputTypeName,
                 LocomotionLegTypeName,
                 LegCommandModeTypeName,
+                StepTargetTypeName,
             };
 
             // Act / Assert
@@ -633,6 +635,94 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(cyclePhase, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(blendWeight, Is.EqualTo(0f).Within(0.0001f));
             AssertVector3Equal(footTarget, Vector3.zero, "FootTarget");
+        }
+
+        [Test]
+        public void StepTarget_ConstructedWithValues_ClampsAndPreservesFields()
+        {
+            // Arrange
+            Type stepTargetType = RequireType(StepTargetTypeName);
+            Vector3 landing = new Vector3(1f, 0f, 3f);
+            float timing = 0.5f;
+            float widthBias = 1.5f;
+            float brakingBias = -2f;
+            float confidence = 1.5f;
+
+            // Act
+            object target = CreateInstance(stepTargetType, landing, timing, widthBias, brakingBias, confidence);
+
+            // Assert
+            Vector3 landingPos = GetPropertyValue<Vector3>(target, "LandingPosition");
+            float desiredTiming = GetPropertyValue<float>(target, "DesiredTiming");
+            float width = GetPropertyValue<float>(target, "WidthBias");
+            float braking = GetPropertyValue<float>(target, "BrakingBias");
+            float conf = GetPropertyValue<float>(target, "Confidence");
+            bool isValid = GetPropertyValue<bool>(target, "IsValid");
+
+            AssertVector3Equal(landingPos, landing, "LandingPosition");
+            Assert.That(desiredTiming, Is.EqualTo(0.5f).Within(0.0001f), "DesiredTiming should be preserved when non-negative.");
+            Assert.That(width, Is.EqualTo(1f).Within(0.0001f), "WidthBias should be clamped to +1.");
+            Assert.That(braking, Is.EqualTo(-1f).Within(0.0001f), "BrakingBias should be clamped to -1.");
+            Assert.That(conf, Is.EqualTo(1f).Within(0.0001f), "Confidence should be clamped to 1.");
+            Assert.That(isValid, Is.True, "Constructed StepTarget should be valid.");
+        }
+
+        [Test]
+        public void StepTarget_InvalidProperty_ReturnsInvalidMarker()
+        {
+            // Arrange
+            Type stepTargetType = RequireType(StepTargetTypeName);
+            PropertyInfo invalidProp = stepTargetType.GetProperty(
+                "Invalid",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(invalidProp, Is.Not.Null, "StepTarget should expose a static Invalid property.");
+
+            // Act
+            object invalid = invalidProp.GetValue(null);
+
+            // Assert
+            bool isValid = GetPropertyValue<bool>(invalid, "IsValid");
+            float confidence = GetPropertyValue<float>(invalid, "Confidence");
+            Assert.That(isValid, Is.False, "Invalid StepTarget should report IsValid=false.");
+            Assert.That(confidence, Is.EqualTo(0f).Within(0.0001f), "Invalid StepTarget should have zero confidence.");
+        }
+
+        [Test]
+        public void StepTarget_NegativeTiming_ClampedToZero()
+        {
+            // Arrange
+            Type stepTargetType = RequireType(StepTargetTypeName);
+
+            // Act
+            object target = CreateInstance(stepTargetType, Vector3.zero, -1f, 0f, 0f, 0.5f);
+
+            // Assert
+            float desiredTiming = GetPropertyValue<float>(target, "DesiredTiming");
+            Assert.That(desiredTiming, Is.EqualTo(0f).Within(0.0001f), "Negative timing should be clamped to 0.");
+        }
+
+        [Test]
+        public void LegCommandOutput_DisabledWithStepTarget_CarriesInvalidStepTarget()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type commandOutputType = RequireType(LegCommandOutputTypeName);
+            Type stepTargetType = RequireType(StepTargetTypeName);
+            MethodInfo disabledMethod = RequireStaticMethod(commandOutputType, "Disabled", legType);
+            object leftLeg = Enum.Parse(legType, "Left");
+
+            // Act
+            object command = disabledMethod.Invoke(null, new[] { leftLeg });
+
+            // Assert
+            PropertyInfo stepTargetProp = command.GetType().GetProperty(
+                "StepTarget",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(stepTargetProp, Is.Not.Null,
+                "LegCommandOutput should expose a StepTarget property for Chapter 4 step planning.");
+            object stepTarget = stepTargetProp.GetValue(command);
+            bool isValid = GetPropertyValue<bool>(stepTarget, "IsValid");
+            Assert.That(isValid, Is.False, "Disabled command should carry an invalid StepTarget.");
         }
 
         private static Type RequireType(string typeName)

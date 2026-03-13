@@ -726,7 +726,7 @@ namespace PhysicsDrivenMovement.Character
                     -30f,
                     0f,
                     1f,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
                 rightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.HoldPose,
@@ -735,7 +735,7 @@ namespace PhysicsDrivenMovement.Character
                     -30f,
                     0f,
                     1f,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
 
                 _recoveryFrameCounter--;
                 if (_recoveryFrameCounter <= 0)
@@ -847,7 +847,7 @@ namespace PhysicsDrivenMovement.Character
                     leftSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
                 LegCommandOutput explicitRightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.Cycle,
@@ -856,7 +856,7 @@ namespace PhysicsDrivenMovement.Character
                     rightSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
 
                 // STEP 3: Estimate whether the explicit per-leg controller still has enough
                 //         observation confidence to keep divergent gait roles active, then
@@ -906,7 +906,7 @@ namespace PhysicsDrivenMovement.Character
                     0f,
                     0f,
                     0f,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
                 rightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.HoldPose,
@@ -915,7 +915,7 @@ namespace PhysicsDrivenMovement.Character
                     0f,
                     0f,
                     0f,
-                    gaitReferenceDirection);
+                    StepTarget.Invalid);
                 return;
             }
 
@@ -931,7 +931,7 @@ namespace PhysicsDrivenMovement.Character
                 0f,
                 0f,
                 0f,
-                gaitReferenceDirection);
+                StepTarget.Invalid);
             rightCommand = new LegCommandOutput(
                 LocomotionLeg.Right,
                 LegCommandMode.HoldPose,
@@ -940,7 +940,7 @@ namespace PhysicsDrivenMovement.Character
                 0f,
                 0f,
                 0f,
-                gaitReferenceDirection);
+                StepTarget.Invalid);
         }
 
         internal void SetCommandFrame(
@@ -1383,7 +1383,7 @@ namespace PhysicsDrivenMovement.Character
                 swingAngleDegrees,
                 _kneeAngle * blendWeight,
                 blendWeight,
-                gaitReferenceDirection);
+                StepTarget.Invalid);
         }
 
         private LegCommandOutput BlendTowardFallbackCommand(
@@ -1411,7 +1411,7 @@ namespace PhysicsDrivenMovement.Character
                 Mathf.Lerp(explicitCommand.SwingAngleDegrees, fallbackCommand.SwingAngleDegrees, _fallbackGaitBlend),
                 Mathf.Lerp(explicitCommand.KneeAngleDegrees, fallbackCommand.KneeAngleDegrees, _fallbackGaitBlend),
                 Mathf.Lerp(explicitCommand.BlendWeight, fallbackCommand.BlendWeight, _fallbackGaitBlend),
-                explicitCommand.FootTarget);
+                explicitCommand.StepTarget);
         }
 
         private static float LerpWrappedPhase(float fromPhase, float toPhase, float blend)

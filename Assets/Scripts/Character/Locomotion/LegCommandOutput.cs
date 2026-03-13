@@ -3,9 +3,10 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Per-leg command payload emitted by future locomotion coordination logic.
-    /// The contract stays lightweight in C1.2 so the next slice can wire it through
-    /// without changing locomotion behaviour yet.
+    /// Per-leg command payload emitted by the locomotion coordination layer.
+    /// Carries swing parameters, state labels, and an optional world-space step target
+    /// so executors can combine phase-driven swing with foothold-aware placement.
+    /// Collaborators: <see cref="LocomotionDirector"/> (producer), <see cref="LegAnimator"/> (consumer).
     /// </summary>
     internal readonly struct LegCommandOutput
     {
@@ -17,7 +18,7 @@ namespace PhysicsDrivenMovement.Character
             float swingAngleDegrees,
             float kneeAngleDegrees,
             float blendWeight,
-            Vector3 footTarget)
+            StepTarget stepTarget)
         {
             // STEP 1: Preserve the leg identity and requested command mode exactly as issued.
             Leg = leg;
@@ -32,8 +33,9 @@ namespace PhysicsDrivenMovement.Character
             KneeAngleDegrees = kneeAngleDegrees;
             BlendWeight = Mathf.Clamp01(blendWeight);
 
-            // STEP 3: Preserve any future world-space target without interpretation in this slice.
-            FootTarget = footTarget;
+            // STEP 3: Carry the step target through for foothold-aware execution.
+            StepTarget = stepTarget;
+            FootTarget = stepTarget.IsValid ? stepTarget.LandingPosition : Vector3.zero;
         }
 
         public LocomotionLeg Leg { get; }
@@ -54,6 +56,16 @@ namespace PhysicsDrivenMovement.Character
 
         public float BlendWeight { get; }
 
+        /// <summary>
+        /// World-space step target describing the planned landing position, timing, and biases.
+        /// Invalid when no step plan has been computed.
+        /// </summary>
+        public StepTarget StepTarget { get; }
+
+        /// <summary>
+        /// Legacy convenience accessor. Returns <see cref="StepTarget.LandingPosition"/> when
+        /// the target is valid, or <see cref="Vector3.zero"/> otherwise.
+        /// </summary>
         public Vector3 FootTarget { get; }
 
         public static LegCommandOutput Disabled(LocomotionLeg leg)
@@ -66,7 +78,7 @@ namespace PhysicsDrivenMovement.Character
                 0f,
                 0f,
                 0f,
-                Vector3.zero);
+                StepTarget.Invalid);
         }
     }
 }

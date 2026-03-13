@@ -2385,6 +2385,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Type transitionReasonType = RequireLocomotionType(characterAssembly, "LegStateTransitionReason");
             Type stateFrameType = RequireLocomotionType(characterAssembly, "LegStateFrame");
             Type commandType = RequireLocomotionType(characterAssembly, "LegCommandOutput");
+            Type stepTargetType = RequireLocomotionType(characterAssembly, "StepTarget");
 
             object leg = Enum.Parse(legType, legName);
             object mode = Enum.Parse(modeType, modeName);
@@ -2404,6 +2405,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             object stateFrame = stateFrameConstructor.Invoke(new[] { leg, state, transitionReason });
 
+            PropertyInfo invalidProp = stepTargetType.GetProperty(
+                "Invalid",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            object stepTarget = invalidProp?.GetValue(null)
+                ?? Activator.CreateInstance(stepTargetType);
+
             ConstructorInfo commandConstructor = commandType.GetConstructor(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
                 binder: null,
@@ -2416,13 +2423,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     typeof(float),
                     typeof(float),
                     typeof(float),
-                    typeof(Vector3),
+                    stepTargetType,
                 },
                 modifiers: null);
             if (commandConstructor == null)
             {
                 throw new InvalidOperationException(
-                    "Missing expected LegCommandOutput constructor for Chapter 3 command injection tests.");
+                    "Missing expected LegCommandOutput constructor for Chapter 4 command injection tests.");
             }
 
             return commandConstructor.Invoke(new object[]
@@ -2434,7 +2441,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 swingAngleDegrees,
                 kneeAngleDegrees,
                 blendWeight,
-                footTarget,
+                stepTarget,
             });
         }
 
