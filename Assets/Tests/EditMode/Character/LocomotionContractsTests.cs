@@ -440,6 +440,20 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void LegStateTransitionReason_Chapter3FailureHandling_IncludesLowConfidenceFallback()
+        {
+            // Arrange
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
+
+            // Act
+            string[] transitionReasonNames = Enum.GetNames(transitionReasonType);
+
+            // Assert
+            Assert.That(transitionReasonNames, Does.Contain("LowConfidenceFallback"),
+                "Chapter 3 C3.5 should expose an explicit transition reason for low-confidence fallback so runtime logs can distinguish graceful fallback gait from normal cadence or stumble recovery.");
+        }
+
+        [Test]
         public void LegStateMachine_AdvanceMovingWhenOppositeLegStillSwinging_HoldsSupportStateAtPhaseEnd()
         {
             // Arrange

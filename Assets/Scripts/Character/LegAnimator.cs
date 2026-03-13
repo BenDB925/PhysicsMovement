@@ -180,6 +180,22 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("When enabled, explicit Chapter 3 leg states shape per-leg upper-leg and knee targets before the legacy sinusoidal executor applies them. Disable to fall back to the raw pass-through command angles during migration.")]
         private bool _useStateDrivenExecution = true;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum observation confidence required to keep the explicit Chapter 3 per-leg controller fully active. Below this the animator starts blending back toward a stable mirrored fallback gait.")]
+        private float _minimumStateMachineConfidence = 0.18f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Confidence required before the low-confidence fallback gait is released. Keep this above the entry threshold to avoid frame-to-frame chatter.")]
+        private float _minimumStateMachineConfidenceExit = 0.35f;
+
+        [SerializeField, Range(0f, 20f)]
+        [Tooltip("How quickly the graceful fallback blend rises toward the stable mirrored gait once state-machine confidence stays low.")]
+        private float _fallbackGaitBlendRiseSpeed = 2f;
+
+        [SerializeField, Range(0f, 20f)]
+        [Tooltip("How quickly the graceful fallback blend falls back toward the explicit per-leg controller after confidence recovers.")]
+        private float _fallbackGaitBlendFallSpeed = 4f;
+
         // ── Airborne Spring Scaling (Phase 3F2) ────────────────────────────
 
         [SerializeField, Range(0f, 1f)]
@@ -342,6 +358,8 @@ namespace PhysicsDrivenMovement.Character
         private bool _suppressIncomingCommandFrame;
         private LegStateMachine _leftLegStateMachine;
         private LegStateMachine _rightLegStateMachine;
+        private float _fallbackGaitBlend;
+        private bool _isFallbackGaitLatched;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -539,6 +557,7 @@ namespace PhysicsDrivenMovement.Character
                 _suppressIncomingCommandFrame = true;
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetFallbackGaitBlend();
                 ResetLegStateMachinesToIdle();
                 SetAllLegTargetsToIdentity();
                 return;
@@ -550,6 +569,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetFallbackGaitBlend();
                 ResetLegStateMachinesToIdle();
                 SetAllLegTargetsToIdentity();
                 return;
@@ -577,6 +597,7 @@ namespace PhysicsDrivenMovement.Character
         {
             if (_suppressIncomingCommandFrame)
             {
+                ResetFallbackGaitBlend();
                 leftCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
                 rightCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
                 return;
@@ -591,6 +612,7 @@ namespace PhysicsDrivenMovement.Character
                 _prevInputDir = Vector2.zero;
                 _wasMoving = false;
                 _stuckFrameCounter = 0;
+                ResetFallbackGaitBlend();
                 ResetLegStateMachinesToIdle();
                 leftCommand = LegCommandOutput.Disabled(LocomotionLeg.Left);
                 rightCommand = LegCommandOutput.Disabled(LocomotionLeg.Right);
@@ -599,7 +621,7 @@ namespace PhysicsDrivenMovement.Character
 
             float inputMagnitude = desiredInput.MoveMagnitude;
             float horizontalSpeedGate = observation.PlanarSpeed;
-            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.02f;
+            bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.15f;
 
             if (_isAirborne || state == CharacterStateType.Airborne)
             {
@@ -685,6 +707,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_isRecovering)
             {
+                ResetFallbackGaitBlend();
                 _leftLegStateMachine.ForceState(
                     LegStateType.RecoveryStep,
                     LegStateTransitionReason.StumbleRecovery,
@@ -726,11 +749,12 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            LegStateTransitionReason dominantReason = DetermineDominantTransitionReason(
+            // STEP 1: Start from a cadence reason that describes the overall move context,
+            //         then let C3.4 override it per leg for sharp-turn support or recovery.
+            LegStateTransitionReason cadenceReason = DetermineCadenceTransitionReason(
                 desiredInput,
-                observation,
-                isRecoveryState: false);
-            SynchronizeLegStateMachinesFromLegacyPhaseIfNeeded(dominantReason);
+                observation);
+            SynchronizeLegStateMachinesFromLegacyPhaseIfNeeded(cadenceReason);
 
             if (isMoving)
             {
@@ -752,29 +776,49 @@ namespace PhysicsDrivenMovement.Character
                     bothFeetFarBehind = leftFootForwardOffset < -0.2f && rightFootForwardOffset < -0.2f;
                 }
 
-                bool promoteCatchStep = desiredInput.HasMoveIntent &&
+                // STEP 2: Chapter 3.4 gives sharp turns and recovery explicit per-leg ownership
+                //         instead of pushing one body-level reason through both legs.
+                bool promoteRecoveryOverride = desiredInput.HasMoveIntent &&
                     (observation.IsLocomotionCollapsed || bothFeetFarBehind);
-                LocomotionLeg catchLeg = SelectCatchStepLeg();
-                LegStateTransitionReason controllerTransitionReason = promoteCatchStep
-                    ? LegStateTransitionReason.StumbleRecovery
-                    : dominantReason;
+                bool forceCatchStep = desiredInput.HasMoveIntent &&
+                    (observation.IsLocomotionCollapsed || bothFeetFarBehind);
+                bool hasTurnAsymmetry = TryGetTurnLegRoles(
+                    desiredInput,
+                    observation,
+                    out LocomotionLeg outsideLeg,
+                    out LocomotionLeg insideLeg);
+                LocomotionLeg recoveryLeg = SelectRecoveryLeg(gaitReferenceDirection, observation);
+                LegStateTransitionReason leftTransitionReason = DetermineLegTransitionReason(
+                    LocomotionLeg.Left,
+                    cadenceReason,
+                    hasTurnAsymmetry,
+                    outsideLeg,
+                    insideLeg,
+                    promoteRecoveryOverride,
+                    recoveryLeg);
+                LegStateTransitionReason rightTransitionReason = DetermineLegTransitionReason(
+                    LocomotionLeg.Right,
+                    cadenceReason,
+                    hasTurnAsymmetry,
+                    outsideLeg,
+                    insideLeg,
+                    promoteRecoveryOverride,
+                    recoveryLeg);
 
                 LegStateType previousLeftState = _leftLegStateMachine.CurrentState;
                 LegStateType previousRightState = _rightLegStateMachine.CurrentState;
                 LegStateFrame leftStateFrame = _leftLegStateMachine.AdvanceMoving(
                     observation.LeftFoot,
                     previousRightState,
-                    controllerTransitionReason,
+                    leftTransitionReason,
                     phaseAdvance,
-                    promoteCatchStep && catchLeg == LocomotionLeg.Left);
+                    forceCatchStep && recoveryLeg == LocomotionLeg.Left);
                 LegStateFrame rightStateFrame = _rightLegStateMachine.AdvanceMoving(
                     observation.RightFoot,
                     previousLeftState,
-                    controllerTransitionReason,
+                    rightTransitionReason,
                     phaseAdvance,
-                    promoteCatchStep && catchLeg == LocomotionLeg.Right);
-
-                _phase = _leftLegStateMachine.CyclePhase;
+                    forceCatchStep && recoveryLeg == LocomotionLeg.Right);
 
                 float leftSwingDeg = BuildSwingAngleFromPhase(
                     _leftLegStateMachine.CyclePhase,
@@ -795,7 +839,7 @@ namespace PhysicsDrivenMovement.Character
 
                 float kneeBendDeg = _kneeAngle * _smoothedInputMag;
 
-                leftCommand = new LegCommandOutput(
+                LegCommandOutput explicitLeftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
                     LegCommandMode.Cycle,
                     leftStateFrame,
@@ -804,7 +848,7 @@ namespace PhysicsDrivenMovement.Character
                     kneeBendDeg,
                     _smoothedInputMag,
                     gaitReferenceDirection);
-                rightCommand = new LegCommandOutput(
+                LegCommandOutput explicitRightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.Cycle,
                     rightStateFrame,
@@ -813,12 +857,34 @@ namespace PhysicsDrivenMovement.Character
                     kneeBendDeg,
                     _smoothedInputMag,
                     gaitReferenceDirection);
+
+                // STEP 3: Estimate whether the explicit per-leg controller still has enough
+                //         observation confidence to keep divergent gait roles active, then
+                //         blend the emitted commands toward a stable mirrored fallback gait
+                //         when that confidence stays low for multiple frames.
+                float stateMachineConfidence = ComputeStateMachineConfidence(
+                    observation,
+                    hasTurnAsymmetry,
+                    forceCatchStep,
+                    explicitLeftCommand,
+                    explicitRightCommand);
+                UpdateFallbackGaitBlend(stateMachineConfidence);
+                ApplyLowConfidenceFallback(
+                    gaitReferenceDirection,
+                    bothFeetBehind,
+                    ref explicitLeftCommand,
+                    ref explicitRightCommand);
+
+                leftCommand = explicitLeftCommand;
+                rightCommand = explicitRightCommand;
+                _phase = leftCommand.CyclePhase;
                 return;
             }
 
             float decayStep = _idleBlendSpeed * Mathf.PI * Time.fixedDeltaTime;
             float decayT = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
             _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, 0f, decayT);
+            ResetFallbackGaitBlend();
 
             LegStateFrame idleLeftStateFrame = _leftLegStateMachine.AdvanceIdle(decayStep);
             LegStateFrame idleRightStateFrame = _rightLegStateMachine.AdvanceIdle(decayStep);
@@ -853,33 +919,27 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float idleLeftSwingDeg = BuildSwingAngleFromPhase(
-                _leftLegStateMachine.CyclePhase,
-                _smoothedInputMag,
-                idleLeftStateFrame.State);
-            float idleRightSwingDeg = BuildSwingAngleFromPhase(
-                _rightLegStateMachine.CyclePhase,
-                _smoothedInputMag,
-                idleRightStateFrame.State);
-            float idleKneeBendDeg = _kneeAngle * _smoothedInputMag;
-
+            // STEP 3: Once movement intent is gone, keep decaying the hidden phase/state
+            //         machine so re-entry stays smooth, but publish neutral hold-pose targets
+            //         so the joints relax back toward identity immediately instead of carrying
+            //         a support-side knee bend deeper into idle.
             leftCommand = new LegCommandOutput(
                 LocomotionLeg.Left,
-                LegCommandMode.Cycle,
+                LegCommandMode.HoldPose,
                 idleLeftStateFrame,
                 _leftLegStateMachine.CyclePhase,
-                idleLeftSwingDeg,
-                idleKneeBendDeg,
-                _smoothedInputMag,
+                0f,
+                0f,
+                0f,
                 gaitReferenceDirection);
             rightCommand = new LegCommandOutput(
                 LocomotionLeg.Right,
-                LegCommandMode.Cycle,
+                LegCommandMode.HoldPose,
                 idleRightStateFrame,
                 _rightLegStateMachine.CyclePhase,
-                idleRightSwingDeg,
-                idleKneeBendDeg,
-                _smoothedInputMag,
+                0f,
+                0f,
+                0f,
                 gaitReferenceDirection);
         }
 
@@ -926,6 +986,7 @@ namespace PhysicsDrivenMovement.Character
             _recoveryFrameCounter = 0;
             _recoveryCooldownFrameCounter = 0;
             _isGaitBiasedForward = false;
+            ResetFallbackGaitBlend();
             ResetLegStateMachinesToIdle();
             SetLegSpringMultiplier(1f);
             SetAllLegTargetsToIdentity();
@@ -988,6 +1049,10 @@ namespace PhysicsDrivenMovement.Character
 
                 case LegStateType.Plant:
                     ApplyPlantExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    break;
+
+                case LegStateType.RecoveryStep:
+                    ApplyRecoveryStepExecutionProfile(command, ref swingAngleDegrees, ref kneeAngleDegrees);
                     break;
 
                 case LegStateType.CatchStep:
@@ -1054,6 +1119,32 @@ namespace PhysicsDrivenMovement.Character
             kneeAngleDegrees = Mathf.Min(kneeAngleDegrees, touchdownKneeTarget);
         }
 
+        private void ApplyRecoveryStepExecutionProfile(
+            LegCommandOutput command,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            // STEP 1: Recovery steps should move through an explicit brace-to-reach window
+            //         instead of replaying the old static stuck pose. Early recovery braces
+            //         the leg back under the body; late recovery reaches further forward with
+            //         more knee tuck so the leg can reclaim support.
+            float recoveryStepProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
+            float easedRecoveryProgress = Mathf.SmoothStep(0f, 1f, recoveryStepProgress);
+            float recoverySwingTarget = Mathf.Lerp(
+                -_stepAngle * 0.28f,
+                _stepAngle * 0.72f,
+                easedRecoveryProgress) * command.BlendWeight;
+            float recoveryKneeTarget = Mathf.Lerp(
+                _kneeAngle * 0.12f,
+                _kneeAngle * 0.7f,
+                easedRecoveryProgress) * command.BlendWeight;
+
+            swingAngleDegrees = command.Mode == LegCommandMode.HoldPose
+                ? recoverySwingTarget
+                : Mathf.Lerp(swingAngleDegrees, recoverySwingTarget, 0.85f);
+            kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, recoveryKneeTarget);
+        }
+
         private void ApplyCatchStepExecutionProfile(
             LegCommandOutput command,
             ref float swingAngleDegrees,
@@ -1063,10 +1154,10 @@ namespace PhysicsDrivenMovement.Character
             //         so the recovery leg reaches under the body instead of tracing the old arc.
             float catchStepProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
             float catchStepForwardTarget = Mathf.Lerp(
-                _stepAngle * 0.35f,
-                _stepAngle * 0.55f,
+                _stepAngle * 0.64f,
+                _stepAngle * 0.78f,
                 Mathf.SmoothStep(0f, 1f, catchStepProgress)) * command.BlendWeight;
-            float catchStepKneeTarget = _kneeAngle * 0.55f * command.BlendWeight;
+            float catchStepKneeTarget = _kneeAngle * 0.65f * command.BlendWeight;
 
             swingAngleDegrees = Mathf.Max(swingAngleDegrees, catchStepForwardTarget);
             kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, catchStepKneeTarget);
@@ -1097,6 +1188,251 @@ namespace PhysicsDrivenMovement.Character
             EnsureLegStateMachines();
             _leftLegStateMachine.ResetToIdle();
             _rightLegStateMachine.ResetToIdle();
+        }
+
+        private void ResetFallbackGaitBlend()
+        {
+            _fallbackGaitBlend = 0f;
+            _isFallbackGaitLatched = false;
+        }
+
+        private float ComputeStateMachineConfidence(
+            LocomotionObservation observation,
+            bool hasTurnAsymmetry,
+            bool forceCatchStep,
+            LegCommandOutput leftCommand,
+            LegCommandOutput rightCommand)
+        {
+            // STEP 1: Start from the weakest observation signal that the explicit gait
+            //         controller currently depends on so brief sensor drops reduce trust.
+            float supportConfidence = Mathf.Min(
+                observation.SupportQuality,
+                observation.ContactConfidence);
+            float stabilityConfidence = Mathf.Min(
+                supportConfidence,
+                Mathf.Min(observation.PlantedFootConfidence, 1f - observation.SlipEstimate));
+            bool preserveTurnSupportOwnership = hasTurnAsymmetry &&
+                !forceCatchStep &&
+                !observation.IsLocomotionCollapsed;
+            bool developingTurn = observation.TurnSeverity > 0.15f &&
+                !forceCatchStep &&
+                !observation.IsLocomotionCollapsed;
+
+            // STEP 2: Penalize observation states that historically imply unstable or
+            //         contradictory support, because those are the frames where mirrored
+            //         fallback is safer than preserving asymmetric gait roles.
+            //         Use the softer COM penalty when a turn is developing but not yet
+            //         past the TryGetTurnLegRoles threshold, so early turn frames don't
+            //         crater confidence before preserveTurnSupportOwnership activates.
+            if (observation.IsComOutsideSupport)
+            {
+                stabilityConfidence *= (preserveTurnSupportOwnership || developingTurn) ? 0.85f : 0.6f;
+            }
+
+            if (observation.IsInSnapRecovery)
+            {
+                stabilityConfidence *= 0.75f;
+            }
+
+            if (observation.IsLocomotionCollapsed)
+            {
+                stabilityConfidence *= 0.45f;
+            }
+
+            // STEP 3: Punish unexplained phase drift away from the mirrored gait when
+            //         turn/recovery ownership is absent. Preserve the explicit gait via
+            //         the planted-foot floor that is applied as the final step below.
+            if (!preserveTurnSupportOwnership && !forceCatchStep)
+            {
+                float mirroredRightPhase = Mathf.Repeat(leftCommand.CyclePhase + Mathf.PI, Mathf.PI * 2f);
+                float mirrorDeviation = Mathf.Abs(
+                    Mathf.DeltaAngle(rightCommand.CyclePhase * Mathf.Rad2Deg, mirroredRightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+                float footAsymmetry = Mathf.Max(
+                    Mathf.Abs(observation.LeftFoot.ContactConfidence - observation.RightFoot.ContactConfidence),
+                    Mathf.Abs(observation.LeftFoot.PlantedConfidence - observation.RightFoot.PlantedConfidence));
+                float unexpectedAsymmetry = Mathf.InverseLerp(0.05f, 0.3f, mirrorDeviation) * footAsymmetry;
+                // Attenuate the unexplained-asymmetry penalty as TurnSeverity ramps
+                // toward the 0.45 recognition threshold so early turn frames don't
+                // latch fallback before preserveTurnSupportOwnership activates.
+                float turnAttenuation = 1f - Mathf.InverseLerp(0.15f, 0.45f, observation.TurnSeverity);
+                stabilityConfidence *= Mathf.Lerp(1f, 0.25f, unexpectedAsymmetry * turnAttenuation);
+            }
+
+            if (hasTurnAsymmetry)
+            {
+                stabilityConfidence *= preserveTurnSupportOwnership
+                    ? Mathf.Lerp(1f, 0.95f, observation.TurnSeverity)
+                    : Mathf.Lerp(1f, 0.85f, observation.TurnSeverity);
+            }
+
+            if (forceCatchStep)
+            {
+                stabilityConfidence *= 0.75f;
+            }
+
+            // STEP 4: Floor — applied AFTER all penalties so it is the definitive minimum.
+            //         During a recognized sharp turn the floor guarantees at least the
+            //         exit threshold so a fallback latch that accumulated during normal
+            //         walking is immediately released once the turn is recognized.
+            //         The planted-foot component still applies when available, but a hard
+            //         turn-recognition floor ensures the state machine stays confident
+            //         enough to execute turn-specific leg roles even when GroundSensor
+            //         planted confidence is transiently zero.
+            if (preserveTurnSupportOwnership)
+            {
+                float plantedSupportConfidence = Mathf.Min(
+                    Mathf.Max(observation.LeftFoot.PlantedConfidence, observation.RightFoot.PlantedConfidence),
+                    1f - observation.SlipEstimate);
+                float floorValue = plantedSupportConfidence * 0.7f;
+
+                // During a recognized sharp turn, guarantee at least the exit threshold.
+                if (hasTurnAsymmetry)
+                {
+                    floorValue = Mathf.Max(floorValue, _minimumStateMachineConfidenceExit);
+                }
+
+                stabilityConfidence = Mathf.Max(stabilityConfidence, floorValue);
+            }
+
+            return Mathf.Clamp01(stabilityConfidence);
+        }
+
+        private void UpdateFallbackGaitBlend(float stateMachineConfidence)
+        {
+            // STEP 1: Latch the fallback gate with hysteresis so a noisy confidence sample
+            //         does not cause the gait to flicker between explicit and mirrored modes.
+            if (_isFallbackGaitLatched)
+            {
+                if (stateMachineConfidence >= _minimumStateMachineConfidenceExit)
+                {
+                    _isFallbackGaitLatched = false;
+                }
+            }
+            else if (stateMachineConfidence <= _minimumStateMachineConfidence)
+            {
+                _isFallbackGaitLatched = true;
+            }
+
+            // STEP 2: Blend numerically into or out of the fallback gait instead of hard
+            //         snapping phases and swing targets in a single frame.
+            float targetBlend = _isFallbackGaitLatched ? 1f : 0f;
+            float blendSpeed = _isFallbackGaitLatched
+                ? _fallbackGaitBlendRiseSpeed
+                : _fallbackGaitBlendFallSpeed;
+            _fallbackGaitBlend = Mathf.MoveTowards(
+                _fallbackGaitBlend,
+                targetBlend,
+                Mathf.Max(0f, blendSpeed) * Time.fixedDeltaTime);
+        }
+
+        private void ApplyLowConfidenceFallback(
+            Vector3 gaitReferenceDirection,
+            bool applyStrandedBias,
+            ref LegCommandOutput leftCommand,
+            ref LegCommandOutput rightCommand)
+        {
+            if (_fallbackGaitBlend <= 0.0001f)
+            {
+                return;
+            }
+
+            // STEP 1: Rebuild a stable mirrored gait anchored on the current exposed left-leg
+            //         phase, preserving forward continuity while steering the opposite leg
+            //         back toward the legacy half-cycle relationship.
+            LegCommandOutput fallbackLeftCommand = BuildFallbackCycleCommand(
+                LocomotionLeg.Left,
+                leftCommand.CyclePhase,
+                leftCommand.BlendWeight,
+                gaitReferenceDirection,
+                applyStrandedBias);
+            LegCommandOutput fallbackRightCommand = BuildFallbackCycleCommand(
+                LocomotionLeg.Right,
+                Mathf.Repeat(leftCommand.CyclePhase + Mathf.PI, Mathf.PI * 2f),
+                rightCommand.BlendWeight,
+                gaitReferenceDirection,
+                applyStrandedBias);
+
+            // STEP 2: Blend the emitted command payloads toward that mirrored fallback so
+            //         the safety path converges over several frames instead of hard snapping.
+            leftCommand = BlendTowardFallbackCommand(leftCommand, fallbackLeftCommand);
+            rightCommand = BlendTowardFallbackCommand(rightCommand, fallbackRightCommand);
+        }
+
+        private LegCommandOutput BuildFallbackCycleCommand(
+            LocomotionLeg leg,
+            float cyclePhase,
+            float blendWeight,
+            Vector3 gaitReferenceDirection,
+            bool applyStrandedBias)
+        {
+            LegStateFrame stateFrame = new LegStateFrame(
+                leg,
+                InferFallbackStateFromPhase(cyclePhase),
+                LegStateTransitionReason.LowConfidenceFallback);
+            float swingAngleDegrees = BuildSwingAngleFromPhase(cyclePhase, blendWeight, stateFrame.State);
+            if (applyStrandedBias)
+            {
+                swingAngleDegrees += _stepAngle * blendWeight;
+            }
+
+            return new LegCommandOutput(
+                leg,
+                LegCommandMode.Cycle,
+                stateFrame,
+                cyclePhase,
+                swingAngleDegrees,
+                _kneeAngle * blendWeight,
+                blendWeight,
+                gaitReferenceDirection);
+        }
+
+        private LegCommandOutput BlendTowardFallbackCommand(
+            LegCommandOutput explicitCommand,
+            LegCommandOutput fallbackCommand)
+        {
+            float blendedCyclePhase = LerpWrappedPhase(
+                explicitCommand.CyclePhase,
+                fallbackCommand.CyclePhase,
+                _fallbackGaitBlend);
+
+            // STEP 2: Promote the logged state/reason into the fallback path once the
+            //         numeric blend is clearly underway, rather than waiting until the
+            //         gait is almost fully mirrored and risking a collapse before the
+            //         safety mode becomes authoritative.
+            LegStateFrame blendedStateFrame = _fallbackGaitBlend >= 0.35f
+                ? fallbackCommand.StateFrame
+                : explicitCommand.StateFrame;
+
+            return new LegCommandOutput(
+                explicitCommand.Leg,
+                explicitCommand.Mode,
+                blendedStateFrame,
+                blendedCyclePhase,
+                Mathf.Lerp(explicitCommand.SwingAngleDegrees, fallbackCommand.SwingAngleDegrees, _fallbackGaitBlend),
+                Mathf.Lerp(explicitCommand.KneeAngleDegrees, fallbackCommand.KneeAngleDegrees, _fallbackGaitBlend),
+                Mathf.Lerp(explicitCommand.BlendWeight, fallbackCommand.BlendWeight, _fallbackGaitBlend),
+                explicitCommand.FootTarget);
+        }
+
+        private static float LerpWrappedPhase(float fromPhase, float toPhase, float blend)
+        {
+            float deltaDegrees = Mathf.DeltaAngle(fromPhase * Mathf.Rad2Deg, toPhase * Mathf.Rad2Deg);
+            return Mathf.Repeat(fromPhase + deltaDegrees * Mathf.Deg2Rad * Mathf.Clamp01(blend), Mathf.PI * 2f);
+        }
+
+        private static LegStateType InferFallbackStateFromPhase(float cyclePhase)
+        {
+            if (cyclePhase < Mathf.PI * 0.85f)
+            {
+                return LegStateType.Swing;
+            }
+
+            if (cyclePhase < Mathf.PI)
+            {
+                return LegStateType.Plant;
+            }
+
+            return LegStateType.Stance;
         }
 
         private void SynchronizeLegStateMachinesFromLegacyPhaseIfNeeded(LegStateTransitionReason transitionReason)
@@ -1132,7 +1468,57 @@ namespace PhysicsDrivenMovement.Character
             return swingAngle;
         }
 
-        private LocomotionLeg SelectCatchStepLeg()
+        private LocomotionLeg SelectRecoveryLeg(
+            Vector3 gaitReferenceDirection,
+            LocomotionObservation observation)
+        {
+            // STEP 1: Prefer the foot that is least reliable as support right now so the
+            //         recovery override goes to the leg that actually needs to reclaim ground.
+            float leftRecoveryScore = BuildRecoveryLegScore(_footL, observation.LeftFoot, gaitReferenceDirection);
+            float rightRecoveryScore = BuildRecoveryLegScore(_footR, observation.RightFoot, gaitReferenceDirection);
+
+            if (Mathf.Abs(leftRecoveryScore - rightRecoveryScore) > 0.05f)
+            {
+                return leftRecoveryScore > rightRecoveryScore ? LocomotionLeg.Left : LocomotionLeg.Right;
+            }
+
+            // STEP 2: If both feet look equally compromised, fall back to the current phase
+            //         so the selected recovery leg is still deterministic frame to frame.
+            return SelectLegByPhaseBias();
+        }
+
+        private float BuildRecoveryLegScore(
+            Transform footTransform,
+            FootContactObservation footObservation,
+            Vector3 gaitReferenceDirection)
+        {
+            float recoveryScore = 0f;
+
+            if (!footObservation.IsGrounded)
+            {
+                recoveryScore += 0.35f;
+            }
+
+            if (!footObservation.IsPlanted)
+            {
+                recoveryScore += 0.25f;
+            }
+
+            recoveryScore += footObservation.SlipEstimate * 0.2f;
+
+            if (footTransform != null && gaitReferenceDirection.sqrMagnitude > 0.0001f)
+            {
+                float footForwardOffset = GetFootForwardOffsetFromHips(footTransform, gaitReferenceDirection);
+                if (footForwardOffset < 0f)
+                {
+                    recoveryScore += Mathf.Clamp01(-footForwardOffset / 0.4f) * 0.4f;
+                }
+            }
+
+            return recoveryScore;
+        }
+
+        private LocomotionLeg SelectLegByPhaseBias()
         {
             float leftSwingBias = Mathf.Sin(_leftLegStateMachine.CyclePhase);
             float rightSwingBias = Mathf.Sin(_rightLegStateMachine.CyclePhase);
@@ -1144,21 +1530,10 @@ namespace PhysicsDrivenMovement.Character
             return new LegStateFrame(stateMachine.Leg, stateMachine.CurrentState, stateMachine.TransitionReason);
         }
 
-        private static LegStateTransitionReason DetermineDominantTransitionReason(
+        private static LegStateTransitionReason DetermineCadenceTransitionReason(
             DesiredInput desiredInput,
-            LocomotionObservation observation,
-            bool isRecoveryState)
+            LocomotionObservation observation)
         {
-            if (isRecoveryState)
-            {
-                return LegStateTransitionReason.StumbleRecovery;
-            }
-
-            if (observation.IsLocomotionCollapsed || observation.IsComOutsideSupport)
-            {
-                return LegStateTransitionReason.StumbleRecovery;
-            }
-
             if (observation.TurnSeverity >= 0.45f && desiredInput.HasMoveIntent)
             {
                 return LegStateTransitionReason.TurnSupport;
@@ -1181,6 +1556,73 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return LegStateTransitionReason.None;
+        }
+
+        private static LegStateTransitionReason DetermineLegTransitionReason(
+            LocomotionLeg leg,
+            LegStateTransitionReason cadenceReason,
+            bool hasTurnAsymmetry,
+            LocomotionLeg outsideLeg,
+            LocomotionLeg insideLeg,
+            bool promoteRecoveryLeg,
+            LocomotionLeg recoveryLeg)
+        {
+            // STEP 1: Recovery ownership outranks cadence so only the selected leg claims
+            //         the stumble-recovery override during C3.4 catch-step promotion.
+            if (promoteRecoveryLeg && leg == recoveryLeg)
+            {
+                return LegStateTransitionReason.StumbleRecovery;
+            }
+
+            // STEP 2: Sharp turns split the outside support leg from the inside cadence leg.
+            if (hasTurnAsymmetry)
+            {
+                if (leg == outsideLeg)
+                {
+                    return LegStateTransitionReason.TurnSupport;
+                }
+
+                if (leg == insideLeg)
+                {
+                    return LegStateTransitionReason.SpeedUp;
+                }
+            }
+
+            return cadenceReason;
+        }
+
+        private static bool TryGetTurnLegRoles(
+            DesiredInput desiredInput,
+            LocomotionObservation observation,
+            out LocomotionLeg outsideLeg,
+            out LocomotionLeg insideLeg)
+        {
+            outsideLeg = LocomotionLeg.Left;
+            insideLeg = LocomotionLeg.Right;
+
+            if (!desiredInput.HasMoveIntent || observation.TurnSeverity < 0.45f)
+            {
+                return false;
+            }
+
+            Vector3 requestedDirection = desiredInput.MoveWorldDirection.sqrMagnitude > 0.0001f
+                ? desiredInput.MoveWorldDirection
+                : desiredInput.FacingDirection;
+            if (requestedDirection.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            float signedTurn = Vector3.Cross(observation.BodyForward, requestedDirection).y;
+            if (Mathf.Abs(signedTurn) <= 0.0001f)
+            {
+                return false;
+            }
+
+            bool turningRight = signedTurn > 0f;
+            outsideLeg = turningRight ? LocomotionLeg.Left : LocomotionLeg.Right;
+            insideLeg = turningRight ? LocomotionLeg.Right : LocomotionLeg.Left;
+            return true;
         }
 
         private void LogLegStateTransitionIfNeeded(LegCommandOutput previousCommand, LegCommandOutput nextCommand)

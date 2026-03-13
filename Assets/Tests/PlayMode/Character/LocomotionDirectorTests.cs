@@ -370,14 +370,70 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             string rightState = GetPropertyValue<object>(rightLegCommand, "State").ToString();
             string leftTransitionReason = GetPropertyValue<object>(leftLegCommand, "TransitionReason").ToString();
             string rightTransitionReason = GetPropertyValue<object>(rightLegCommand, "TransitionReason").ToString();
+            bool leftIsRecoveryLeg = leftState == "CatchStep";
+            bool rightIsRecoveryLeg = rightState == "CatchStep";
 
             // Assert
             Assert.That(new[] { leftState, rightState }, Does.Contain("CatchStep"),
                 "Weak support ahead of the support patch should promote at least one leg into a catch-step role.");
-            Assert.That(leftTransitionReason, Is.EqualTo("StumbleRecovery"),
-                "The left leg command should explain catch-step promotion as a stumble-recovery transition.");
-            Assert.That(rightTransitionReason, Is.EqualTo("StumbleRecovery"),
-                "The right leg command should explain weak-support promotion as a stumble-recovery transition.");
+            Assert.That(leftIsRecoveryLeg ^ rightIsRecoveryLeg, Is.True,
+                "Chapter 3.4 recovery ownership should assign the catch-step role to one recovery leg instead of tagging both legs identically.");
+
+            if (leftIsRecoveryLeg)
+            {
+                Assert.That(leftTransitionReason, Is.EqualTo("StumbleRecovery"),
+                    "The selected left recovery leg should explain its catch-step role as a stumble-recovery transition.");
+                Assert.That(rightTransitionReason, Is.Not.EqualTo("StumbleRecovery"),
+                    "The opposite support leg should keep its own cadence reason instead of mirroring stumble recovery.");
+            }
+            else
+            {
+                Assert.That(rightTransitionReason, Is.EqualTo("StumbleRecovery"),
+                    "The selected right recovery leg should explain its catch-step role as a stumble-recovery transition.");
+                Assert.That(leftTransitionReason, Is.Not.EqualTo("StumbleRecovery"),
+                    "The opposite support leg should keep its own cadence reason instead of mirroring stumble recovery.");
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenSharpTurnRequestsRightwardTravel_AssignsOutsideTurnSupportAndInsideOverride()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C3.4.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            for (int frame = 0; frame < 25; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Act
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.right);
+            for (int frame = 0; frame < 15; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object leftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object rightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+            string leftTransitionReason = GetPropertyValue<object>(leftLegCommand, "TransitionReason").ToString();
+            string rightTransitionReason = GetPropertyValue<object>(rightLegCommand, "TransitionReason").ToString();
+            float leftPhase = GetPropertyValue<float>(leftLegCommand, "CyclePhase");
+            float rightPhase = GetPropertyValue<float>(rightLegCommand, "CyclePhase");
+            float mirroredRightPhase = Mathf.Repeat(leftPhase + Mathf.PI, Mathf.PI * 2f);
+            float mirrorDeviation = Mathf.Abs(
+                Mathf.DeltaAngle(rightPhase * Mathf.Rad2Deg, mirroredRightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+
+            // Assert
+            Assert.That(leftTransitionReason, Is.EqualTo("TurnSupport"),
+                "During a sharp right turn, the outside left leg should stay in a turn-support cadence role.");
+            Assert.That(new[] { "SpeedUp", "StumbleRecovery" }, Does.Contain(rightTransitionReason),
+                "During a sharp right turn, the inside right leg should stop mirroring outside-leg turn support and use either a faster cadence or a support-risk recovery override.");
+            Assert.That(mirrorDeviation, Is.GreaterThan(0.05f),
+                "Chapter 3.4 should let the inside and outside turn legs break a strict half-cycle mirror instead of sharing the same cadence timing.");
         }
 
         [UnityTest]
@@ -441,6 +497,93 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenStateMachineConfidenceDrops_ConvergesTowardMirroredFallbackWithoutOneFrameSnap()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for roadmap task C3.5.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            Rigidbody footRightBody = _rig.FootR.GetComponent<Rigidbody>();
+            Assert.That(footRightBody, Is.Not.Null, "Foot_R should expose a Rigidbody on the prefab-backed test rig.");
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            RigidbodyConstraints originalConstraints = footRightBody.constraints;
+            footRightBody.constraints = RigidbodyConstraints.FreezeAll;
+            TeleportFootBody(
+                footRightBody,
+                _rig.HipsBody.position + Vector3.right * 0.25f + Vector3.up * 0.9f + Vector3.forward * 0.1f);
+
+            for (int frame = 0; frame < 10; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object asymmetricLeftLegCommand = GetPropertyValue<object>(_director, "LeftLegCommand");
+            object asymmetricRightLegCommand = GetPropertyValue<object>(_director, "RightLegCommand");
+            float asymmetricLeftPhase = GetPropertyValue<float>(asymmetricLeftLegCommand, "CyclePhase");
+            float asymmetricRightPhase = GetPropertyValue<float>(asymmetricRightLegCommand, "CyclePhase");
+            float asymmetricMirrorDeviation = GetMirrorDeviationRadians(asymmetricLeftPhase, asymmetricRightPhase);
+            object desiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+
+            footRightBody.constraints = originalConstraints;
+
+            Assert.That(asymmetricMirrorDeviation, Is.GreaterThan(0.05f),
+                "The precondition for C3.5 requires a genuinely asymmetric gait phase before the fallback path is asked to recover it.");
+
+            SetPrivateField(_rig.LegAnimator, "_minimumStateMachineConfidence", 0.95f);
+            SetPrivateField(_rig.LegAnimator, "_fallbackGaitBlendRiseSpeed", 10f);
+
+            // Act
+            BuildAndApplyPassThroughCommandFrame(
+                _rig.LegAnimator,
+                desiredInput,
+                observation,
+                out object firstFallbackLeftLegCommand,
+                out object firstFallbackRightLegCommand);
+            float firstFallbackLeftPhase = GetPropertyValue<float>(firstFallbackLeftLegCommand, "CyclePhase");
+            float firstFallbackRightPhase = GetPropertyValue<float>(firstFallbackRightLegCommand, "CyclePhase");
+            float firstFallbackMirrorDeviation = GetMirrorDeviationRadians(firstFallbackLeftPhase, firstFallbackRightPhase);
+
+            object settledFallbackLeftLegCommand = firstFallbackLeftLegCommand;
+            object settledFallbackRightLegCommand = firstFallbackRightLegCommand;
+
+            for (int frame = 0; frame < 8; frame++)
+            {
+                BuildAndApplyPassThroughCommandFrame(
+                    _rig.LegAnimator,
+                    desiredInput,
+                    observation,
+                    out settledFallbackLeftLegCommand,
+                    out settledFallbackRightLegCommand);
+            }
+            float settledFallbackLeftPhase = GetPropertyValue<float>(settledFallbackLeftLegCommand, "CyclePhase");
+            float settledFallbackRightPhase = GetPropertyValue<float>(settledFallbackRightLegCommand, "CyclePhase");
+            float settledFallbackMirrorDeviation = GetMirrorDeviationRadians(settledFallbackLeftPhase, settledFallbackRightPhase);
+            string settledLeftTransitionReason = GetPropertyValue<object>(settledFallbackLeftLegCommand, "TransitionReason").ToString();
+            string settledRightTransitionReason = GetPropertyValue<object>(settledFallbackRightLegCommand, "TransitionReason").ToString();
+
+            // Assert
+            Assert.That(firstFallbackMirrorDeviation, Is.GreaterThan(0.015f),
+                "Low-confidence fallback should not hard-snap the gait straight back into an exact mirrored phase in a single frame.");
+            Assert.That(settledFallbackMirrorDeviation, Is.LessThan(0.03f),
+                "After the fallback blend has time to settle, the unstable asymmetric gait should converge back toward a stable mirrored cadence.");
+            Assert.That(settledFallbackMirrorDeviation, Is.LessThan(asymmetricMirrorDeviation - 0.02f),
+                "C3.5 fallback should materially reduce asymmetric phase drift once confidence stays low for several frames.");
+            Assert.That(settledLeftTransitionReason, Is.EqualTo("LowConfidenceFallback"),
+                "The left leg command should log the graceful fallback reason once the low-confidence gait safety path takes over.");
+            Assert.That(settledRightTransitionReason, Is.EqualTo("LowConfidenceFallback"),
+                "The right leg command should log the graceful fallback reason once the low-confidence gait safety path takes over.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenCollapseWatchdogConfirmsButStateRemainsMoving_StillEmitsCycleCommands()
         {
             // Arrange
@@ -490,6 +633,47 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             object value = property.GetValue(instance);
             Assert.That(value, Is.Not.Null, $"Property '{propertyName}' should not be null.");
             return (T)value;
+        }
+
+        private static void SetPrivateField(object instance, string fieldName, object value)
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo field = instance.GetType().GetField(fieldName, flags);
+
+            Assert.That(field, Is.Not.Null,
+                $"Expected type '{instance.GetType().FullName}' to expose private field '{fieldName}'.");
+
+            field.SetValue(instance, value);
+        }
+
+        private static float GetMirrorDeviationRadians(float leftPhase, float rightPhase)
+        {
+            float mirroredRightPhase = Mathf.Repeat(leftPhase + Mathf.PI, Mathf.PI * 2f);
+            return Mathf.Abs(Mathf.DeltaAngle(rightPhase * Mathf.Rad2Deg, mirroredRightPhase * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+        }
+
+        private static void BuildAndApplyPassThroughCommandFrame(
+            LegAnimator legAnimator,
+            object desiredInput,
+            object observation,
+            out object leftCommand,
+            out object rightCommand)
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            MethodInfo buildPassThroughCommandsMethod = typeof(LegAnimator).GetMethod("BuildPassThroughCommands", flags);
+            MethodInfo setCommandFrameMethod = typeof(LegAnimator).GetMethod("SetCommandFrame", flags);
+
+            Assert.That(buildPassThroughCommandsMethod, Is.Not.Null,
+                "Expected LegAnimator to expose internal BuildPassThroughCommands for Chapter 3 command construction.");
+            Assert.That(setCommandFrameMethod, Is.Not.Null,
+                "Expected LegAnimator to expose internal SetCommandFrame for Chapter 3 command application.");
+
+            object[] buildArguments = { desiredInput, observation, null, null };
+            buildPassThroughCommandsMethod.Invoke(legAnimator, buildArguments);
+            leftCommand = buildArguments[2];
+            rightCommand = buildArguments[3];
+
+            setCommandFrameMethod.Invoke(legAnimator, new[] { desiredInput, observation, leftCommand, rightCommand });
         }
 
         private static void AssertVector2Equal(Vector2 actual, Vector2 expected, string propertyName)

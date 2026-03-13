@@ -31,6 +31,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private PlayerPrefabTestRig(Options options)
         {
+            PlayModeSceneIsolation.ResetToEmptyScene();
+
             _savedFixedDeltaTime = Time.fixedDeltaTime;
             _savedSolverIterations = Physics.defaultSolverIterations;
             _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;

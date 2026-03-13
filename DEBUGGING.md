@@ -145,9 +145,9 @@ Useful physics-style signals:
 **Fix:** keep the real stack active in the regression test and diagnose the ownership or ordering conflict.
 
 ### "A PlayMode fixture passes alone but degrades inside a multi-fixture slice"
-**Most likely issue:** a previous test leaked global Unity physics state such as the layer-collision matrix, fixed timestep, or solver settings.
+**Most likely issue:** a previous test leaked global Unity physics state such as the layer-collision matrix, fixed timestep, or solver settings, or left the next prefab-backed fixture instantiating into an authored scene that it did not expect.
 
-**Fix:** save and restore global physics settings in `SetUp`/`TearDown`, then compare the isolated fixture metrics against the full slice again before blaming runtime code.
+**Fix:** save and restore global physics settings in `SetUp`/`TearDown`, and for prefab-backed PlayMode fixtures switch the active test world to a fresh runtime scene via `SceneManager.CreateScene(...)` plus `SceneManager.SetActiveScene(...)` before instantiating the rig. Do not use `EditorSceneManager.NewScene(...)` during PlayMode setup. If the remaining red is a locomotion outcome assertion, prefer hips-relative limb lead over raw world-position crossing so whole-body translation does not dominate the metric.
 
 ---
 

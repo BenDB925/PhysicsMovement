@@ -13,5 +13,6 @@ namespace PhysicsDrivenMovement.Character
         Braking = 3,
         TurnSupport = 4,
         StumbleRecovery = 5,
+        LowConfidenceFallback = 6,
     }
 }

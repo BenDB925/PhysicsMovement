@@ -9,6 +9,7 @@
   <Project Path="Unity.PerformanceTesting.Editor.csproj" />
   <Project Path="PhysicsDrivenMovement.Tests.PlayMode.csproj" />
   <Project Path="Unity.Burst.csproj" />
+  <Project Path="McpUnity.Editor.csproj" />
   <Project Path="Unity.VisualStudio.Editor.csproj" />
   <Project Path="Unity.PerformanceTesting.csproj" />
   <Project Path="Unity.Networking.Transport.csproj" />
@@ -26,6 +27,7 @@
   <Project Path="Unity.Multiplayer.Center.Common.csproj" />
   <Project Path="PhysicsDrivenMovement.Tests.EditMode.csproj" />
   <Project Path="Unity.InputSystem.ForUI.csproj" />
+  <Project Path="Unity.EditorCoroutines.Editor.csproj" />
   <Project Path="Unity.Collections.CodeGen.csproj" />
   <Project Path="Unity.Mathematics.Editor.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />

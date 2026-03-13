@@ -9,6 +9,7 @@
 - Default to `Tools/Run-UnityTests.ps1` and the smallest meaningful `-TestFilter` slice for the feature you changed; only escalate to full-platform coverage when the impact is cross-cutting.
 - Run EditMode and PlayMode sequentially, never in parallel, and verify that fresh XML was written under `TestResults/` before trusting the result.
 - Prefer the absolute-path, `-NoProfile` invocation of the repo script for terminal reliability; use raw Unity CLI only when the repo script is insufficient.
+- Use Unity MCP `run_tests` only for quick in-editor smoke checks or when the current open editor state matters; use the repo script for authoritative unattended verification.
 - Decide pass/fail from the NUnit XML, not from Unity's process exit code alone; use the log file for compile or infrastructure diagnostics.
 
 ## Read More When
@@ -22,6 +23,8 @@
 ## Overview
 
 Unity's Test Framework supports headless execution via the Unity Editor's **command-line / batch mode**. The agent can invoke the Unity executable with specific arguments to run tests, produce an NUnit XML results file, and then parse that file to determine pass/fail status — all without the user interacting with the Unity GUI.
+
+When a Unity editor session is already open and you only need fast local confirmation, the Unity MCP `run_tests` tool is acceptable as a supplemental path. Do not treat that as the final regression record; use the repo script when you need reliable `TestResults/*.xml`, retries, or lock handling.
 
 ---
 

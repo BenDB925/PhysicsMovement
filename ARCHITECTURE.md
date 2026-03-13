@@ -8,6 +8,7 @@
 - Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label and `LocomotionCollapseDetector` as a watchdog input.
 - The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
 - `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity` respectively.
+- A live Unity MCP bridge is available for editor automation through the MCP stdio server plus Unity's `ws://localhost:8090/McpUnity` endpoint; use it for editor-state work and keep unattended regression verification on `Tools/Run-UnityTests.ps1`.
 - When ownership boundaries or key collaborators change, keep this file, `TASK_ROUTING.md`, and `.copilot-instructions.md` aligned in the same slice.
 
 ## Read More When
@@ -59,6 +60,12 @@
 
 ★ = not yet implemented
 ```
+
+## 1.5 — Editor Automation Surface
+
+- VS Code agents can drive the open Unity editor through the Unity MCP bridge documented in `UNITY_MCP.md`.
+- Prefer that bridge for console inspection, script recompiles, menu-item execution, scene or prefab mutation, component wiring, material edits, and quick in-editor smoke tests.
+- Keep unattended regression verification on `Tools/Run-UnityTests.ps1` so `TestResults/` remains the authoritative artifact source.
 
 ---
 

@@ -65,6 +65,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [SetUp]
         public void SetUp()
         {
+            PlayModeSceneIsolation.ResetToEmptyScene();
+
             _savedFixedDeltaTime = Time.fixedDeltaTime;
             _savedSolverIterations = Physics.defaultSolverIterations;
             _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
@@ -472,6 +474,69 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Catch-step execution should drive a stronger forward upper-leg target than a plain swing " +
                 $"when the raw command payload is otherwise identical. Swing={swingTargetAngle:F2}°, " +
                 $"CatchStep={catchStepTargetAngle:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenRecoveryStepWindowProgresses_DrivesFurtherReachAndKneeTuck()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.25f,
+                swingAngleDegrees: -6f,
+                kneeAngleDegrees: 6f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            object earlyRecoveryCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "HoldPose",
+                stateName: "RecoveryStep",
+                transitionReasonName: "StumbleRecovery",
+                cyclePhase: Mathf.PI * 0.1f,
+                swingAngleDegrees: -30f,
+                kneeAngleDegrees: 0f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            ApplyExplicitCommandFrame(earlyRecoveryCommand, rightSupportCommand);
+            float earlyRecoveryUpperLegAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+            float earlyRecoveryKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegLJoint.targetRotation);
+
+            object lateRecoveryCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "HoldPose",
+                stateName: "RecoveryStep",
+                transitionReasonName: "StumbleRecovery",
+                cyclePhase: Mathf.PI * 0.9f,
+                swingAngleDegrees: -30f,
+                kneeAngleDegrees: 0f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward);
+
+            // Act
+            ApplyExplicitCommandFrame(lateRecoveryCommand, rightSupportCommand);
+            float lateRecoveryUpperLegAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+            float lateRecoveryKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegLJoint.targetRotation);
+
+            // Assert
+            Assert.That(lateRecoveryUpperLegAngle, Is.GreaterThan(earlyRecoveryUpperLegAngle + 5f),
+                $"Recovery-step execution should use the explicit timing window to reach further forward later in the step " +
+                $"instead of replaying the same static hold pose. Early={earlyRecoveryUpperLegAngle:F2}°, " +
+                $"Late={lateRecoveryUpperLegAngle:F2}°.");
+            Assert.That(lateRecoveryKneeAngle, Is.GreaterThan(earlyRecoveryKneeAngle + 5f),
+                $"Recovery-step execution should tuck the knee more aggressively later in the recovery window. " +
+                $"Early={earlyRecoveryKneeAngle:F2}°, Late={lateRecoveryKneeAngle:F2}°.");
         }
 
         [UnityTest]
@@ -1249,34 +1314,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         /// <summary>
-        /// Gait Quality Test 3: Feet must alternate — left and right lower legs must
-        /// each take a turn being further forward along the movement direction over 80
-        /// physics frames.
+        /// Gait Quality Test 3: both lower legs must visibly take a forward turn relative
+        /// to the hips, and those turns must happen at different times.
         ///
-        /// This proves that the L/R alternating gait phase (π offset) produces a visible
-        /// walking pattern in world space, not just symmetric oscillation.
+        /// The old mirror-only gait could be validated by asking whether one lower leg's
+        /// world position fully crossed ahead of the other within a short cold-start run.
+        /// Chapter 3's explicit per-leg controller allows longer support dwell and small
+        /// asymmetries, so a support leg can retain a slight global lead while the other
+        /// leg still takes a clear forward step. What matters for readable alternation is:
+        ///   1. each lower leg reaches a meaningful forward excursion relative to the hips,
+        ///      not just from whole-body translation, and
+        ///   2. those peak excursions are separated in time rather than happening together.
         ///
-        /// Method:
-        ///   Move input is (0, 1) → movement direction is world +Z.
-        ///   Project both lower leg world positions onto the +Z axis each frame.
-        ///   Assert that:
-        ///     (a) At some frame, LowerLeg_L.z > LowerLeg_R.z (left foot is ahead)
-        ///     (b) At a different frame, LowerLeg_R.z > LowerLeg_L.z (right foot is ahead)
-        ///
-        /// Threshold rationale (0.01 m):
-        ///   - With _stepAngle=25° and upper leg length ~0.3 m, the forward excursion of
-        ///     each foot at peak swing is ~0.3 × sin(25°) ≈ 0.13 m.
-        ///   - 0.01 m threshold is conservative: both feet should exceed this easily if
-        ///     the alternating phase is working.
-        ///   - A symmetric rig (both swinging together) would never produce a crossing;
-        ///     a broken phase would show one foot always ahead.
+        /// This still catches dead-leg and synchronized-gait regressions without binding
+        /// the test to a strict world-position crossing that whole-body drift can mask.
         /// </summary>
         [UnityTest]
         public IEnumerator LowerLeg_WhenWalking_FeetAlternate()
         {
             // ── Arrange ────────────────────────────────────────────────────────
-            const float MinAlternationMarginMetres = 0.01f;
-            const int PhysicsFrames = 80;
+            const float MinForwardExcursionMetres = 0.02f;
+            const int MinPeakSeparationFrames = 10;
+            const int PhysicsFrames = 120;
 
             // Move input direction: forward (+Z in world space for our rig)
             Vector2 moveInput = new Vector2(0f, 1f);
@@ -1286,41 +1345,56 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 out GameObject physUpperLegL, out GameObject physUpperLegR,
                 out GameObject physLowerLegL, out GameObject physLowerLegR,
                 out GameObject physFootL, out GameObject physFootR);
+            Transform hipsTransform = physMovement.transform;
 
             physMovement.SetMoveInputForTest(moveInput);
             yield return null;  // allow Awake/Start
 
+            float startForwardL = Vector3.Dot(physLowerLegL.transform.position - hipsTransform.position, moveDir3D);
+            float startForwardR = Vector3.Dot(physLowerLegR.transform.position - hipsTransform.position, moveDir3D);
+
             // ── Act ────────────────────────────────────────────────────────────
-            float maxLeftAheadMargin  = float.MinValue;  // L.z - R.z (positive = L ahead)
-            float maxRightAheadMargin = float.MinValue;  // R.z - L.z (positive = R ahead)
+            float maxForwardExcursionL = float.MinValue;
+            float maxForwardExcursionR = float.MinValue;
+            int peakFrameL = -1;
+            int peakFrameR = -1;
 
             for (int i = 0; i < PhysicsFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
 
-                // Project lower leg world positions onto the movement direction
-                float lForward = Vector3.Dot(physLowerLegL.transform.position, moveDir3D);
-                float rForward = Vector3.Dot(physLowerLegR.transform.position, moveDir3D);
+                float lForward = Vector3.Dot(physLowerLegL.transform.position - hipsTransform.position, moveDir3D);
+                float rForward = Vector3.Dot(physLowerLegR.transform.position - hipsTransform.position, moveDir3D);
+                float excursionL = lForward - startForwardL;
+                float excursionR = rForward - startForwardR;
 
-                float leftAhead  = lForward - rForward;
-                float rightAhead = rForward - lForward;
+                if (excursionL > maxForwardExcursionL)
+                {
+                    maxForwardExcursionL = excursionL;
+                    peakFrameL = i;
+                }
 
-                if (leftAhead  > maxLeftAheadMargin)  { maxLeftAheadMargin  = leftAhead; }
-                if (rightAhead > maxRightAheadMargin) { maxRightAheadMargin = rightAhead; }
+                if (excursionR > maxForwardExcursionR)
+                {
+                    maxForwardExcursionR = excursionR;
+                    peakFrameR = i;
+                }
             }
 
             // ── Assert ─────────────────────────────────────────────────────────
-            Assert.That(maxLeftAheadMargin, Is.GreaterThanOrEqualTo(MinAlternationMarginMetres),
-                $"During {PhysicsFrames} frames, LowerLeg_L must be further forward than LowerLeg_R " +
-                $"by ≥{MinAlternationMarginMetres:F3} m at some frame. " +
-                $"Max L-ahead margin={maxLeftAheadMargin:F4} m. " +
-                $"A value below threshold means left foot never leads — alternating gait broken.");
+            Assert.That(maxForwardExcursionL, Is.GreaterThanOrEqualTo(MinForwardExcursionMetres),
+                $"During {PhysicsFrames} frames, LowerLeg_L must gain at least {MinForwardExcursionMetres:F3} m " +
+                $"of forward excursion relative to its own start. Max excursion={maxForwardExcursionL:F4} m at " +
+                $"frame {peakFrameL}. A value below threshold means the left leg never takes a meaningful step.");
 
-            Assert.That(maxRightAheadMargin, Is.GreaterThanOrEqualTo(MinAlternationMarginMetres),
-                $"During {PhysicsFrames} frames, LowerLeg_R must be further forward than LowerLeg_L " +
-                $"by ≥{MinAlternationMarginMetres:F3} m at some frame. " +
-                $"Max R-ahead margin={maxRightAheadMargin:F4} m. " +
-                $"A value below threshold means right foot never leads — alternating gait broken.");
+            Assert.That(maxForwardExcursionR, Is.GreaterThanOrEqualTo(MinForwardExcursionMetres),
+                $"During {PhysicsFrames} frames, LowerLeg_R must gain at least {MinForwardExcursionMetres:F3} m " +
+                $"of forward excursion relative to its own start. Max excursion={maxForwardExcursionR:F4} m at " +
+                $"frame {peakFrameR}. A value below threshold means the right leg never takes a meaningful step.");
+
+            Assert.That(Mathf.Abs(peakFrameL - peakFrameR), Is.GreaterThanOrEqualTo(MinPeakSeparationFrames),
+                $"Left and right lower-leg forward peaks must be separated in time to prove alternating gait. " +
+                $"Peak frames: L={peakFrameL}, R={peakFrameR}, required separation={MinPeakSeparationFrames}.");
 
             // ── Cleanup ────────────────────────────────────────────────────────
             UnityEngine.Object.Destroy(rigRoot);
@@ -2580,8 +2654,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// <summary>
         /// When the character has input but is stuck (zero horizontal velocity for
         /// _stuckFrameThreshold frames while smoothedInputMag > 0.5), LegAnimator must
-        /// drive both UpperLeg joints to the recovery pose (AngleAxis(-30, swingAxis)),
-        /// which should be significantly different from identity (> 10 degrees).
+        /// drive both UpperLeg joints into the state-driven recovery window instead of
+        /// leaving them near identity. The exact profile can evolve, but both legs should
+        /// clearly enter a non-rest recovery pose (> 10 degrees from identity).
         /// </summary>
         [UnityTest]
         public IEnumerator WhenStuck_RecoveryPoseIsApplied()
@@ -2621,14 +2696,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(angleL, Is.GreaterThan(10f),
                 $"UpperLeg_L targetRotation must be in recovery pose (> 10 degrees from identity). " +
                 $"Actual angle from identity: {angleL:F2}°. " +
-                "LegAnimator stuck detection may not have fired, or recovery pose not applied.");
+                "LegAnimator stuck detection may not have fired, or the recovery-state bridge may not have applied.");
 
             // Assert 2: UpperLeg_R targetRotation should also be in recovery pose.
             float angleR = Quaternion.Angle(_upperLegRJoint.targetRotation, Quaternion.identity);
             Assert.That(angleR, Is.GreaterThan(10f),
                 $"UpperLeg_R targetRotation must be in recovery pose (> 10 degrees from identity). " +
                 $"Actual angle from identity: {angleR:F2}°. " +
-                "Both upper-leg joints must receive recovery pose during stuck recovery.");
+                "Both upper-leg joints must receive the recovery-state bridge during stuck recovery.");
         }
 
         /// <summary>

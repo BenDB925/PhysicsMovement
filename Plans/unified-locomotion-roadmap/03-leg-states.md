@@ -5,7 +5,7 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 ## Quick Load
 
 - Use this chapter for gait-state migration: replace mirrored phase-only cadence with explicit per-leg state labels, transition reasons, and eventually state-driven execution.
-- Completed work so far covers C3.1 explicit state/reason contracts and C3.2 per-leg controller timing; C3.3-C3.5 are still the remaining bridge, asymmetry, and fallback slices.
+- Completed work so far covers C3.1 explicit state/reason contracts, C3.2 per-leg controller timing, C3.3 animator bridge execution, and C3.4 state-aware asymmetry. C3.5 failure handling is now the remaining open Chapter 3 slice.
 - The main verification surface is `LocomotionContractsTests`, `LocomotionDirectorTests`, `LegAnimatorTests`, `GaitOutcomeTests`, and `StumbleStutterRegressionTests`.
 - Read Chapter 1 first if a gait-state change also moves ownership boundaries, and coordinate with Chapter 2 when new state transitions depend on observation-model signals.
 
@@ -52,9 +52,17 @@ Move from pure phase-offset gait to explicit per-leg state roles.
 3. C3.3 Animator bridge:
    - LegAnimator executes state-driven targets and timing windows.
    - Keep current sinusoidal path as fallback during migration.
+   - 2026-03-12: Complete. `LegAnimator.ResolveLegExecutionTargets(...)` now bridges every Chapter 3 runtime state, including a dedicated `RecoveryStep` timing window and a stronger `CatchStep` execution profile, while `_useStateDrivenExecution` keeps the raw sinusoidal command payload as the fallback path.
+   - 2026-03-12: Verification passed via focused `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`) and the broader Chapter 3 mixed PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` (`77 passed, 3 ignored, 0 failed`). An isolated `MovementQualityTests` rerun remained at the same two known pre-existing reds (`WalkStraight_NoFalls`, `SustainedLocomotionCollapse_TransitionsIntoFallen`) with no new failures.
 4. C3.4 State-aware asymmetry:
    - Allow outside and inside legs to diverge in sharp turns.
    - Allow recovery leg to override standard cadence.
+   - 2026-03-12: In progress. `LegAnimator.BuildPassThroughCommands(...)` now derives a baseline cadence reason and then splits it per leg so the outside turn leg stays on `TurnSupport`, the inside turn leg uses an override cadence, and catch-step ownership is assigned to a selected recovery leg instead of mirroring `StumbleRecovery` across both legs. Recovery-leg selection now prefers weaker support/trailing-foot evidence over a fixed mirror assumption.
+   - 2026-03-12: Idle pass-through commands now publish neutral `HoldPose` targets while the internal phase still decays, and no-input gait activation now uses a braking-scale speed threshold so the stop/idle path does not stay active on settle noise.
+   - 2026-03-12: Focused verification passed via `LocomotionDirectorTests` (`11/11`), the EditMode seam slice `LocomotionContractsTests` + `LocomotionDirectorEditModeTests` (`19/19`), isolated `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`), and the tested pairwise PlayMode combinations `LocomotionDirectorTests` + `LegAnimatorTests` (`69 passed, 3 ignored, 0 failed`), `GaitOutcomeTests` + `LegAnimatorTests` (`62 passed, 3 ignored, 0 failed`), `LegAnimatorTests` + `StumbleStutterRegressionTests` (`63 passed, 3 ignored, 0 failed`), and `GaitOutcomeTests` + `StumbleStutterRegressionTests` (`9/9`).
+   - 2026-03-13: Complete. Prefab-backed PlayMode fixtures that build their own rigs now switch onto a fresh runtime-created active scene via `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`, which removed the scene bleed that had been leaving later locomotion fixtures inside Arena_01 or another authored scene.
+   - 2026-03-13: `LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate()` now measures hips-relative lower-leg forward lead plus separated peak timing rather than strict world-position crossing, which better matches the explicit per-leg controller while still catching dead-leg and synchronized-gait regressions.
+   - 2026-03-13: The full mixed PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, closing the remaining C3.4 blocker.
 5. C3.5 Failure handling:
    - If state machine confidence is low, degrade gracefully to stable fallback gait rather than hard snapping.
 

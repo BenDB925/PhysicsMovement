@@ -3,17 +3,18 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Finish Chapter 3 C3.3 by resolving the mixed-slice `LowerLeg_WhenWalking_FeetAlternate` instability, then proceed to C3.4 state-aware asymmetry.
-- Active blockers: Broader mixed PlayMode slices still expose `LowerLeg_WhenWalking_FeetAlternate` instability while the focused `LegAnimatorTests` slice stays green.
+- Current next step: Start Chapter 3 C3.5 failure handling now that the C3.4 asymmetry slice and its mixed PlayMode gate are green.
+- Active blockers: None on the current Chapter 3 asymmetry gate. C3.5 fallback behavior is still open implementation work.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1 and 2 are complete, Chapter 3 is active, and Chapters 4 through 9 remain queued in order.
-- Open Chapter 3 for live gait-state work and Chapter 9 for validation or telemetry workflow context; use `LOCOMOTION_BASELINES.md` only when comparing regressions or known reds.
+- Chapters 1 and 2 are complete, Chapter 3 C3.4 is now complete, and C3.5 remains the next open locomotion slice.
+- The former mixed C3.4 blocker is resolved: the four-fixture PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` now passes `78 passed, 3 ignored, 0 failed` after isolating prefab-backed PlayMode fixtures onto fresh runtime scenes and updating the lower-leg alternation test to measure hips-relative lead instead of brittle world-position crossing.
+- Open Chapter 3 for C3.5 fallback behavior next, and use `LOCOMOTION_BASELINES.md` only when comparing known pre-existing reds such as the two isolated `MovementQualityTests` failures.
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/03-leg-states.md`: active work package and current Chapter 3 blocker.
-- `LOCOMOTION_BASELINES.md`: baseline snapshots and known pre-existing locomotion reds.
+- `Plans/unified-locomotion-roadmap/03-leg-states.md`: active Chapter 3 work package with C3.4 completion notes and the remaining C3.5 work.
+- `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
 
 ## Child docs
 - [x] Chapter 1: Define The Single Voice (`Plans/unified-locomotion-roadmap/01-single-voice.md`)
@@ -29,7 +30,7 @@
 ## Work packages
 1. [x] Clean Chapter 1 authority boundaries and lock the pre-director baseline.
 2. [x] Promote a stable locomotion world model through Chapter 2.
-3. [ ] Finish Chapter 3 gait-state migration and clear the remaining mixed-slice regression.
+3. [ ] Finish Chapter 3 gait-state migration with C3.4 state-aware asymmetry and C3.5 failure handling.
 4. [ ] Execute Chapters 4 through 8 in order once the Chapter 3 bridge is stable enough to build on.
 5. [ ] Keep Chapter 9 validation, telemetry, and baseline artifacts current throughout the roadmap.
 
@@ -67,3 +68,6 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 
 ## Progress notes
 - 2026-03-12: Migrated the roadmap's working chapters out of `.github/instructions/unified-locomotion-roadmap/` into `Plans/unified-locomotion-roadmap/` so the instruction layer stays a thin router and the execution record lives under the canonical plan tree.
+- 2026-03-12: Completed Chapter 3 C3.3 by giving `LegAnimator` dedicated `RecoveryStep` timing and stronger `CatchStep` execution, clearing the focused `LegAnimatorTests` slice (`58 passed, 3 ignored, 0 failed`) and the broader mixed Chapter 3 gate (`77 passed, 3 ignored, 0 failed`). A separate `MovementQualityTests` rerun stayed at the same two known pre-existing reds.
+- 2026-03-12: Started Chapter 3 C3.4 by splitting `LegAnimator` pass-through planning into per-leg turn/recovery reasons so sharp turns now give the outside leg `TurnSupport`, the inside leg an override cadence, and catch-step ownership to one selected recovery leg instead of mirroring stumble recovery across both legs. Focused verification passed via `LocomotionDirectorTests` (`11/11`), EditMode seam coverage (`19/19`), isolated `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`), and pairwise PlayMode combinations (`69/72`, `62/65`, and `63/66` all green aside from the expected ignores). The remaining blocker is the larger four-fixture mixed slice, which still shows order-sensitive `LowerLeg_WhenWalking_FeetAlternate` and `SharpTurn90_NoFallenTransition` reds.
+- 2026-03-13: Closed the C3.4 mixed-slice blocker. Prefab-backed PlayMode fixtures now switch to a fresh runtime scene via `PlayModeSceneIsolation.ResetToEmptyScene()` before instantiating their rigs, which stopped scene bleed from earlier scene-loading tests. `LegAnimatorTests.LowerLeg_WhenWalking_FeetAlternate()` now measures hips-relative lower-leg forward lead and separated peak timing instead of strict world-position crossing. The full mixed Chapter 3 PlayMode slice `LocomotionDirectorTests` + `LegAnimatorTests` + `GaitOutcomeTests` + `StumbleStutterRegressionTests` passed `78 passed, 3 ignored, 0 failed`, so the next open Chapter 3 work is C3.5 failure handling.
