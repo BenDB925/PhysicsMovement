@@ -70,6 +70,19 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum lean angle (degrees) the director requests during turns. Scales with turn severity so the COM target shifts toward the turn.")]
         private float _maxTurnLeanDegrees = 5f;
 
+        [Header("Recovery Transition Hysteresis")]
+        [SerializeField, Range(1, 10)]
+        [Tooltip("Minimum consecutive frames a recovery situation must persist before entering recovery. NearFall and Stumble use half this value.")]
+        private int _recoveryEntryDebounceFrames = 3;
+
+        [SerializeField, Range(1, 60)]
+        [Tooltip("Frames to block re-entry of the same-or-lower-priority recovery situation after the previous recovery expires.")]
+        private int _recoveryExitCooldownFrames = 20;
+
+        [SerializeField, Range(1, 20)]
+        [Tooltip("Frames over which recovery blend ramps from 0 to its natural value, preventing snap-on of support adjustments.")]
+        private int _recoveryRampInFrames = 8;
+
         [Header("Debug Visibility")]
         [SerializeField]
         [Tooltip("Draws the current support geometry, COM offset, and predicted drift direction in the Scene view while the game is running.")]
@@ -114,6 +127,7 @@ namespace PhysicsDrivenMovement.Character
         private string _currentObservationTelemetryLine;
         private float _nextObservationTelemetryTime;
         private RecoveryState _currentRecoveryState;
+        private RecoveryTransitionGuard _transitionGuard;
 
         public bool HasCommandFrame { get; private set; }
 
@@ -197,6 +211,7 @@ namespace PhysicsDrivenMovement.Character
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
+            _transitionGuard = null;
             _supportObservationFilter = null;
             ResetOutputs();
         }
@@ -404,10 +419,14 @@ namespace PhysicsDrivenMovement.Character
             int recoveryFramesThisStep = _currentRecoveryState.FramesRemaining;
             float recoveryBlend = ComputeRecoveryBlend(recoveryFramesThisStep);
 
+            // Apply C6.3 ramp-in so recovery blend increases gradually from 0 at entry.
+            float rampInBlend = _transitionGuard.ComputeRampInBlend(_recoveryRampInFrames);
+            recoveryBlend *= rampInBlend;
+
             int kdStartOffset = _balanceController.SnapRecoveryDurationFrames - _balanceController.SnapRecoveryKdDurationFrames;
             int recoveryFramesAfterSupport = recoveryFramesThisStep > 0 ? recoveryFramesThisStep - 1 : 0;
             int kdFrames = recoveryFramesAfterSupport - kdStartOffset;
-            float recoveryKdBlend = ComputeRecoveryBlend(kdFrames);
+            float recoveryKdBlend = ComputeRecoveryBlend(kdFrames) * rampInBlend;
 
             // STEP 3: Map observation severity onto the support-command surface, with per-situation
             // response profiles blended in while recovery is active.
@@ -462,9 +481,16 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 5: Advance the recovery state after publishing the command frame for this step.
+            // Tick the transition guard ramp-in and detect recovery expiry for the exit cooldown.
             if (_currentRecoveryState.IsActive)
             {
+                _transitionGuard.TickRampIn();
+                RecoverySituation situationBeforeTick = _currentRecoveryState.Situation;
                 _currentRecoveryState = _currentRecoveryState.Tick();
+                if (!_currentRecoveryState.IsActive)
+                {
+                    _transitionGuard.OnRecoveryExpired(situationBeforeTick, _recoveryExitCooldownFrames);
+                }
             }
         }
 
@@ -476,12 +502,42 @@ namespace PhysicsDrivenMovement.Character
                 state == CharacterStateType.Fallen ||
                 state == CharacterStateType.GettingUp)
             {
+                // Feed None to the guard so candidate tracking resets.
+                _transitionGuard.ShouldEnter(RecoverySituation.None, _recoveryEntryDebounceFrames, _recoveryExitCooldownFrames);
                 return;
             }
 
-            // STEP 2: Classify the current situation and enter/extend the recovery state if warranted.
+            // STEP 2: Classify the current situation.
             RecoverySituation situation = ClassifyRecoverySituation(supportRisk);
-            if (situation != RecoverySituation.None)
+
+            // STEP 3: When recovery is already active, allow direct extension or
+            // situation-priority upgrades without re-debouncing. The guard only
+            // gates the initial entry from idle so the ramp-in counter can advance
+            // uninterrupted. Reset the guard's candidate tracking so no stale
+            // debounce count carries over into the next idle→recovery transition.
+            if (_currentRecoveryState.IsActive)
+            {
+                if (situation != RecoverySituation.None)
+                {
+                    int duration = GetRecoveryDuration(situation);
+                    _currentRecoveryState = _currentRecoveryState.Enter(
+                        situation,
+                        duration,
+                        supportRisk,
+                        _currentObservation.TurnSeverity);
+                }
+
+                _transitionGuard.ShouldEnter(RecoverySituation.None, _recoveryEntryDebounceFrames, _recoveryExitCooldownFrames);
+                return;
+            }
+
+            // STEP 4: Recovery is not active — use the guard for debounce and cooldown.
+            bool shouldEnter = _transitionGuard.ShouldEnter(
+                situation,
+                _recoveryEntryDebounceFrames,
+                _recoveryExitCooldownFrames);
+
+            if (shouldEnter)
             {
                 int duration = GetRecoveryDuration(situation);
                 _currentRecoveryState = _currentRecoveryState.Enter(
@@ -715,6 +771,11 @@ namespace PhysicsDrivenMovement.Character
                     _plantedExitThreshold);
             }
 
+            if (_transitionGuard == null)
+            {
+                _transitionGuard = new RecoveryTransitionGuard();
+            }
+
             return _sensorAggregator != null && _supportObservationFilter != null;
         }
 
@@ -764,6 +825,7 @@ namespace PhysicsDrivenMovement.Character
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
+            _transitionGuard?.Reset();
             HasCommandFrame = false;
         }
 

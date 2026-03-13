@@ -36,6 +36,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string RecoverySituationTypeName = "PhysicsDrivenMovement.Character.RecoverySituation";
         private const string RecoveryStateTypeName = "PhysicsDrivenMovement.Character.RecoveryState";
         private const string RecoveryResponseProfileTypeName = "PhysicsDrivenMovement.Character.RecoveryResponseProfile";
+        private const string RecoveryTransitionGuardTypeName = "PhysicsDrivenMovement.Character.RecoveryTransitionGuard";
 
         private static Assembly CharacterAssembly => typeof(PlayerMovement).Assembly;
 
@@ -66,6 +67,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 RecoverySituationTypeName,
                 RecoveryStateTypeName,
                 RecoveryResponseProfileTypeName,
+                RecoveryTransitionGuardTypeName,
             };
 
             // Act / Assert
@@ -2030,6 +2032,241 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 $"Expected type '{instance.GetType().FullName}' to expose field '{fieldName}'.");
 
             return (T)field.GetValue(instance);
+        }
+
+        // ── C6.3 — Recovery Transition Guard Tests ──────────────────────────
+
+        /// <summary>Creates a boxed RecoveryTransitionGuard via default(T) since it's a struct.</summary>
+        private object CreateTransitionGuard()
+        {
+            Type guardType = RequireType(RecoveryTransitionGuardTypeName);
+            return Activator.CreateInstance(guardType);
+        }
+
+        private bool InvokeGuardShouldEnter(object guard, int situationValue, int debounceFrames, int cooldownFrames)
+        {
+            Type guardType = guard.GetType();
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo shouldEnter = guardType.GetMethod("ShouldEnter",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(shouldEnter, Is.Not.Null, "RecoveryTransitionGuard must expose ShouldEnter.");
+
+            object situationEnum = Enum.ToObject(situationType, situationValue);
+            return (bool)shouldEnter.Invoke(guard, new object[] { situationEnum, debounceFrames, cooldownFrames });
+        }
+
+        private void InvokeGuardOnRecoveryExpired(object guard, int situationValue, int cooldownFrames)
+        {
+            Type guardType = guard.GetType();
+            Type situationType = RequireType(RecoverySituationTypeName);
+            MethodInfo expired = guardType.GetMethod("OnRecoveryExpired",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(expired, Is.Not.Null, "RecoveryTransitionGuard must expose OnRecoveryExpired.");
+
+            object situationEnum = Enum.ToObject(situationType, situationValue);
+            expired.Invoke(guard, new object[] { situationEnum, cooldownFrames });
+        }
+
+        private void InvokeGuardTickRampIn(object guard)
+        {
+            MethodInfo tick = guard.GetType().GetMethod("TickRampIn",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(tick, Is.Not.Null, "RecoveryTransitionGuard must expose TickRampIn.");
+            tick.Invoke(guard, null);
+        }
+
+        private float InvokeGuardComputeRampInBlend(object guard, int rampInFrames)
+        {
+            MethodInfo compute = guard.GetType().GetMethod("ComputeRampInBlend",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(compute, Is.Not.Null, "RecoveryTransitionGuard must expose ComputeRampInBlend.");
+            return (float)compute.Invoke(guard, new object[] { rampInFrames });
+        }
+
+        private void InvokeGuardReset(object guard)
+        {
+            MethodInfo reset = guard.GetType().GetMethod("Reset",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(reset, Is.Not.Null, "RecoveryTransitionGuard must expose Reset.");
+            reset.Invoke(guard, null);
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_SingleFrameClassification_DoesNotEnterBeforeDebounce()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int hardTurn = 1;
+            int debounce = 3;
+            int cooldown = 20;
+
+            // Act — single frame only
+            bool entered = InvokeGuardShouldEnter(guard, hardTurn, debounce, cooldown);
+
+            // Assert
+            Assert.That(entered, Is.False, "Debounce should prevent entry on the first frame.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_SufficientDebounceFrames_AllowsEntry()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int hardTurn = 1;
+            int debounce = 3;
+            int cooldown = 20;
+
+            // Act — advance past debounce
+            bool enteredEarly = false;
+            for (int i = 0; i < debounce - 1; i++)
+            {
+                enteredEarly |= InvokeGuardShouldEnter(guard, hardTurn, debounce, cooldown);
+            }
+            bool enteredOnThreshold = InvokeGuardShouldEnter(guard, hardTurn, debounce, cooldown);
+
+            // Assert
+            Assert.That(enteredEarly, Is.False, "Should not enter before debounce threshold.");
+            Assert.That(enteredOnThreshold, Is.True, "Should enter once debounce threshold is reached.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_HighPrioritySituation_DebouncesHalfAsLong()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int nearFall = 4; // NearFall — high priority
+            int debounce = 4;
+            int cooldown = 20;
+            int effectiveDebounce = debounce / 2; // Should be 2
+
+            // Act
+            bool enteredEarly = false;
+            for (int i = 0; i < effectiveDebounce - 1; i++)
+            {
+                enteredEarly |= InvokeGuardShouldEnter(guard, nearFall, debounce, cooldown);
+            }
+            bool enteredOnThreshold = InvokeGuardShouldEnter(guard, nearFall, debounce, cooldown);
+
+            // Assert
+            Assert.That(enteredEarly, Is.False);
+            Assert.That(enteredOnThreshold, Is.True, "NearFall should enter at half the debounce frames.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_ExitCooldown_BlocksSameOrLowerPriority()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int hardTurn = 1;
+            int cooldown = 10;
+
+            // Arm the cooldown
+            InvokeGuardOnRecoveryExpired(guard, hardTurn, cooldown);
+
+            // Act — try to enter HardTurn (same priority) while in cooldown
+            // Fast-track past debounce by repeating
+            bool entered = false;
+            for (int i = 0; i < 5; i++)
+            {
+                entered |= InvokeGuardShouldEnter(guard, hardTurn, 1, cooldown);
+            }
+
+            // Assert
+            Assert.That(entered, Is.False, "Same-priority situation should be blocked during cooldown.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_ExitCooldown_AllowsHigherPriority()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int hardTurn = 1;
+            int nearFall = 4; // Higher priority
+            int cooldown = 20;
+
+            // Arm cooldown for HardTurn
+            InvokeGuardOnRecoveryExpired(guard, hardTurn, cooldown);
+
+            // Act — try to enter NearFall (higher priority = bypasses cooldown)
+            // With half debounce for NearFall: debounce=4 → effective=2
+            bool entered = false;
+            for (int i = 0; i < 3; i++)
+            {
+                entered |= InvokeGuardShouldEnter(guard, nearFall, 4, cooldown);
+            }
+
+            // Assert
+            Assert.That(entered, Is.True, "Higher-priority situation should bypass exit cooldown.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_ExitCooldown_ExpiresAfterDuration()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int hardTurn = 1;
+            int cooldown = 5;
+
+            InvokeGuardOnRecoveryExpired(guard, hardTurn, cooldown);
+
+            // Act — tick through cooldown by calling ShouldEnter with None
+            for (int i = 0; i < cooldown; i++)
+            {
+                InvokeGuardShouldEnter(guard, 0, 1, cooldown); // None = 0
+            }
+
+            // Now try to enter HardTurn again — debounce of 1
+            bool entered = InvokeGuardShouldEnter(guard, hardTurn, 1, cooldown);
+
+            // Assert
+            Assert.That(entered, Is.True, "Should allow re-entry after cooldown expires.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_RampInBlend_IncreasesOverFrames()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            int rampInFrames = 8;
+
+            // Act — ramp-in starts at 0
+            float blendStart = InvokeGuardComputeRampInBlend(guard, rampInFrames);
+
+            // Tick a few frames
+            for (int i = 0; i < 4; i++)
+            {
+                InvokeGuardTickRampIn(guard);
+            }
+            float blendMid = InvokeGuardComputeRampInBlend(guard, rampInFrames);
+
+            // Tick to completion
+            for (int i = 0; i < 4; i++)
+            {
+                InvokeGuardTickRampIn(guard);
+            }
+            float blendEnd = InvokeGuardComputeRampInBlend(guard, rampInFrames);
+
+            // Assert
+            Assert.That(blendStart, Is.EqualTo(0f), "Ramp-in should start at 0.");
+            Assert.That(blendMid, Is.EqualTo(0.5f).Within(0.01f), "Ramp-in should be 0.5 at midpoint.");
+            Assert.That(blendEnd, Is.EqualTo(1f), "Ramp-in should reach 1.0 at completion.");
+        }
+
+        [Test]
+        public void RecoveryTransitionGuard_Reset_ClearsSituationAndCooldown()
+        {
+            // Arrange
+            object guard = CreateTransitionGuard();
+            InvokeGuardOnRecoveryExpired(guard, 3, 20); // Arm cooldown
+
+            // Act
+            InvokeGuardReset(guard);
+
+            // Should now be able to enter even at debounce=1
+            bool entered = InvokeGuardShouldEnter(guard, 1, 1, 20); // HardTurn with debounce=1
+
+            // Assert
+            Assert.That(entered, Is.True, "Reset should clear cooldown and allow immediate entry.");
         }
     }
 }

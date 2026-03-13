@@ -224,16 +224,33 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Vector3 supportCenter = _rig.HipsBody.position - Vector3.forward * 0.55f + Vector3.up * 0.02f;
             TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
 
-            // Act
+            // Minimise debounce so this test focuses on whether the director enters
+            // recovery at all, not on hysteresis timing (hysteresis is covered by
+            // dedicated C6.3 EditMode tests). Physics can shift feet within the
+            // debounce window, so keep the gate at 1 frame.
+            SetPrivateField(_director, "_recoveryEntryDebounceFrames", 1);
+
+            // Act — drive perpendicular input while feet sit behind hips.
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.right);
-            yield return new WaitForFixedUpdate();
+            float recoveryBlend = 0f;
+            for (int i = 0; i < 10; i++)
+            {
+                TeleportFootBodies(footLeftBody, footRightBody, supportCenter);
+                yield return new WaitForFixedUpdate();
+
+                object cmd = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+                recoveryBlend = GetPropertyValue<float>(cmd, "RecoveryBlend");
+                if (recoveryBlend > 0f)
+                {
+                    break;
+                }
+            }
 
             object desiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
             object supportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
 
             Vector3 moveWorldDirection = GetPropertyValue<Vector3>(desiredInput, "MoveWorldDirection");
             Vector3 travelDirection = GetPropertyValue<Vector3>(supportCommand, "TravelDirection");
-            float recoveryBlend = GetPropertyValue<float>(supportCommand, "RecoveryBlend");
             float yawStrengthScale = GetPropertyValue<float>(supportCommand, "YawStrengthScale");
             float uprightStrengthScale = GetPropertyValue<float>(supportCommand, "UprightStrengthScale");
             float stabilizationStrengthScale = GetPropertyValue<float>(supportCommand, "StabilizationStrengthScale");
