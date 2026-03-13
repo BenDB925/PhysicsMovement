@@ -918,6 +918,132 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(timing, Is.GreaterThan(0f), "Desired timing should be positive for a mid-swing leg.");
         }
 
+        // ── StepPlanner turn-specific tests (C4.3) ────────────────────────────
+
+        [Test]
+        public void StepPlanner_TurnSupport_OutsideLeg_LongerStrideThanDefault()
+        {
+            // Arrange — compare default cadence vs TurnSupport at high turn severity.
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0.8f);
+            object[] turnSupportArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "TurnSupport", turnSeverity: 0.8f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object turnResult = InvokeComputeSwingTarget(planner, turnSupportArgs);
+
+            // Assert
+            Vector3 defaultLanding = GetPropertyValue<Vector3>(defaultResult, "LandingPosition");
+            Vector3 turnLanding = GetPropertyValue<Vector3>(turnResult, "LandingPosition");
+            Assert.That(turnLanding.z, Is.GreaterThan(defaultLanding.z),
+                "Outside turn leg (TurnSupport) should have a longer stride than default cadence.");
+        }
+
+        [Test]
+        public void StepPlanner_SpeedUp_InsideLeg_ShorterStrideThanDefault()
+        {
+            // Arrange — inside turn leg (SpeedUp with turnSeverity) should shorten stride.
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0.8f);
+            object[] insideArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "SpeedUp", turnSeverity: 0.8f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object insideResult = InvokeComputeSwingTarget(planner, insideArgs);
+
+            // Assert
+            Vector3 defaultLanding = GetPropertyValue<Vector3>(defaultResult, "LandingPosition");
+            Vector3 insideLanding = GetPropertyValue<Vector3>(insideResult, "LandingPosition");
+            Assert.That(insideLanding.z, Is.LessThan(defaultLanding.z),
+                "Inside turn leg (SpeedUp during turn) should have a shorter stride than default.");
+        }
+
+        [Test]
+        public void StepPlanner_TurnSupport_OutsideLeg_LongerTimingThanDefault()
+        {
+            // Arrange — outside turn leg should get extended swing timing.
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0.8f);
+            object[] turnArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "TurnSupport", turnSeverity: 0.8f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object turnResult = InvokeComputeSwingTarget(planner, turnArgs);
+
+            // Assert
+            float defaultTiming = GetPropertyValue<float>(defaultResult, "DesiredTiming");
+            float turnTiming = GetPropertyValue<float>(turnResult, "DesiredTiming");
+            Assert.That(turnTiming, Is.GreaterThan(defaultTiming),
+                "Outside turn leg should have longer desired timing for the wider arc.");
+        }
+
+        [Test]
+        public void StepPlanner_InsideLeg_LowTurnSeverity_NoStrideShorteningApplied()
+        {
+            // Arrange — SpeedUp with very low turn severity should not shorten stride.
+            object planner = CreateStepPlannerInstance();
+            object[] defaultArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "DefaultCadence", turnSeverity: 0.05f);
+            object[] insideArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                transitionReason: "SpeedUp", turnSeverity: 0.05f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(planner, defaultArgs);
+            object insideResult = InvokeComputeSwingTarget(planner, insideArgs);
+
+            // Assert
+            Vector3 defaultLanding = GetPropertyValue<Vector3>(defaultResult, "LandingPosition");
+            Vector3 insideLanding = GetPropertyValue<Vector3>(insideResult, "LandingPosition");
+            Assert.That(insideLanding.z, Is.EqualTo(defaultLanding.z).Within(0.001f),
+                "Low turn severity should not trigger inside-leg stride shortening.");
+        }
+
         // ── StepPlanner test helpers ────────────────────────────────────────────
 
         private static object CreateStepPlannerInstance()
@@ -937,10 +1063,13 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Vector3 hipsPosition,
             Vector3 gaitReferenceDirection,
             float stepFrequency,
-            float supportQuality)
+            float supportQuality,
+            string transitionReason = "DefaultCadence",
+            float turnSeverity = 0f)
         {
             Type legType = RequireType(LocomotionLegTypeName);
             Type legStateTypeType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
             Type desiredInputType = RequireType(DesiredInputTypeName);
             Type observationType = RequireType(LocomotionObservationTypeName);
             Type footObsType = RequireType(FootContactObservationTypeName);
@@ -948,6 +1077,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
 
             object legEnum = Enum.Parse(legType, leg);
             object legStateEnum = Enum.Parse(legStateTypeType, legState);
+            object transitionReasonEnum = Enum.Parse(transitionReasonType, transitionReason);
 
             object desiredInput = CreateInstance(
                 desiredInputType,
@@ -996,13 +1126,14 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 Vector3.forward, // bodyForward
                 Vector3.up,      // bodyUp
                 support,
-                0f);     // turnSeverity
+                turnSeverity);   // turnSeverity — C4.3 controlled
 
             return new object[]
             {
                 legEnum,
                 legPhase,
                 legStateEnum,
+                transitionReasonEnum,
                 desiredInput,
                 observation,
                 hipsPosition,
@@ -1016,6 +1147,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Type plannerType = planner.GetType();
             Type legType = RequireType(LocomotionLegTypeName);
             Type legStateTypeType = RequireType(LegStateTypeTypeName);
+            Type transitionReasonType = RequireType(LegStateTransitionReasonTypeName);
             Type desiredInputType = RequireType(DesiredInputTypeName);
             Type observationType = RequireType(LocomotionObservationTypeName);
 
@@ -1028,6 +1160,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     legType,
                     typeof(float),
                     legStateTypeType,
+                    transitionReasonType,
                     desiredInputType,
                     observationType,
                     typeof(Vector3),

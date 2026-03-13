@@ -28,6 +28,16 @@ namespace PhysicsDrivenMovement.Character
         private const float TurnWidthBias = 0.5f;
         private const float TurnBrakingBias = 0.3f;
 
+        // STEP 3b: Turn-specific stride differentiation (C4.3).
+        //          The outside turn leg (TurnSupport) gets a longer stride to sweep a wider arc,
+        //          while the inside turn leg (SpeedUp during turn) gets a shorter stride to
+        //          pivot more tightly. Both scale with TurnSeverity (0-1).
+        //          Timing also adjusts: the outside leg uses a slower swing (longer timing)
+        //          so it does not rush the wider path, while the inside leg keeps default timing.
+        private const float TurnStrideOutsideScale = 0.20f;
+        private const float TurnStrideInsideScale = 0.15f;
+        private const float TurnTimingOutsideScale = 0.25f;
+
         // STEP 4: COM drift compensation — when the COM leads or trails the support center,
         //         the step target shifts to recapture balance.
         private const float DriftCompensationScale = 0.35f;
@@ -49,6 +59,7 @@ namespace PhysicsDrivenMovement.Character
             LocomotionLeg leg,
             float legPhase,
             LegStateType legState,
+            LegStateTransitionReason transitionReason,
             DesiredInput desiredInput,
             LocomotionObservation observation,
             Vector3 hipsPosition,
@@ -62,9 +73,10 @@ namespace PhysicsDrivenMovement.Character
                 return StepTarget.Invalid;
             }
 
-            // STEP 2: Compute the forward stride offset from speed.
+            // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3).
             float planarSpeed = observation.PlanarSpeed;
             float strideOffset = ComputeStrideOffset(planarSpeed);
+            strideOffset = ApplyTurnStrideAdjustment(strideOffset, transitionReason, observation.TurnSeverity);
 
             // STEP 3: Compute lateral offset based on which leg.
             float lateralOffset = ComputeLateralOffset(leg);
@@ -84,7 +96,9 @@ namespace PhysicsDrivenMovement.Character
                 + driftCompensation;
 
             // STEP 6: Compute timing, biases, and confidence.
+            //         C4.3: Outside turn leg gets extended timing for the wider arc.
             float desiredTiming = ComputeDesiredTiming(legPhase, stepFrequency);
+            desiredTiming = ApplyTurnTimingAdjustment(desiredTiming, transitionReason, observation.TurnSeverity);
             float widthBias = ComputeWidthBias(leg, observation.TurnSeverity,
                 gaitReferenceDirection, observation.BodyForward);
             float brakingBias = ComputeBrakingBias(desiredInput, planarSpeed);
@@ -193,6 +207,42 @@ namespace PhysicsDrivenMovement.Character
             // STEP 8: Map support quality directly to confidence with a minimum floor.
             float raw = observation.SupportQuality;
             return Mathf.Clamp(Mathf.Lerp(MinConfidence, 1f, raw), 0f, 1f);
+        }
+
+        private static float ApplyTurnStrideAdjustment(
+            float baseStride,
+            LegStateTransitionReason reason,
+            float turnSeverity)
+        {
+            // STEP 3b: Outside turn leg (TurnSupport) extends stride to sweep the wider arc.
+            //          Inside turn leg (SpeedUp during a turn) shortens stride to pivot tightly.
+            //          Both adjustments scale linearly with turn severity.
+            if (reason == LegStateTransitionReason.TurnSupport)
+            {
+                return baseStride + baseStride * TurnStrideOutsideScale * turnSeverity;
+            }
+
+            if (reason == LegStateTransitionReason.SpeedUp && turnSeverity > 0.1f)
+            {
+                return baseStride - baseStride * TurnStrideInsideScale * turnSeverity;
+            }
+
+            return baseStride;
+        }
+
+        private static float ApplyTurnTimingAdjustment(
+            float baseTiming,
+            LegStateTransitionReason reason,
+            float turnSeverity)
+        {
+            // STEP 3b: Outside turn leg gets proportionally longer swing timing so it does not
+            //          rush through the wider arc. Inside leg keeps the base timing.
+            if (reason == LegStateTransitionReason.TurnSupport)
+            {
+                return baseTiming + baseTiming * TurnTimingOutsideScale * turnSeverity;
+            }
+
+            return baseTiming;
         }
     }
 }
