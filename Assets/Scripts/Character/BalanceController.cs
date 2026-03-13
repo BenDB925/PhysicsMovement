@@ -338,12 +338,14 @@ namespace PhysicsDrivenMovement.Character
         // ─── Public Methods ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Sets the desired world-space facing direction. The controller constrains this to
-        /// the XZ plane (yaw only) so the upright axis is never affected.
+        /// Legacy test seam: sets the desired world-space facing direction via a
+        /// <see cref="BodySupportCommand.PassThrough"/> wrapper. Production code now
+        /// uses <see cref="SetBodySupportCommand"/> via <see cref="LocomotionDirector"/>
+        /// instead.
         /// A zero or near-zero vector is silently ignored — the previous facing is kept.
-        /// Called by <c>PlayerMovement</c> (Phase 3) when the input direction changes.
         /// </summary>
         /// <param name="dir">Desired facing direction in world space (Y component is ignored).</param>
+        [System.Obsolete("Use SetBodySupportCommand via LocomotionDirector instead. Kept for test compatibility.")]
         public void SetFacingDirection(Vector3 dir)
         {
             _currentBodySupportCommand = BodySupportCommand.PassThrough(dir);
@@ -480,6 +482,20 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
+            // DESIGN: Override precedence chain (C5.4)
+            //  1. LocomotionDirector publishes a BodySupportCommand each FixedUpdate (exec order 250).
+            //  2. BalanceController consumes the command at exec order 0 (one-frame delay).
+            //  3. Command fields modulate PD gains, height maintenance, COM lean, and yaw intent.
+            //  4. Local angle-based IsFallen and CharacterState provide safety gates:
+            //     - IsFallen: fast angle-based hysteresis (responds within one frame).
+            //     - CharacterState: authoritative FSM with transition timing and get-up windows.
+            //     Both gates suppress yaw torque independently so neither alone is a single
+            //     point of failure.
+            //  5. Snap recovery blends (RecoveryBlend, RecoveryKdBlend) and airborne multiplier
+            //     further modulate the torques computed from the command.
+            //  SetFacingDirection() is the legacy test seam that predates the command path;
+            //  production code now uses SetBodySupportCommand() exclusively.
+
             // STEP 1: Update ground state from foot sensors (unless overridden by test seam).
             if (!_overrideGroundState)
             {
@@ -781,6 +797,13 @@ namespace PhysicsDrivenMovement.Character
                 TryGetComponent(out _characterState);
             }
 
+            // DESIGN: Dual gate is intentional (C5.4). IsFallen is a fast per-frame
+            // angle check; CharacterState is the authoritative FSM that includes
+            // transition timing and get-up windows. They can briefly diverge (e.g.
+            // CharacterState enters Fallen a few frames after IsFallen flips, or 
+            // IsFallen clears before CharacterState exits GettingUp). Keeping both
+            // ensures yaw torque is suppressed during the entire fallen/recovery
+            // window without coupling the two systems tighter.
             bool suppressTurnDrive = IsFallen ||
                                      (_characterState != null &&
                                       (_characterState.CurrentState == CharacterStateType.Fallen ||

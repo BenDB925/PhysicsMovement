@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // SetFacingDirection is obsolete but still tested for legacy coverage
 using System.Collections;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
