@@ -3,14 +3,14 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Implement C4.5 (catch-step planning) now that C4.4 braking steps are complete.
+- Current next step: Implement C4.6 (visual debug) now that C4.5 catch-step planning is complete.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1, C4.2, C4.3, and C4.4 complete, C4.5 (catch-step planning) next.
-- C4.4 added braking stride/timing shortening: `BrakingStrideScale=0.35`, `BrakingTimingScale=0.25`, both proportional to residual planar speed.
-- Next: implement C4.5 catch-step planning (wider/farther catch-step when support quality drops).
+- Chapters 1, 2, and 3 are complete. Chapter 4 is in progress: C4.1 through C4.5 complete, C4.6 (visual debug) next.
+- C4.5 added catch-step stride/lateral/timing adjustments: `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20`, all scaled by support urgency.
+- Next: implement C4.6 visual debug (draw planned and accepted footholds in scene debug mode).
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/04-step-planning.md`: active Chapter 4 work package with C4.1 and C4.2 completion notes.
@@ -78,3 +78,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C4.2 basic step planner. Added internal `StepPlanner` class under `Assets/Scripts/Character/Locomotion/`. Wired into `LegAnimator.BuildPassThroughCommands()` moving path so swing-like legs now get computed step targets with stride, lateral offset, drift compensation, turn width bias, braking bias, timing, and confidence. Recovery/idle/falling paths still use `StepTarget.Invalid`. 7 new EditMode tests. Verification: EditMode 43/43, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `0866f63`.
 - 2026-03-13: Completed C4.3 turn-specific step planning. `StepPlanner.ComputeSwingTarget` now accepts `LegStateTransitionReason` to differentiate outside (TurnSupport: +20% stride, +25% timing) and inside (SpeedUp: -15% stride) turn legs, both scaled by `TurnSeverity`. 4 new EditMode tests. Verification: EditMode 47/47, PlayMode 82 (79 passed, 3 ignored, 0 failed). Commit `9fb37c4`.
 - 2026-03-13: Completed C4.4 braking stride/timing shortening. Added `BrakingStrideScale=0.35` and `BrakingTimingScale=0.25` constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportional to residual planar speed when `Braking` active. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
+- 2026-03-13: Completed C4.5 catch-step planning. Added `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20` constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral, and shorten timing when `StumbleRecovery` active, all scaled by support urgency (1 - SupportQuality). 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.

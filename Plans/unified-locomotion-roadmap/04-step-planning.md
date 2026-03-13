@@ -4,8 +4,8 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 ## Quick Load
 
-- C4.1, C4.2, C4.3, and C4.4 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, turn-specific stride/timing differentiation, and braking stride/timing shortening.
-- Next active slice is C4.5 (Catch-step planning): prioritize wider or farther catch-step when support quality drops.
+- C4.1 through C4.5 are complete: `StepTarget` contract, `StepPlanner` wired into `LegAnimator` moving path, turn-specific stride/timing differentiation, braking stride/timing shortening, and catch-step stride/lateral/timing adjustments.
+- Next active slice is C4.6 (Visual debug): draw planned and accepted footholds in scene debug mode.
 - The verification surface is the Chapter 3 PlayMode gate plus StepPlanner EditMode tests.
 
 ## Read More When
@@ -51,6 +51,7 @@ Decide where each step should land based on movement goals and support needs.
    - 2026-03-13: Complete. Added `BrakingStrideScale` (0.35) and `BrakingTimingScale` (0.25) constants. `ApplyBrakingStrideAdjustment` and `ApplyBrakingTimingAdjustment` shorten stride and timing proportionally to residual planar speed when `LegStateTransitionReason.Braking` is active. Both chained after turn adjustments in `ComputeSwingTarget`. 4 new EditMode tests. Verification: EditMode 51/51, PlayMode gate green (pre-existing intra-fixture reds only). Commit `134cd10`.
 5. C4.5 Catch-step planning:
    - When support quality drops, prioritize wider or farther catch-step instead of normal cadence.
+   - 2026-03-13: Complete. Added `CatchStepStrideScale` (0.30), `CatchStepWidenScale` (0.12), and `CatchStepTimingScale` (0.20) constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral offset, and shorten timing when `StumbleRecovery` is active, all scaled by support urgency (`1 - SupportQuality`). Chained after braking adjustments in `ComputeSwingTarget`. 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.
 6. C4.6 Visual debug:
    - Draw planned footholds and accepted footholds in scene debug mode.
 
