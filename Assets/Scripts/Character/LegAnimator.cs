@@ -360,6 +360,7 @@ namespace PhysicsDrivenMovement.Character
         private LegStateMachine _rightLegStateMachine;
         private float _fallbackGaitBlend;
         private bool _isFallbackGaitLatched;
+        private readonly StepPlanner _stepPlanner = new StepPlanner();
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -839,6 +840,25 @@ namespace PhysicsDrivenMovement.Character
 
                 float kneeBendDeg = _kneeAngle * _smoothedInputMag;
 
+                StepTarget leftStepTarget = _stepPlanner.ComputeSwingTarget(
+                    LocomotionLeg.Left,
+                    _leftLegStateMachine.CyclePhase,
+                    leftStateFrame.State,
+                    desiredInput,
+                    observation,
+                    _hipsRigidbody.position,
+                    gaitReferenceDirection,
+                    _stepFrequency);
+                StepTarget rightStepTarget = _stepPlanner.ComputeSwingTarget(
+                    LocomotionLeg.Right,
+                    _rightLegStateMachine.CyclePhase,
+                    rightStateFrame.State,
+                    desiredInput,
+                    observation,
+                    _hipsRigidbody.position,
+                    gaitReferenceDirection,
+                    _stepFrequency);
+
                 LegCommandOutput explicitLeftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
                     LegCommandMode.Cycle,
@@ -847,7 +867,7 @@ namespace PhysicsDrivenMovement.Character
                     leftSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
-                    StepTarget.Invalid);
+                    leftStepTarget);
                 LegCommandOutput explicitRightCommand = new LegCommandOutput(
                     LocomotionLeg.Right,
                     LegCommandMode.Cycle,
@@ -856,7 +876,7 @@ namespace PhysicsDrivenMovement.Character
                     rightSwingDeg,
                     kneeBendDeg,
                     _smoothedInputMag,
-                    StepTarget.Invalid);
+                    rightStepTarget);
 
                 // STEP 3: Estimate whether the explicit per-leg controller still has enough
                 //         observation confidence to keep divergent gait roles active, then

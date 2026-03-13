@@ -32,6 +32,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private const string LocomotionLegTypeName = "PhysicsDrivenMovement.Character.LocomotionLeg";
         private const string LegCommandModeTypeName = "PhysicsDrivenMovement.Character.LegCommandMode";
         private const string StepTargetTypeName = "PhysicsDrivenMovement.Character.StepTarget";
+        private const string StepPlannerTypeName = "PhysicsDrivenMovement.Character.StepPlanner";
 
         private static Assembly CharacterAssembly => typeof(PlayerMovement).Assembly;
 
@@ -58,6 +59,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 LocomotionLegTypeName,
                 LegCommandModeTypeName,
                 StepTargetTypeName,
+                StepPlannerTypeName,
             };
 
             // Act / Assert
@@ -723,6 +725,321 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             object stepTarget = stepTargetProp.GetValue(command);
             bool isValid = GetPropertyValue<bool>(stepTarget, "IsValid");
             Assert.That(isValid, Is.False, "Disabled command should carry an invalid StepTarget.");
+        }
+
+        // ── StepPlanner tests (C4.2) ──────────────────────────────────────────
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_SwingLeg_ReturnsValidTarget()
+        {
+            // Arrange — a left leg in Swing state walking forward at moderate speed.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left",
+                legPhase: 0.5f,
+                legState: "Swing",
+                moveInput: new Vector2(0, 1),
+                moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward,
+                velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up,
+                gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f,
+                supportQuality: 0.8f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool isValid = GetPropertyValue<bool>(result, "IsValid");
+            Assert.That(isValid, Is.True, "Swing-phase left leg should produce a valid step target.");
+
+            Vector3 landing = GetPropertyValue<Vector3>(result, "LandingPosition");
+            Assert.That(landing.z, Is.GreaterThan(0.3f),
+                "Landing position should be ahead of hips when walking forward.");
+
+            float confidence = GetPropertyValue<float>(result, "Confidence");
+            Assert.That(confidence, Is.GreaterThan(0f).And.LessThanOrEqualTo(1f),
+                "Confidence should be positive and in [0,1].");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_StanceLeg_ReturnsInvalid()
+        {
+            // Arrange — a left leg in Stance state (weight-bearing, no planning needed).
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left",
+                legPhase: Mathf.PI + 0.5f,
+                legState: "Stance",
+                moveInput: new Vector2(0, 1),
+                moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward,
+                velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up,
+                gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f,
+                supportQuality: 0.8f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool isValid = GetPropertyValue<bool>(result, "IsValid");
+            Assert.That(isValid, Is.False, "Stance-phase leg should not produce a step target.");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_FasterSpeed_LongerStride()
+        {
+            // Arrange — compare stride at 1 m/s vs 4 m/s.
+            object planner = CreateStepPlannerInstance();
+            object[] slowArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 1f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+            object[] fastArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 4f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+
+            // Act
+            object slowResult = InvokeComputeSwingTarget(planner, slowArgs);
+            object fastResult = InvokeComputeSwingTarget(planner, fastArgs);
+
+            // Assert
+            Vector3 slowLanding = GetPropertyValue<Vector3>(slowResult, "LandingPosition");
+            Vector3 fastLanding = GetPropertyValue<Vector3>(fastResult, "LandingPosition");
+            Assert.That(fastLanding.z, Is.GreaterThan(slowLanding.z),
+                "Higher speed should produce a longer forward stride.");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_LeftVsRight_LaterallyOpposite()
+        {
+            // Arrange — same state but opposite legs should land on opposite sides of hips.
+            object planner = CreateStepPlannerInstance();
+            object[] leftArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+            object[] rightArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+
+            // Act
+            object leftResult = InvokeComputeSwingTarget(planner, leftArgs);
+            object rightResult = InvokeComputeSwingTarget(planner, rightArgs);
+
+            // Assert
+            Vector3 leftLanding = GetPropertyValue<Vector3>(leftResult, "LandingPosition");
+            Vector3 rightLanding = GetPropertyValue<Vector3>(rightResult, "LandingPosition");
+            Assert.That(leftLanding.x, Is.LessThan(0f),
+                "Left leg should land to the left (negative X) of hips.");
+            Assert.That(rightLanding.x, Is.GreaterThan(0f),
+                "Right leg should land to the right (positive X) of hips.");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_LowSupportQuality_LowConfidence()
+        {
+            // Arrange — very poor support quality should reduce confidence.
+            object planner = CreateStepPlannerInstance();
+            object[] goodArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 1f);
+            object[] poorArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.1f);
+
+            // Act
+            object goodResult = InvokeComputeSwingTarget(planner, goodArgs);
+            object poorResult = InvokeComputeSwingTarget(planner, poorArgs);
+
+            // Assert
+            float goodConfidence = GetPropertyValue<float>(goodResult, "Confidence");
+            float poorConfidence = GetPropertyValue<float>(poorResult, "Confidence");
+            Assert.That(poorConfidence, Is.LessThan(goodConfidence),
+                "Lower support quality should produce lower step confidence.");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_CatchStep_ReturnsValidTarget()
+        {
+            // Arrange — a CatchStep-state leg should also produce a valid target.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.3f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.5f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool isValid = GetPropertyValue<bool>(result, "IsValid");
+            Assert.That(isValid, Is.True, "CatchStep leg should produce a valid step target.");
+        }
+
+        [Test]
+        public void StepPlanner_ComputeSwingTarget_DesiredTiming_IsPositive()
+        {
+            // Arrange
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 3f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            float timing = GetPropertyValue<float>(result, "DesiredTiming");
+            Assert.That(timing, Is.GreaterThan(0f), "Desired timing should be positive for a mid-swing leg.");
+        }
+
+        // ── StepPlanner test helpers ────────────────────────────────────────────
+
+        private static object CreateStepPlannerInstance()
+        {
+            Type plannerType = RequireType(StepPlannerTypeName);
+            return Activator.CreateInstance(plannerType, nonPublic: true);
+        }
+
+        private static object[] BuildSwingTargetArgs(
+            string leg,
+            float legPhase,
+            string legState,
+            Vector2 moveInput,
+            Vector3 moveWorldDirection,
+            Vector3 facingDirection,
+            Vector3 velocity,
+            Vector3 hipsPosition,
+            Vector3 gaitReferenceDirection,
+            float stepFrequency,
+            float supportQuality)
+        {
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type legStateTypeType = RequireType(LegStateTypeTypeName);
+            Type desiredInputType = RequireType(DesiredInputTypeName);
+            Type observationType = RequireType(LocomotionObservationTypeName);
+            Type footObsType = RequireType(FootContactObservationTypeName);
+            Type supportObsType = RequireType(SupportObservationTypeName);
+
+            object legEnum = Enum.Parse(legType, leg);
+            object legStateEnum = Enum.Parse(legStateTypeType, legState);
+
+            object desiredInput = CreateInstance(
+                desiredInputType,
+                moveInput,
+                moveWorldDirection,
+                facingDirection,
+                false);
+
+            // Build left/right foot observations with default grounded state.
+            object leftFoot = CreateInstance(
+                footObsType,
+                Enum.Parse(legType, "Left"),
+                true,            // isGrounded
+                1f,              // contactConfidence
+                supportQuality,  // plantedConfidence
+                1f - supportQuality); // slipEstimate
+            object rightFoot = CreateInstance(
+                footObsType,
+                Enum.Parse(legType, "Right"),
+                true,
+                1f,
+                supportQuality,
+                1f - supportQuality);
+            // Pass supportQuality directly into SupportObservation so the planner sees it.
+            object support = CreateInstance(
+                supportObsType,
+                leftFoot,
+                rightFoot,
+                supportQuality,  // supportQuality — explicitly controlled
+                1f,              // contactConfidence
+                supportQuality,  // plantedFootConfidence
+                1f - supportQuality, // slipEstimate
+                false);          // isComOutsideSupport
+
+            // Build an observation with the specified velocity and support quality.
+            object observation = CreateInstance(
+                observationType,
+                (object)CharacterStateType.Moving,
+                true,   // isGrounded
+                false,  // isFallen
+                false,  // isLocomotionCollapsed
+                false,  // isInSnapRecovery
+                0f,     // uprightAngleDegrees
+                velocity,
+                Vector3.zero, // angularVelocity
+                Vector3.forward, // bodyForward
+                Vector3.up,      // bodyUp
+                support,
+                0f);     // turnSeverity
+
+            return new object[]
+            {
+                legEnum,
+                legPhase,
+                legStateEnum,
+                desiredInput,
+                observation,
+                hipsPosition,
+                gaitReferenceDirection,
+                stepFrequency,
+            };
+        }
+
+        private static object InvokeComputeSwingTarget(object planner, object[] args)
+        {
+            Type plannerType = planner.GetType();
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type legStateTypeType = RequireType(LegStateTypeTypeName);
+            Type desiredInputType = RequireType(DesiredInputTypeName);
+            Type observationType = RequireType(LocomotionObservationTypeName);
+
+            MethodInfo method = plannerType.GetMethod(
+                "ComputeSwingTarget",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    legType,
+                    typeof(float),
+                    legStateTypeType,
+                    desiredInputType,
+                    observationType,
+                    typeof(Vector3),
+                    typeof(Vector3),
+                    typeof(float),
+                },
+                modifiers: null);
+
+            Assert.That(method, Is.Not.Null,
+                "StepPlanner should expose a ComputeSwingTarget method with the expected signature.");
+
+            return method.Invoke(planner, args);
         }
 
         private static Type RequireType(string typeName)
