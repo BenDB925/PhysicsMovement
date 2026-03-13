@@ -72,6 +72,10 @@ namespace PhysicsDrivenMovement.Character
         private bool _debugObservationDraw = false;
 
         [SerializeField]
+        [Tooltip("Draws planned step targets for each leg as colored markers in the Scene view. Color reflects step confidence (red=low, green=high).")]
+        private bool _debugStepTargetDraw = false;
+
+        [SerializeField]
         [Tooltip("Logs throttled locomotion-observation telemetry including support geometry, drift direction, and confidence values.")]
         private bool _debugObservationTelemetry = false;
 
@@ -165,6 +169,12 @@ namespace PhysicsDrivenMovement.Character
             EmitObservationDrivenCommands();
             PushCommandsToExecutors();
             HasCommandFrame = true;
+
+            // STEP 4: Draw optional step target debug visualization after commands are finalized.
+            if (_debugStepTargetDraw)
+            {
+                DrawStepTargetDebug(_leftLegCommand, _rightLegCommand, Time.fixedDeltaTime);
+            }
         }
 
         private void OnDisable()
@@ -673,6 +683,46 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return Vector3.forward;
+        }
+
+        private static void DrawStepTargetDebug(
+            LegCommandOutput leftCommand,
+            LegCommandOutput rightCommand,
+            float duration)
+        {
+            // STEP C4.6: Draw a marker at each valid step target's landing position.
+            //            Left leg uses blue, right leg uses green-yellow.
+            //            Marker brightness reflects confidence (lerp from red to the base color).
+            DrawStepTarget(leftCommand, new Color(0.3f, 0.5f, 1f), duration);
+            DrawStepTarget(rightCommand, new Color(0.8f, 0.9f, 0.2f), duration);
+        }
+
+        private static void DrawStepTarget(
+            LegCommandOutput command,
+            Color baseColor,
+            float duration)
+        {
+            StepTarget target = command.StepTarget;
+            if (!target.IsValid)
+            {
+                return;
+            }
+
+            // Color-code by confidence: low confidence shifts toward red, high stays the base color.
+            Color color = Color.Lerp(Color.red, baseColor, target.Confidence);
+
+            // Draw a cross at the planned landing position.
+            Vector3 landingPosition = target.LandingPosition;
+            DrawCross(landingPosition, 0.08f, color, duration);
+
+            // Draw a circle at the landing position whose radius scales with confidence.
+            float radius = Mathf.Lerp(0.04f, 0.12f, target.Confidence);
+            DrawCircle(landingPosition, radius, color, duration);
+
+            // Draw a vertical pillar from the landing to a height proportional to desired timing
+            // so the viewer can gauge how soon the foot is expected to land.
+            float pillarHeight = Mathf.Clamp(target.DesiredTiming, 0.05f, 0.5f);
+            Debug.DrawLine(landingPosition, landingPosition + Vector3.up * pillarHeight, color, duration, false);
         }
 
         private static void DrawSupportCapsule(
