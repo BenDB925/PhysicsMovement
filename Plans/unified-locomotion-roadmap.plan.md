@@ -3,19 +3,19 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Begin Chapter 6 (Turn Recovery, Stumbles, And Catch Steps) now that Chapter 5 is complete.
+- Current next step: Continue Chapter 6 with C6.4 (collapse boundary) and C6.5 (expressive outcomes).
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, 3, 4, and 5 are complete. Chapter 6 is next.
-- Chapter 5 delivered: BalanceController is now a pure executor of BodySupportCommand; director-owned height maintenance, COM lean offset, documented precedence chain, `SetFacingDirection` marked obsolete, and grouped Inspector fields.
-- Next: begin Chapter 6 (Turn Recovery, Stumbles, And Catch Steps).
+- Chapters 1, 2, 3, 4, and 5 are complete. Chapter 6 is in progress: C6.1-C6.3 are committed, C6.4 and C6.5 remain.
+- Chapter 6 so far: situation classification (HardTurn, Reversal, Slip, NearFall, Stumble), typed response profiles with per-situation strength multipliers, and recovery transition guard (debounce, cooldown, ramp-in). Leg smoothing fix also applied between C6.2 and C6.3.
+- Next: C6.4 (collapse boundary — defer collapse→Fallen while director recovery is active, expose `IsRecoveryActive`), then C6.5 (expressive outcomes).
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/05-body-support.md`: completed Chapter 5 work package with C5.1-C5.5 completion notes.
-- `Assets/Scripts/Character/BalanceController.cs`: Chapter 5 executor with precedence documentation and header-grouped fields.
-- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director now owns height maintenance and COM lean intent.
+- `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 work package with C6.1-C6.3 completion notes and C6.4 design notes.
+- `Assets/Scripts/Character/Locomotion/RecoveryTransitionGuard.cs`: C6.3 guard with entry debounce, exit cooldown, and ramp-in blend.
+- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director now classifies situations and applies typed recovery profiles gated by the transition guard.
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
 
 ## Child docs
@@ -81,3 +81,7 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C4.5 catch-step planning. Added `CatchStepStrideScale=0.30`, `CatchStepWidenScale=0.12`, `CatchStepTimingScale=0.20` constants. `ApplyCatchStepStrideAdjustment`, `ApplyCatchStepLateralAdjustment`, and `ApplyCatchStepTimingAdjustment` extend stride, widen lateral, and shorten timing when `StumbleRecovery` active, all scaled by support urgency (1 - SupportQuality). 4 new EditMode tests. Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `62534dc`.
 - 2026-03-13: Completed C4.6 visual debug draw. Added `_debugStepTargetDraw` toggle to `LocomotionDirector` that draws per-leg step target markers (cross + confidence circle + timing pillar) in Scene view. Left=blue, right=green-yellow. No new tests (debug-draw-only). Verification: EditMode 55/55, PlayMode 70 (67 passed, 3 ignored, 0 failed). Commit `b81e8cb`. Chapter 4 is now complete.
 - 2026-03-13: Completed Chapter 5 (Recast Balance As Body Support). C5.1 added `HeightMaintenanceScale` to `BodySupportCommand` (`6e21e34`). C5.2 moved height maintenance ownership to `LocomotionDirector` and gated startup assist by command scale (`0d17aa4`). C5.3 populated `DesiredLeanDegrees` from turn severity and added COM lean offset in `BalanceController` (`c5b85c4`). C5.4 documented override precedence chain, marked `SetFacingDirection` obsolete, documented yaw dual-gate rationale (`fc531e0`). C5.5 grouped serialized fields with `[Header]` attributes and fixed indentation (`92dd123`). Chapter 5 gate: EditMode 58/58, PlayMode 42/42. No new regressions.
+- 2026-03-13: Completed C6.1 situation classifier. Added `RecoverySituation` enum and `RecoveryState` struct. Director classifies observations into named situations with priority ordering. 8 new EditMode tests. Verification: EditMode 73/73, PlayMode 67/70. Commit `9495992`.
+- 2026-03-13: Completed C6.2 dedicated responses. Added `RecoveryResponseProfile` with per-situation strength multipliers. Director applies profiles to recovery blend and kD blend. 5 new EditMode tests. Verification: EditMode 78/78, PlayMode 67/70. Commit `484575a`.
+- 2026-03-13: Leg smoothing fix: `LegAnimator` smooths resolved angles via `Mathf.MoveTowards` at 720 deg/s to prevent stride snap at state boundaries. Commit `adc5096`.
+- 2026-03-13: Completed C6.3 recovery transitions. Added `RecoveryTransitionGuard` with entry debounce (3 frames, halved for high priority), exit cooldown (20 frames), and ramp-in blend (8 frames). Active recovery bypasses guard for direct extension. 8 new EditMode tests. Verification: EditMode 81/81, PlayMode 82/86 (3 ignored, 1 known fixture-order flake). Commit `b7b6b40`.
