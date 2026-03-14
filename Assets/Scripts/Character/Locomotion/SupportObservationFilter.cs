@@ -123,7 +123,10 @@ namespace PhysicsDrivenMovement.Character
                 footState.IsPlanted,
                 footState.ContactConfidence,
                 plantedConfidence,
-                slipEstimate);
+                slipEstimate,
+                instantaneousFoot.HasForwardObstruction,
+                instantaneousFoot.EstimatedStepHeight,
+                instantaneousFoot.ForwardObstructionConfidence);
         }
 
         private static float MoveTowards(float current, float target, float speed, float deltaTime)

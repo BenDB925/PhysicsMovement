@@ -3,7 +3,7 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Continue Chapter 7 with C7.2 contact-aware planning now that C7.1 terrain scenarios are in both generated scenes.
+- Current next step: Continue Chapter 7 with C7.2b observation promotion so the new forward-obstruction payload is exposed on `LocomotionObservation` for planner-facing reads.
 - Active blockers: None.
 
 ## Quick Resume
@@ -11,11 +11,12 @@
 - Chapters 1 through 6 are complete. Chapter 7 is active.
 - Chapter 6 delivered: situation classification, typed response profiles, recovery transition guard, collapse deferral during active recovery, and situation-aware recovery/catch-step execution profiles.
 - Chapter 7 C7.1 delivered: shared terrain scene authoring, runtime terrain metadata, regenerated Arena and Museum scenes, and a focused EditMode terrain-scene fixture.
-- Next: C7.2 contact-aware planning, then the remaining Chapter 7 terrain robustness slices.
+- Chapter 7 C7.2a delivered: `GroundSensor` now reports step-up-style forward obstruction with estimated rise and confidence, and `FootContactObservation` plus the sensor aggregation/filter path preserve that per-foot signal without changing planner behavior.
+- Next: Start C7.2b by promoting the new per-foot obstruction fields through `LocomotionObservation`, then continue with clearance-intent planning and execution.
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 complete with C6.1-C6.5 completion notes and verification gate.
-- `Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`: C7.1 complete with scene-builder, runtime-metadata, and focused regression artifacts.
+- `Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`: C7.1 complete, and C7.2-C7.5 are now split into agent-sized slices with per-slice done conditions and verification.
 - `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director classifies situations, applies typed recovery profiles gated by the transition guard, defers collapse during active recovery, and stamps recovery context onto leg commands.
 - `Assets/Scripts/Character/CharacterState.cs`: Collapse-triggered Fallen now deferred while director recovery is active (hard ceiling 1s).
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
@@ -73,6 +74,9 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 6. Chapter 9 continues throughout and scales with each chapter.
 
 ## Progress notes
+- 2026-03-14: Completed Chapter 7 C7.2a. Added forward step-face sensing in `GroundSensor`, extended `FootContactObservation` with obstruction height/confidence, preserved the new per-foot payload through `LocomotionSensorAggregator` and `SupportObservationFilter`, and verified with focused EditMode contracts/seam tests (`70/70`) plus the existing PlayMode GroundSensor regression slice (`4/4`).
+- 2026-03-14: Split Chapter 7 C7.2-C7.5 into agent-sized slices so terrain work can be picked up one step at a time. The active restart point is now C7.2a forward step-up sensing in `GroundSensor` and `FootContactObservation`.
+- 2026-03-14: Sandbox testing exposed a new Chapter 7 C7.2 requirement: direct approaches into the generated step-up lane can stall because terrain logic currently observes only downward foot contact and step targets do not yet request swing clearance. Captured the next slice in the Chapter 7 doc as forward step-face sensing plus clearance-aware planning/execution.
 - 2026-03-12: Migrated the roadmap's working chapters out of `.github/instructions/unified-locomotion-roadmap/` into `Plans/unified-locomotion-roadmap/` so the instruction layer stays a thin router and the execution record lives under the canonical plan tree.
 - 2026-03-12: Completed Chapter 3 C3.3 by giving `LegAnimator` dedicated `RecoveryStep` timing and stronger `CatchStep` execution, clearing the focused `LegAnimatorTests` slice (`58 passed, 3 ignored, 0 failed`) and the broader mixed Chapter 3 gate (`77 passed, 3 ignored, 0 failed`). A separate `MovementQualityTests` rerun stayed at the same two known pre-existing reds.
 - 2026-03-12: Started Chapter 3 C3.4 by splitting `LegAnimator` pass-through planning into per-leg turn/recovery reasons so sharp turns now give the outside leg `TurnSupport`, the inside leg an override cadence, and catch-step ownership to one selected recovery leg instead of mirroring stumble recovery across both legs. Focused verification passed via `LocomotionDirectorTests` (`11/11`), EditMode seam coverage (`19/19`), isolated `LegAnimatorTests` (`58 passed, 3 ignored, 0 failed`), and pairwise PlayMode combinations (`69/72`, `62/65`, and `63/66` all green aside from the expected ignores). The remaining blocker is the larger four-fixture mixed slice, which still shows order-sensitive `LowerLeg_WhenWalking_FeetAlternate` and `SharpTurn90_NoFallenTransition` reds.

@@ -166,6 +166,40 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(contactConfidence, Is.EqualTo(1f).Within(0.0001f));
             Assert.That(plantedConfidence, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(slipEstimate, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstruction"), Is.False);
+            Assert.That(GetPropertyValue<float>(footObservation, "EstimatedStepHeight"), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(footObservation, "ForwardObstructionConfidence"), Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [Test]
+        public void FootContactObservation_ConstructedWithForwardObstructionWithoutGrounding_PreservesIndependentStepUpSignal()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+            object rightLeg = Enum.Parse(legType, "Right");
+
+            // Act
+            object footObservation = CreateInstance(
+                footObservationType,
+                rightLeg,
+                false,
+                false,
+                0.2f,
+                0.1f,
+                0.05f,
+                true,
+                0.45f,
+                1.25f);
+
+            // Assert
+            Assert.That(GetPropertyValue<object>(footObservation, "Leg"), Is.EqualTo(rightLeg));
+            Assert.That(GetPropertyValue<bool>(footObservation, "IsGrounded"), Is.False,
+                "Forward obstruction must remain representable even when the downward grounded signal is false.");
+            Assert.That(GetPropertyValue<bool>(footObservation, "IsPlanted"), Is.False);
+            Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstruction"), Is.True);
+            Assert.That(GetPropertyValue<float>(footObservation, "EstimatedStepHeight"), Is.EqualTo(0.45f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(footObservation, "ForwardObstructionConfidence"), Is.EqualTo(1f).Within(0.0001f));
         }
 
         [Test]

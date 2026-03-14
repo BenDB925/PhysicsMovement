@@ -13,6 +13,14 @@ namespace PhysicsDrivenMovement.Character
     /// </summary>
     public class GroundSensor : MonoBehaviour
     {
+        private const float DefaultForwardProbeDistance = 0.4f;
+        private const float DefaultForwardProbeHeight = 0.04f;
+        private const float DefaultForwardProbeRadius = 0.05f;
+        private const float DefaultMaxStepHeight = 0.85f;
+        private const float DirectionEpsilon = 0.0001f;
+        private const float MinimumStepHeight = 0.03f;
+        private const float UpwardSurfaceNormalThreshold = 0.55f;
+
         // ─── Serialised Fields ──────────────────────────────────────────────
 
         [SerializeField, Range(0.02f, 0.2f)]
@@ -32,10 +40,29 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Layer mask for surfaces that count as ground. Assign the Environment layer.")]
         private LayerMask _groundLayers;
 
+        [SerializeField, Range(0.05f, 0.6f)]
+        [Tooltip("How far ahead of the foot to probe for a step face or other forward obstruction.")]
+        private float _forwardProbeDistance = 0.4f;
+
+        [SerializeField, Range(0.01f, 0.12f)]
+        [Tooltip("Radius of the forward obstruction SphereCast. Keep slightly smaller than the foot sole.")]
+        private float _forwardProbeRadius = 0.05f;
+
+        [SerializeField, Range(0f, 0.2f)]
+        [Tooltip("Height above the current sole/support height used for the forward obstruction probe.")]
+        private float _forwardProbeHeight = 0.04f;
+
+        [SerializeField, Range(0.1f, 1f)]
+        [Tooltip("Maximum rise considered a step-up candidate when probing forward.")]
+        private float _maxStepHeight = 0.85f;
+
         // ─── Private Fields ──────────────────────────────────────────────────
 
         private bool _isGrounded;
+        private bool _hasForwardObstruction;
         private Collider _footCollider;
+        private float _estimatedStepHeight;
+        private float _forwardObstructionConfidence;
         private Vector3 _groundPoint;
         private float _ungroundedTimer;
 
@@ -54,10 +81,28 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public Vector3 GroundPoint => _groundPoint;
 
+        /// <summary>
+        /// True when the sensor detects a step-up style obstruction ahead of the foot even if the
+        /// downward grounded sample is currently false.
+        /// </summary>
+        public bool HasForwardObstruction => _hasForwardObstruction;
+
+        /// <summary>
+        /// Estimated top-surface rise above the current support height when a forward obstruction is present.
+        /// </summary>
+        public float EstimatedStepHeight => _estimatedStepHeight;
+
+        /// <summary>
+        /// Confidence that the detected forward obstruction represents a real step-up surface.
+        /// </summary>
+        public float ForwardObstructionConfidence => _forwardObstructionConfidence;
+
         // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
         {
+            SanitizeProbeSettings();
+
             if (!TryGetComponent(out _footCollider))
             {
                 Debug.LogWarning($"[GroundSensor] '{name}' has no Collider. Falling back to transform-based cast origin.", this);
@@ -80,25 +125,27 @@ namespace PhysicsDrivenMovement.Character
                 layerMask:   _groundLayers,
                 queryTriggerInteraction: QueryTriggerInteraction.Ignore);
 
+            float supportHeight = detectedGround
+                ? hitInfo.point.y
+                : GetSupportReferenceHeight(origin);
+
             if (detectedGround)
             {
                 _isGrounded = true;
                 _groundPoint = hitInfo.point;
                 _ungroundedTimer = 0f;
-                return;
+            }
+            else if (_isGrounded)
+            {
+                _ungroundedTimer += Time.fixedDeltaTime;
+                if (_ungroundedTimer >= _groundedExitDelay)
+                {
+                    _isGrounded = false;
+                    _ungroundedTimer = 0f;
+                }
             }
 
-            if (!_isGrounded)
-            {
-                return;
-            }
-
-            _ungroundedTimer += Time.fixedDeltaTime;
-            if (_ungroundedTimer >= _groundedExitDelay)
-            {
-                _isGrounded = false;
-                _ungroundedTimer = 0f;
-            }
+            UpdateForwardObstruction(origin, supportHeight);
         }
 
         // ─── Editor Visualisation ─────────────────────────────────────────────
@@ -117,6 +164,16 @@ namespace PhysicsDrivenMovement.Character
             // Also draw a line from origin to endpoint for clarity.
             Gizmos.color = new Color(Gizmos.color.r, Gizmos.color.g, Gizmos.color.b, 0.5f);
             Gizmos.DrawLine(origin, castEnd);
+
+            Vector3 forward = GetProbeForward();
+            float supportHeight = GetSupportReferenceHeight(origin);
+            Vector3 forwardOrigin = GetForwardProbeOrigin(origin, supportHeight);
+            Vector3 forwardEnd = forwardOrigin + forward * _forwardProbeDistance;
+
+            Gizmos.color = _hasForwardObstruction ? new Color(1f, 0.75f, 0.2f) : new Color(1f, 1f, 0f, 0.6f);
+            Gizmos.DrawWireSphere(forwardOrigin, _forwardProbeRadius);
+            Gizmos.DrawWireSphere(forwardEnd, _forwardProbeRadius);
+            Gizmos.DrawLine(forwardOrigin, forwardEnd);
         }
 
         private Vector3 GetCastOrigin()
@@ -129,6 +186,128 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return transform.position + Vector3.up * _castRadius;
+        }
+
+        private void SanitizeProbeSettings()
+        {
+            _castRadius = Mathf.Max(0.02f, _castRadius);
+            _castDistance = Mathf.Max(0.05f, _castDistance);
+            _groundedExitDelay = Mathf.Max(0f, _groundedExitDelay);
+            _forwardProbeDistance = _forwardProbeDistance > 0f
+                ? Mathf.Max(0.05f, _forwardProbeDistance)
+                : DefaultForwardProbeDistance;
+            _forwardProbeRadius = _forwardProbeRadius > 0f
+                ? Mathf.Max(0.01f, _forwardProbeRadius)
+                : DefaultForwardProbeRadius;
+            _forwardProbeHeight = _forwardProbeHeight >= 0f
+                ? _forwardProbeHeight
+                : DefaultForwardProbeHeight;
+            _maxStepHeight = _maxStepHeight > 0f
+                ? Mathf.Max(MinimumStepHeight, _maxStepHeight)
+                : DefaultMaxStepHeight;
+        }
+
+        private void UpdateForwardObstruction(Vector3 castOrigin, float supportHeight)
+        {
+            // STEP 1: Probe forward from the current sole/support height to look for a near step face.
+            Vector3 forward = GetProbeForward();
+            Vector3 probeOrigin = GetForwardProbeOrigin(castOrigin, supportHeight);
+
+            bool detectedFace = Physics.SphereCast(
+                origin: probeOrigin,
+                radius: _forwardProbeRadius,
+                direction: forward,
+                hitInfo: out RaycastHit faceHit,
+                maxDistance: _forwardProbeDistance,
+                layerMask: _groundLayers,
+                queryTriggerInteraction: QueryTriggerInteraction.Ignore);
+
+            if (!detectedFace)
+            {
+                ClearForwardObstruction();
+                return;
+            }
+
+            // STEP 2: Sample down from above the hit so we can confirm a reachable top surface.
+            Vector3 topProbeOrigin = faceHit.point
+                + forward * (_forwardProbeRadius + 0.02f)
+                + Vector3.up * (_maxStepHeight + _forwardProbeRadius);
+            float topProbeDistance = _maxStepHeight + _forwardProbeRadius + _forwardProbeHeight + 0.1f;
+
+            bool detectedTopSurface = Physics.Raycast(
+                origin: topProbeOrigin,
+                direction: Vector3.down,
+                hitInfo: out RaycastHit topHit,
+                maxDistance: topProbeDistance,
+                layerMask: _groundLayers,
+                queryTriggerInteraction: QueryTriggerInteraction.Ignore);
+
+            if (!detectedTopSurface)
+            {
+                ClearForwardObstruction();
+                return;
+            }
+
+            // STEP 3: Reject flat-ground hits and non-step surfaces, then cache the obstruction sample.
+            float stepHeight = topHit.point.y - supportHeight;
+            float surfaceUpDot = Vector3.Dot(topHit.normal, Vector3.up);
+            if (stepHeight < MinimumStepHeight ||
+                stepHeight > _maxStepHeight ||
+                surfaceUpDot < UpwardSurfaceNormalThreshold)
+            {
+                ClearForwardObstruction();
+                return;
+            }
+
+            float distanceFactor = 1f - Mathf.Clamp01(faceHit.distance / Mathf.Max(_forwardProbeDistance, DirectionEpsilon));
+            float surfaceFactor = Mathf.InverseLerp(UpwardSurfaceNormalThreshold, 1f, surfaceUpDot);
+
+            _hasForwardObstruction = true;
+            _estimatedStepHeight = stepHeight;
+            _forwardObstructionConfidence = Mathf.Clamp01(Mathf.Lerp(0.4f, 1f, distanceFactor) * Mathf.Lerp(0.7f, 1f, surfaceFactor));
+        }
+
+        private void ClearForwardObstruction()
+        {
+            _hasForwardObstruction = false;
+            _estimatedStepHeight = 0f;
+            _forwardObstructionConfidence = 0f;
+        }
+
+        private float GetSupportReferenceHeight(Vector3 castOrigin)
+        {
+            if (_isGrounded)
+            {
+                return _groundPoint.y;
+            }
+
+            return castOrigin.y - _castRadius;
+        }
+
+        private Vector3 GetForwardProbeOrigin(Vector3 castOrigin, float supportHeight)
+        {
+            return new Vector3(
+                castOrigin.x,
+                supportHeight + _forwardProbeHeight + _forwardProbeRadius,
+                castOrigin.z);
+        }
+
+        private Vector3 GetProbeForward()
+        {
+            Vector3 rootForward = transform.root != null ? transform.root.forward : transform.forward;
+            Vector3 planarRootForward = Vector3.ProjectOnPlane(rootForward, Vector3.up);
+            if (planarRootForward.sqrMagnitude > DirectionEpsilon)
+            {
+                return planarRootForward.normalized;
+            }
+
+            Vector3 planarLocalForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (planarLocalForward.sqrMagnitude > DirectionEpsilon)
+            {
+                return planarLocalForward.normalized;
+            }
+
+            return Vector3.forward;
         }
     }
 }

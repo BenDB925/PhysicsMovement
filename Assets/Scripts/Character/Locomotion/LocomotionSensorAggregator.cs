@@ -70,11 +70,13 @@ namespace PhysicsDrivenMovement.Character
             FootContactObservation leftFoot = BuildFootContactObservation(
                 LocomotionLeg.Left,
                 leftGrounded,
-                leftFootPlanarSpeed);
+                leftFootPlanarSpeed,
+                _leftGroundSensor);
             FootContactObservation rightFoot = BuildFootContactObservation(
                 LocomotionLeg.Right,
                 rightGrounded,
-                rightFootPlanarSpeed);
+                rightFootPlanarSpeed,
+                _rightGroundSensor);
 
             SupportGeometry supportGeometry = new SupportGeometry(
                 leftFootPosition,
@@ -135,20 +137,27 @@ namespace PhysicsDrivenMovement.Character
         private static FootContactObservation BuildFootContactObservation(
             LocomotionLeg leg,
             bool isGrounded,
-            float planarSpeed)
+            float planarSpeed,
+            GroundSensor sensor)
         {
             float contactConfidence = isGrounded ? 1f : 0f;
             float slipEstimate = isGrounded
                 ? Mathf.InverseLerp(PlantedSpeedThreshold, SlipSpeedThreshold, planarSpeed)
                 : 0f;
             float plantedConfidence = isGrounded ? 1f - slipEstimate : 0f;
+            bool hasForwardObstruction = sensor != null && sensor.HasForwardObstruction;
+            float estimatedStepHeight = sensor != null ? sensor.EstimatedStepHeight : 0f;
+            float forwardObstructionConfidence = sensor != null ? sensor.ForwardObstructionConfidence : 0f;
 
             return new FootContactObservation(
                 leg,
                 isGrounded,
                 contactConfidence,
                 plantedConfidence,
-                slipEstimate);
+                slipEstimate,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence);
         }
 
         private static float ComputeSupportQuality(SupportGeometry supportGeometry)
