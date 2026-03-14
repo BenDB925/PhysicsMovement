@@ -20,6 +20,7 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
                 false,
                 0f,
                 0f,
@@ -44,6 +45,7 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
                 hasForwardObstruction,
                 estimatedStepHeight,
                 forwardObstructionConfidence,
@@ -69,6 +71,34 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence,
+                hasForwardObstruction,
+                forwardObstructionTopSurfacePoint)
+        {
+        }
+
+        public FootContactObservation(
+            LocomotionLeg leg,
+            bool isGrounded,
+            float contactConfidence,
+            float plantedConfidence,
+            float slipEstimate,
+            float surfaceNormalQuality,
+            bool hasForwardObstruction,
+            float estimatedStepHeight,
+            float forwardObstructionConfidence,
+            Vector3 forwardObstructionTopSurfacePoint)
+            : this(
+                leg,
+                isGrounded,
+                isGrounded && plantedConfidence >= 0.5f,
+                contactConfidence,
+                plantedConfidence,
+                slipEstimate,
+                surfaceNormalQuality,
                 hasForwardObstruction,
                 estimatedStepHeight,
                 forwardObstructionConfidence,
@@ -91,6 +121,7 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
                 false,
                 0f,
                 0f,
@@ -116,6 +147,7 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
                 hasForwardObstruction,
                 estimatedStepHeight,
                 forwardObstructionConfidence,
@@ -142,6 +174,35 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                1f,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence,
+                hasForwardObstruction,
+                forwardObstructionTopSurfacePoint)
+        {
+        }
+
+        public FootContactObservation(
+            LocomotionLeg leg,
+            bool isGrounded,
+            bool isPlanted,
+            float contactConfidence,
+            float plantedConfidence,
+            float slipEstimate,
+            float surfaceNormalQuality,
+            bool hasForwardObstruction,
+            float estimatedStepHeight,
+            float forwardObstructionConfidence,
+            Vector3 forwardObstructionTopSurfacePoint)
+            : this(
+                leg,
+                isGrounded,
+                isPlanted,
+                contactConfidence,
+                plantedConfidence,
+                slipEstimate,
+                surfaceNormalQuality,
                 hasForwardObstruction,
                 estimatedStepHeight,
                 forwardObstructionConfidence,
@@ -157,6 +218,7 @@ namespace PhysicsDrivenMovement.Character
             float contactConfidence,
             float plantedConfidence,
             float slipEstimate,
+            float surfaceNormalQuality,
             bool hasForwardObstruction,
             float estimatedStepHeight,
             float forwardObstructionConfidence,
@@ -172,6 +234,7 @@ namespace PhysicsDrivenMovement.Character
             ContactConfidence = Mathf.Clamp01(contactConfidence);
             PlantedConfidence = Mathf.Clamp01(plantedConfidence);
             SlipEstimate = Mathf.Clamp01(slipEstimate);
+            SurfaceNormalQuality = Mathf.Clamp01(surfaceNormalQuality);
 
             // STEP 3: Preserve forward terrain-obstruction sensing independently from downward grounded state.
             HasForwardObstruction = hasForwardObstruction && estimatedStepHeight > 0f;
@@ -202,6 +265,8 @@ namespace PhysicsDrivenMovement.Character
         public float EstimatedStepHeight { get; }
 
         public float ForwardObstructionConfidence { get; }
+
+        public float SurfaceNormalQuality { get; }
 
         public bool HasForwardObstructionTopSurfacePoint { get; }
 

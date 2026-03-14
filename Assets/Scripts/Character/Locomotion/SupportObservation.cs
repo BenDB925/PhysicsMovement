@@ -47,5 +47,7 @@ namespace PhysicsDrivenMovement.Character
         public bool HasAnyGroundedFoot => LeftFoot.IsGrounded || RightFoot.IsGrounded;
 
         public bool HasDoubleSupport => LeftFoot.IsGrounded && RightFoot.IsGrounded;
+
+        public float MinSurfaceNormalQuality => Mathf.Min(LeftFoot.SurfaceNormalQuality, RightFoot.SurfaceNormalQuality);
     }
 }

@@ -124,6 +124,7 @@ namespace PhysicsDrivenMovement.Character
                 footState.ContactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                instantaneousFoot.SurfaceNormalQuality,
                 instantaneousFoot.HasForwardObstruction,
                 instantaneousFoot.EstimatedStepHeight,
                 instantaneousFoot.ForwardObstructionConfidence,

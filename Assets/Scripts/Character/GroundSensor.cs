@@ -65,6 +65,7 @@ namespace PhysicsDrivenMovement.Character
         private float _forwardObstructionConfidence;
         private Vector3 _forwardObstructionTopSurfacePoint;
         private Vector3 _groundPoint;
+        private Vector3 _groundNormal;
         private float _ungroundedTimer;
 
         // ─── Public Properties ────────────────────────────────────────────────
@@ -103,10 +104,22 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public Vector3 ForwardObstructionTopSurfacePoint => _forwardObstructionTopSurfacePoint;
 
+        /// <summary>
+        /// Surface normal of the last confirmed ground contact. Defaults to Vector3.up when not grounded.
+        /// </summary>
+        public Vector3 GroundNormal => _groundNormal;
+
+        /// <summary>
+        /// Dot product of the ground contact normal with Vector3.up (0–1 range for upward-facing surfaces).
+        /// Returns 1.0 on perfectly flat ground and degrades toward 0 on steeper slopes.
+        /// </summary>
+        public float GroundNormalUpAlignment => Mathf.Max(0f, Vector3.Dot(_groundNormal, Vector3.up));
+
         // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
         {
+            _groundNormal = Vector3.up;
             SanitizeProbeSettings();
 
             if (!TryGetComponent(out _footCollider))
@@ -139,6 +152,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _isGrounded = true;
                 _groundPoint = hitInfo.point;
+                _groundNormal = hitInfo.normal;
                 _ungroundedTimer = 0f;
             }
             else if (_isGrounded)
@@ -147,6 +161,7 @@ namespace PhysicsDrivenMovement.Character
                 if (_ungroundedTimer >= _groundedExitDelay)
                 {
                     _isGrounded = false;
+                    _groundNormal = Vector3.up;
                     _ungroundedTimer = 0f;
                 }
             }

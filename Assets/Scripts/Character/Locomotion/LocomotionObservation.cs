@@ -144,6 +144,12 @@ namespace PhysicsDrivenMovement.Character
 
         public bool IsComOutsideSupport => Support.IsComOutsideSupport;
 
+        public float LeftSurfaceNormalQuality => LeftFoot.SurfaceNormalQuality;
+
+        public float RightSurfaceNormalQuality => RightFoot.SurfaceNormalQuality;
+
+        public float MinSurfaceNormalQuality => Support.MinSurfaceNormalQuality;
+
         public float TurnSeverity { get; }
 
         private static SupportObservation CreateBaselineSupportObservation(bool isGrounded)

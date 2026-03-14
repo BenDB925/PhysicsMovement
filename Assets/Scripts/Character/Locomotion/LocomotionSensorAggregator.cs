@@ -15,6 +15,7 @@ namespace PhysicsDrivenMovement.Character
         private const float DoubleSupportMinSpan = 0.12f;
         private const float PlantedSpeedThreshold = 0.05f;
         private const float SlipSpeedThreshold = 0.75f;
+        private const float SteepNormalThreshold = 0.5f;
 
         private readonly Rigidbody _hipsBody;
         private readonly BalanceController _balanceController;
@@ -140,7 +141,9 @@ namespace PhysicsDrivenMovement.Character
             float planarSpeed,
             GroundSensor sensor)
         {
-            float contactConfidence = isGrounded ? 1f : 0f;
+            float normalUpAlignment = sensor != null && isGrounded ? sensor.GroundNormalUpAlignment : 1f;
+            float surfaceNormalQuality = Mathf.InverseLerp(SteepNormalThreshold, 1f, normalUpAlignment);
+            float contactConfidence = isGrounded ? surfaceNormalQuality : 0f;
             float slipEstimate = isGrounded
                 ? Mathf.InverseLerp(PlantedSpeedThreshold, SlipSpeedThreshold, planarSpeed)
                 : 0f;
@@ -156,6 +159,7 @@ namespace PhysicsDrivenMovement.Character
                 contactConfidence,
                 plantedConfidence,
                 slipEstimate,
+                surfaceNormalQuality,
                 hasForwardObstruction,
                 estimatedStepHeight,
                 forwardObstructionConfidence,

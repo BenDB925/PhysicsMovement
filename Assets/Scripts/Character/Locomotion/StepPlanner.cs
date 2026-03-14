@@ -58,6 +58,17 @@ namespace PhysicsDrivenMovement.Character
         private const float CatchStepWidenScale = 0.12f;
         private const float CatchStepTimingScale = 0.20f;
 
+        // STEP 3e: Partial-contact bracing (C7.3b).
+        //          When surface normal quality drops (slope, edge, uneven surface) the planner
+        //          shortens stride, widens lateral offset, and shortens timing to plant a more
+        //          conservative step that broadens the support polygon. Unlike catch-steps,
+        //          bracing applies to every swing-like state and scales with surface instability
+        //          (1 - MinSurfaceNormalQuality). A quality floor avoids triggering on noise.
+        private const float BracingSurfaceQualityFloor = 0.85f;
+        private const float BracingStrideScale = 0.15f;
+        private const float BracingWidenScale = 0.06f;
+        private const float BracingTimingScale = 0.10f;
+
         // STEP 4: COM drift compensation — when the COM leads or trails the support center,
         //         the step target shifts to recapture balance.
         private const float DriftCompensationScale = 0.35f;
@@ -102,16 +113,19 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 2: Compute the forward stride offset from speed, adjusted by turn role (C4.3),
-            //         braking intent (C4.4), and catch-step urgency (C4.5).
+            //         braking intent (C4.4), catch-step urgency (C4.5), and surface bracing (C7.3b).
             float planarSpeed = observation.PlanarSpeed;
             float strideOffset = ComputeStrideOffset(planarSpeed);
             strideOffset = ApplyTurnStrideAdjustment(strideOffset, transitionReason, observation.TurnSeverity);
             strideOffset = ApplyBrakingStrideAdjustment(strideOffset, transitionReason, planarSpeed);
             strideOffset = ApplyCatchStepStrideAdjustment(strideOffset, transitionReason, observation.SupportQuality);
+            strideOffset = ApplyBracingStrideAdjustment(strideOffset, observation.MinSurfaceNormalQuality);
 
-            // STEP 3: Compute lateral offset based on which leg, widened for catch-steps (C4.5).
+            // STEP 3: Compute lateral offset based on which leg, widened for catch-steps (C4.5)
+            //         and surface bracing (C7.3b).
             float lateralOffset = ComputeLateralOffset(leg);
             lateralOffset = ApplyCatchStepLateralAdjustment(lateralOffset, transitionReason, observation.SupportQuality);
+            lateralOffset = ApplyBracingLateralAdjustment(lateralOffset, observation.MinSurfaceNormalQuality);
 
             // STEP 4: Compute drift compensation from velocity.
             Vector3 driftCompensation = ComputeDriftCompensation(
@@ -153,10 +167,12 @@ namespace PhysicsDrivenMovement.Character
             //         C4.3: Outside turn leg gets extended timing for the wider arc.
             //         C4.4: Braking leg gets shortened timing for quicker plant.
             //         C4.5: Catch-step leg gets shortened timing to anchor sooner.
+            //         C7.3b: Bracing shortens timing on degraded surfaces.
             float desiredTiming = ComputeDesiredTiming(legPhase, stepFrequency);
             desiredTiming = ApplyTurnTimingAdjustment(desiredTiming, transitionReason, observation.TurnSeverity);
             desiredTiming = ApplyBrakingTimingAdjustment(desiredTiming, transitionReason, planarSpeed);
             desiredTiming = ApplyCatchStepTimingAdjustment(desiredTiming, transitionReason, observation.SupportQuality);
+            desiredTiming = ApplyBracingTimingAdjustment(desiredTiming, observation.MinSurfaceNormalQuality);
             float widthBias = ComputeWidthBias(leg, observation.TurnSeverity,
                 gaitReferenceDirection, observation.BodyForward);
             float brakingBias = ComputeBrakingBias(desiredInput, planarSpeed);
@@ -560,6 +576,63 @@ namespace PhysicsDrivenMovement.Character
 
             float urgency = 1f - Mathf.Clamp01(supportQuality);
             return baseTiming * (1f - CatchStepTimingScale * urgency);
+        }
+
+        // ── C7.3b Partial-contact bracing adjustments ─────────────────────────
+
+        private static float ComputeBracingInstability(float minSurfaceNormalQuality)
+        {
+            // Remap quality below the floor into a 0..1 instability metric.
+            // Quality >= BracingSurfaceQualityFloor → 0 (no bracing).
+            // Quality == 0 → 1 (maximum bracing).
+            float clamped = Mathf.Clamp01(minSurfaceNormalQuality);
+            return Mathf.Clamp01(1f - Mathf.InverseLerp(0f, BracingSurfaceQualityFloor, clamped));
+        }
+
+        private static float ApplyBracingStrideAdjustment(
+            float baseStride,
+            float minSurfaceNormalQuality)
+        {
+            // STEP 3e: Shorten stride when the surface is degraded so the foot plants
+            //          closer, keeping the support polygon compact and controllable.
+            float instability = ComputeBracingInstability(minSurfaceNormalQuality);
+            if (instability <= 0f)
+            {
+                return baseStride;
+            }
+
+            return baseStride * (1f - BracingStrideScale * instability);
+        }
+
+        private static float ApplyBracingLateralAdjustment(
+            float baseLateral,
+            float minSurfaceNormalQuality)
+        {
+            // STEP 3e: Widen lateral offset away from center to broaden the support
+            //          polygon on degraded surfaces. The sign of baseLateral encodes leg side.
+            float instability = ComputeBracingInstability(minSurfaceNormalQuality);
+            if (instability <= 0f)
+            {
+                return baseLateral;
+            }
+
+            float widen = BracingWidenScale * instability;
+            return baseLateral + Mathf.Sign(baseLateral) * widen;
+        }
+
+        private static float ApplyBracingTimingAdjustment(
+            float baseTiming,
+            float minSurfaceNormalQuality)
+        {
+            // STEP 3e: Shorten timing so the foot reaches the ground faster, establishing
+            //          support sooner on unstable surfaces.
+            float instability = ComputeBracingInstability(minSurfaceNormalQuality);
+            if (instability <= 0f)
+            {
+                return baseTiming;
+            }
+
+            return baseTiming * (1f - BracingTimingScale * instability);
         }
     }
 }

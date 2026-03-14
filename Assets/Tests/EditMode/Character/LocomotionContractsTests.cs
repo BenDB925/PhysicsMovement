@@ -237,6 +237,219 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void FootContactObservation_ConstructedWithSurfaceNormalQuality_PreservesAndClampsValue()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+
+            // Act – construct with explicit surfaceNormalQuality via the
+            // (leg, isGrounded, contactConfidence, plantedConfidence, slipEstimate,
+            //  surfaceNormalQuality, hasForwardObstruction, estimatedStepHeight,
+            //  forwardObstructionConfidence, forwardObstructionTopSurfacePoint) overload
+            object footOnSlope = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                0.7f,
+                0.65f,
+                0.1f,
+                0.7f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+
+            object footOnFlat = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Right"),
+                true,
+                1f,
+                0.9f,
+                0.05f);
+
+            object footOutOfRange = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                0.8f,
+                0.75f,
+                0.1f,
+                1.5f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+
+            // Assert
+            float slopeQuality = GetPropertyValue<float>(footOnSlope, "SurfaceNormalQuality");
+            Assert.That(slopeQuality, Is.EqualTo(0.7f).Within(0.0001f),
+                "SurfaceNormalQuality should be preserved for a foot on a slope.");
+
+            float flatQuality = GetPropertyValue<float>(footOnFlat, "SurfaceNormalQuality");
+            Assert.That(flatQuality, Is.EqualTo(1f).Within(0.0001f),
+                "SurfaceNormalQuality should default to 1.0 for constructors without an explicit value.");
+
+            float clampedQuality = GetPropertyValue<float>(footOutOfRange, "SurfaceNormalQuality");
+            Assert.That(clampedQuality, Is.EqualTo(1f).Within(0.0001f),
+                "SurfaceNormalQuality should be clamped to 1.0 when out of range.");
+        }
+
+        [Test]
+        public void FootContactObservation_ConstructedWithLowSurfaceNormalQuality_ReflectsDegradedContactConfidence()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+
+            // Act – foot grounded with poor surface normal quality (steep slope)
+            object footOnSteepSlope = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                0.35f,
+                0.3f,
+                0.1f,
+                0.35f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+
+            // Assert – the contact confidence should match the degraded value set by the aggregator
+            float contactConfidence = GetPropertyValue<float>(footOnSteepSlope, "ContactConfidence");
+            float surfaceNormalQuality = GetPropertyValue<float>(footOnSteepSlope, "SurfaceNormalQuality");
+            Assert.That(contactConfidence, Is.EqualTo(0.35f).Within(0.0001f),
+                "Contact confidence should reflect the gradated value from the aggregator on steep surfaces.");
+            Assert.That(surfaceNormalQuality, Is.EqualTo(0.35f).Within(0.0001f),
+                "SurfaceNormalQuality should preserve the degraded quality for steep slopes.");
+            Assert.That(GetPropertyValue<bool>(footOnSteepSlope, "IsGrounded"), Is.True,
+                "IsGrounded should remain true even when surface normal quality is low.");
+        }
+
+        [Test]
+        public void SupportObservation_ConstructedWithDegradedSurfaceNormals_ExposesMinNormalQuality()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type supportObservationType = RequireType(SupportObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+
+            object leftFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                0.6f,
+                0.55f,
+                0.1f,
+                0.6f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+            object rightFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Right"),
+                true,
+                0.9f,
+                0.85f,
+                0.05f,
+                0.9f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+
+            // Act
+            object supportObservation = CreateInstance(
+                supportObservationType,
+                leftFoot,
+                rightFoot,
+                0.85f,
+                0.75f,
+                0.85f,
+                0.1f,
+                false);
+
+            // Assert
+            float minSurfaceNormalQuality = GetPropertyValue<float>(supportObservation, "MinSurfaceNormalQuality");
+            Assert.That(minSurfaceNormalQuality, Is.EqualTo(0.6f).Within(0.0001f),
+                "MinSurfaceNormalQuality should report the worst surface quality of either foot.");
+        }
+
+        [Test]
+        public void LocomotionObservation_ConstructedWithSurfaceNormalQuality_PromotesPerFootAndMinQuality()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type supportObservationType = RequireType(SupportObservationTypeName);
+            Type observationType = RequireType(LocomotionObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+
+            object leftFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                0.55f,
+                0.5f,
+                0.08f,
+                0.55f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+            object rightFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Right"),
+                true,
+                0.95f,
+                0.9f,
+                0.02f,
+                0.95f,
+                false,
+                0f,
+                0f,
+                Vector3.zero);
+            object supportObservation = CreateInstance(
+                supportObservationType,
+                leftFoot,
+                rightFoot,
+                0.85f,
+                0.75f,
+                0.9f,
+                0.08f,
+                false);
+
+            // Act
+            object observation = CreateInstance(
+                observationType,
+                CharacterStateType.Moving,
+                true,
+                false,
+                false,
+                false,
+                5f,
+                new Vector3(0f, 0f, 1.5f),
+                Vector3.zero,
+                Vector3.forward,
+                Vector3.up,
+                supportObservation,
+                0.1f);
+
+            // Assert
+            float leftQuality = GetPropertyValue<float>(observation, "LeftSurfaceNormalQuality");
+            float rightQuality = GetPropertyValue<float>(observation, "RightSurfaceNormalQuality");
+            float minQuality = GetPropertyValue<float>(observation, "MinSurfaceNormalQuality");
+
+            Assert.That(leftQuality, Is.EqualTo(0.55f).Within(0.0001f),
+                "LocomotionObservation should promote left foot surface normal quality.");
+            Assert.That(rightQuality, Is.EqualTo(0.95f).Within(0.0001f),
+                "LocomotionObservation should promote right foot surface normal quality.");
+            Assert.That(minQuality, Is.EqualTo(0.55f).Within(0.0001f),
+                "LocomotionObservation.MinSurfaceNormalQuality should report the worst foot quality.");
+        }
+
+        [Test]
         public void SupportObservation_ConstructedWithFootStates_ExposesAggregatedSupportSignals()
         {
             // Arrange
@@ -1783,6 +1996,141 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(requestedClearanceHeight, Is.EqualTo(0f).Within(0.0001f));
         }
 
+        // ── C7.3b Partial-contact bracing tests ─────────────────────────────────
+
+        [Test]
+        public void StepPlanner_DegradedSurfaceQuality_ShorterStrideThanFlatGround()
+        {
+            // Arrange — low surface normal quality should produce a shorter stride
+            //           than the same step on flat ground (quality=1.0).
+            object planner = CreateStepPlannerInstance();
+            object[] flatArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 1f);
+            object[] degradedArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 0.4f);
+
+            // Act
+            object flatResult = InvokeComputeSwingTarget(planner, flatArgs);
+            object degradedResult = InvokeComputeSwingTarget(planner, degradedArgs);
+
+            // Assert
+            float flatZ = GetPropertyValue<Vector3>(flatResult, "LandingPosition").z;
+            float degradedZ = GetPropertyValue<Vector3>(degradedResult, "LandingPosition").z;
+            Assert.That(degradedZ, Is.LessThan(flatZ),
+                "Degraded surface quality should shorten stride for a more conservative step.");
+        }
+
+        [Test]
+        public void StepPlanner_DegradedSurfaceQuality_WiderLateralThanFlatGround()
+        {
+            // Arrange — degraded surface should widen the lateral offset to broaden
+            //           support polygon without requiring a catch-step transition.
+            object planner = CreateStepPlannerInstance();
+            object[] flatArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 1f);
+            object[] degradedArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 0.4f);
+
+            // Act
+            object flatResult = InvokeComputeSwingTarget(planner, flatArgs);
+            object degradedResult = InvokeComputeSwingTarget(planner, degradedArgs);
+
+            // Assert — Left leg has negative X lateral; more negative = wider.
+            float flatX = GetPropertyValue<Vector3>(flatResult, "LandingPosition").x;
+            float degradedX = GetPropertyValue<Vector3>(degradedResult, "LandingPosition").x;
+            Assert.That(degradedX, Is.LessThan(flatX),
+                "Left-leg step on degraded surface should widen (more negative X) compared to flat ground.");
+        }
+
+        [Test]
+        public void StepPlanner_DegradedSurfaceQuality_ShorterTimingThanFlatGround()
+        {
+            // Arrange — degraded surface should shorten timing to plant sooner.
+            object planner = CreateStepPlannerInstance();
+            object[] flatArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 1f);
+            object[] degradedArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 0.4f);
+
+            // Act
+            object flatResult = InvokeComputeSwingTarget(planner, flatArgs);
+            object degradedResult = InvokeComputeSwingTarget(planner, degradedArgs);
+
+            // Assert
+            float flatTiming = GetPropertyValue<float>(flatResult, "DesiredTiming");
+            float degradedTiming = GetPropertyValue<float>(degradedResult, "DesiredTiming");
+            Assert.That(degradedTiming, Is.LessThan(flatTiming),
+                "Degraded surface quality should shorten swing timing to establish support sooner.");
+        }
+
+        [Test]
+        public void StepPlanner_HighSurfaceQuality_NoBracingAdjustment()
+        {
+            // Arrange — quality above the bracing floor (0.85) should not trigger
+            //           any stride, lateral, or timing change compared to perfect quality.
+            object planner = CreateStepPlannerInstance();
+            object[] perfectArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 1f);
+            object[] nearPerfectArgs = BuildSwingTargetArgs(
+                leg: "Right", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                surfaceNormalQuality: 0.9f);
+
+            // Act
+            object perfectResult = InvokeComputeSwingTarget(planner, perfectArgs);
+            object nearPerfectResult = InvokeComputeSwingTarget(planner, nearPerfectArgs);
+
+            // Assert — both should have identical stride, lateral, and timing.
+            Vector3 perfectLanding = GetPropertyValue<Vector3>(perfectResult, "LandingPosition");
+            Vector3 nearPerfectLanding = GetPropertyValue<Vector3>(nearPerfectResult, "LandingPosition");
+            float perfectTiming = GetPropertyValue<float>(perfectResult, "DesiredTiming");
+            float nearPerfectTiming = GetPropertyValue<float>(nearPerfectResult, "DesiredTiming");
+            Assert.That(nearPerfectLanding.z, Is.EqualTo(perfectLanding.z).Within(0.001f),
+                "High surface quality above the bracing floor should not trigger stride shortening.");
+            Assert.That(nearPerfectLanding.x, Is.EqualTo(perfectLanding.x).Within(0.001f),
+                "High surface quality above the bracing floor should not trigger lateral widening.");
+            Assert.That(nearPerfectTiming, Is.EqualTo(perfectTiming).Within(0.001f),
+                "High surface quality above the bracing floor should not trigger timing shortening.");
+        }
+
         // ── StepPlanner test helpers ────────────────────────────────────────────
 
         private static object CreateStepPlannerInstance()
@@ -1812,7 +2160,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             bool rightHasForwardObstruction = false,
             float rightEstimatedStepHeight = 0f,
             float rightForwardObstructionConfidence = 0f,
-            Vector3? rightForwardObstructionTopSurfacePoint = null)
+            Vector3? rightForwardObstructionTopSurfacePoint = null,
+            float surfaceNormalQuality = 1f)
         {
             Type legType = RequireType(LocomotionLegTypeName);
             Type legStateTypeType = RequireType(LegStateTypeTypeName);
@@ -1834,8 +2183,28 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 false);
 
             // Build left/right foot observations with default grounded state.
-            object leftFoot = leftForwardObstructionTopSurfacePoint.HasValue
-                ? CreateInstance(
+            // When surfaceNormalQuality is non-default, use the 10-param constructor
+            // that includes the explicit quality value.
+            bool useSurfaceQualityCtor = surfaceNormalQuality < 1f;
+            object leftFoot;
+            if (useSurfaceQualityCtor)
+            {
+                leftFoot = CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Left"),
+                    true,            // isGrounded
+                    1f,              // contactConfidence
+                    supportQuality,  // plantedConfidence
+                    1f - supportQuality,
+                    surfaceNormalQuality,
+                    leftHasForwardObstruction,
+                    leftEstimatedStepHeight,
+                    leftForwardObstructionConfidence,
+                    leftForwardObstructionTopSurfacePoint ?? Vector3.zero);
+            }
+            else if (leftForwardObstructionTopSurfacePoint.HasValue)
+            {
+                leftFoot = CreateInstance(
                     footObsType,
                     Enum.Parse(legType, "Left"),
                     true,            // isGrounded
@@ -1845,8 +2214,11 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     leftHasForwardObstruction,
                     leftEstimatedStepHeight,
                     leftForwardObstructionConfidence,
-                    leftForwardObstructionTopSurfacePoint.Value)
-                : CreateInstance(
+                    leftForwardObstructionTopSurfacePoint.Value);
+            }
+            else
+            {
+                leftFoot = CreateInstance(
                     footObsType,
                     Enum.Parse(legType, "Left"),
                     true,            // isGrounded
@@ -1856,8 +2228,26 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     leftHasForwardObstruction,
                     leftEstimatedStepHeight,
                     leftForwardObstructionConfidence);
-            object rightFoot = rightForwardObstructionTopSurfacePoint.HasValue
-                ? CreateInstance(
+            }
+            object rightFoot;
+            if (useSurfaceQualityCtor)
+            {
+                rightFoot = CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Right"),
+                    true,
+                    1f,
+                    supportQuality,
+                    1f - supportQuality,
+                    surfaceNormalQuality,
+                    rightHasForwardObstruction,
+                    rightEstimatedStepHeight,
+                    rightForwardObstructionConfidence,
+                    rightForwardObstructionTopSurfacePoint ?? Vector3.zero);
+            }
+            else if (rightForwardObstructionTopSurfacePoint.HasValue)
+            {
+                rightFoot = CreateInstance(
                     footObsType,
                     Enum.Parse(legType, "Right"),
                     true,
@@ -1867,8 +2257,11 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     rightHasForwardObstruction,
                     rightEstimatedStepHeight,
                     rightForwardObstructionConfidence,
-                    rightForwardObstructionTopSurfacePoint.Value)
-                : CreateInstance(
+                    rightForwardObstructionTopSurfacePoint.Value);
+            }
+            else
+            {
+                rightFoot = CreateInstance(
                     footObsType,
                     Enum.Parse(legType, "Right"),
                     true,
@@ -1878,6 +2271,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     rightHasForwardObstruction,
                     rightEstimatedStepHeight,
                     rightForwardObstructionConfidence);
+            }
             // Pass supportQuality directly into SupportObservation so the planner sees it.
             object support = CreateInstance(
                 supportObsType,
