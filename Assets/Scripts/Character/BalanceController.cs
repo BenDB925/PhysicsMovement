@@ -239,6 +239,18 @@ namespace PhysicsDrivenMovement.Character
                  "lower = more gradual transitions between stance legs.")]
         private float _pelvisSwaySmoothing = 8f;
 
+        // ─── Accel/Decel Expression ──────────────────────────────────────────
+
+        [Header("Accel/Decel Expression")]
+        [SerializeField, Range(0f, 15f)]
+        [Tooltip("Forward lean impulse in degrees applied when transitioning from " +
+                 "Standing to Moving. Decays linearly to zero over the configured decay duration.")]
+        private float _accelStartLeanDeg = 5f;
+
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Duration in seconds for the start-walk forward lean to decay back to zero.")]
+        private float _accelStartLeanDecay = 0.3f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -313,6 +325,18 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Smoothed lateral pelvis sway offset vector (world-space horizontal).</summary>
         private Vector3 _smoothedPelvisSwayOffset;
+
+        /// <summary>Transient lean impulse magnitude in degrees (positive = forward). Set by state-change events.</summary>
+        private float _transientLeanDeg;
+
+        /// <summary>Remaining decay time for the current transient lean impulse.</summary>
+        private float _transientLeanTimer;
+
+        /// <summary>Total decay duration for the current transient lean impulse.</summary>
+        private float _transientLeanDecay;
+
+        /// <summary>True once we have subscribed to <see cref="CharacterState.OnStateChanged"/>.</summary>
+        private bool _subscribedToCharacterState;
 
         /// <summary>
         /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
@@ -497,7 +521,31 @@ namespace PhysicsDrivenMovement.Character
             _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent(out _legAnimator);
 
             TryGetComponent(out _characterState);
+            SubscribeToCharacterState();
             ClearBodySupportCommand();
+        }
+
+        private void OnDestroy()
+        {
+            if (_subscribedToCharacterState && _characterState != null)
+                _characterState.OnStateChanged -= OnCharacterStateChanged;
+        }
+
+        private void SubscribeToCharacterState()
+        {
+            if (_subscribedToCharacterState || _characterState == null) return;
+            _characterState.OnStateChanged += OnCharacterStateChanged;
+            _subscribedToCharacterState = true;
+        }
+
+        private void OnCharacterStateChanged(CharacterStateType previous, CharacterStateType next)
+        {
+            if (previous == CharacterStateType.Standing && next == CharacterStateType.Moving)
+            {
+                _transientLeanDeg = _accelStartLeanDeg;
+                _transientLeanTimer = _accelStartLeanDecay;
+                _transientLeanDecay = _accelStartLeanDecay;
+            }
         }
 
         private void OnValidate()
@@ -858,6 +906,17 @@ namespace PhysicsDrivenMovement.Character
             _smoothedPelvisTiltDeg = Mathf.Lerp(_smoothedPelvisTiltDeg, pelvisTiltTarget,
                 Time.fixedDeltaTime * _pelvisTiltSmoothing);
 
+            // ─── STEP 3.10: Transient accel/decel expression lean ───────────────
+            // Decays a one-shot forward (or backward) lean impulse set by
+            // OnCharacterStateChanged. Added to the pelvis tilt in STEP 4.
+            float transientLeanDeg = 0f;
+            if (_transientLeanTimer > 0f)
+            {
+                _transientLeanTimer -= Time.fixedDeltaTime;
+                float t = Mathf.Clamp01(_transientLeanTimer / Mathf.Max(0.001f, _transientLeanDecay));
+                transientLeanDeg = _transientLeanDeg * t;
+            }
+
             // ─── STEP 4: Compute upright (pitch + roll) torque ─────────────────
             // We isolate the pitch/roll error by comparing the current Hips up-vector
             // to world up. We use Quaternion.FromToRotation to get the shortest-arc
@@ -874,16 +933,17 @@ namespace PhysicsDrivenMovement.Character
             Quaternion currentRot   = _rb.rotation;
             Vector3    currentUp    = currentRot * Vector3.up;
 
-            // Apply pelvis expression tilt to the upright target direction.
+            // Apply pelvis expression tilt + transient accel lean to the upright target direction.
+            float totalPelvisTilt = _smoothedPelvisTiltDeg + transientLeanDeg;
             Vector3 uprightTarget = Vector3.up;
-            if (Mathf.Abs(_smoothedPelvisTiltDeg) > 0.01f)
+            if (Mathf.Abs(totalPelvisTilt) > 0.01f)
             {
                 Vector3 tiltFacing = Vector3.ProjectOnPlane(
                     _currentBodySupportCommand.FacingDirection, Vector3.up);
                 if (tiltFacing.sqrMagnitude > 0.001f)
                 {
                     Vector3 tiltAxis = Vector3.Cross(Vector3.up, tiltFacing.normalized);
-                    uprightTarget = Quaternion.AngleAxis(_smoothedPelvisTiltDeg, tiltAxis) * Vector3.up;
+                    uprightTarget = Quaternion.AngleAxis(totalPelvisTilt, tiltAxis) * Vector3.up;
                 }
             }
             Quaternion uprightError = Quaternion.FromToRotation(currentUp, uprightTarget);
@@ -952,6 +1012,7 @@ namespace PhysicsDrivenMovement.Character
             if (_characterState == null)
             {
                 TryGetComponent(out _characterState);
+                SubscribeToCharacterState();
             }
 
             // DESIGN: Dual gate is intentional (C5.4). IsFallen is a fast per-frame
