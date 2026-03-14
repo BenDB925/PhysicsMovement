@@ -6,40 +6,149 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 - layering recognizable style onto already-stable locomotion control
 - adding pelvis, torso, arm, and stride expression tied to movement state
+- replacing the instant jump impulse with a visible crouch-and-spring launch sequence
 - building style presets that change feel without destabilizing control
 
 ## Dependencies
 
 - Read Chapters 5 through 7 first. Expression work only starts after control and terrain behavior are stable enough to protect readability.
+- Jump rework (C8.5) depends on the existing jump gate in `PlayerMovement.TryApplyJump()`, `LegAnimator` airborne spring scaling, and `BalanceController` height-maintenance and posture torque.
 
 ## Objective
 
-Layer character identity only after control architecture is stable.
+Layer character identity only after control architecture is stable. Replace abrupt mechanical transitions with visible body preparation so every movement looks motivated by the character's body rather than by invisible external forces.
+
+## Status
+
+- State: In progress.
+- Current next step: C8.1b torso twist driven by gait phase.
+- Active blockers: None.
+- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests).
+- Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen` fail on baseline (not caused by C8.1a).
 
 ## Primary touchpoints
 
 - Assets/Scripts/Character/ArmAnimator.cs
 - Assets/Scripts/Character/LegAnimator.cs
 - Assets/Scripts/Character/BalanceController.cs
+- Assets/Scripts/Character/PlayerMovement.cs
+- Assets/Scripts/Character/CharacterState.cs
+- Assets/Scripts/Character/Locomotion/LocomotionDirector.cs
 - Optional style profile assets under Assets/ScriptableObjects/
 
 ## Work packages
 
-2. C8.1 Pelvis and torso expression:
-   - Add controlled pelvis and torso offsets driven by planned movement state.
-3. C8.2 Accel and decel body language:
-   - Add start, stop, and reversal posture signatures tied to locomotion situation tags.
-4. C8.3 Arm-leg coordination:
-   - Expand ArmAnimator contribution from phase mirror to state-aware support and expression.
-5. C8.4 Protect readability:
-   - Keep expressive layers bounded so they never hide true locomotion intent or destabilize physics.
+Each unchecked sub-slice is intentionally small enough for one agent pass: make the change, run the focused verification, and update this chapter.
+
+1. [ ] C8.1 Pelvis and torso expression:
+    - [x] C8.1a Pelvis tilt driven by acceleration:
+       - Scope: Add a small forward/backward pelvis tilt on the Hips joint `targetRotation` that tracks the character's current horizontal acceleration direction, blended by `SmoothedInputMag`. The tilt should lean the pelvis forward during acceleration and backward during deceleration.
+       - Touchpoints: `BalanceController.cs` (add tilt offset to upright posture target).
+       - Done when: A walking character visibly tilts the pelvis forward when speeding up and backward when slowing down, without affecting balance stability.
+       - Verification: `MovementQualityTests`, `Arena01BalanceStabilityTests`.
+    - [ ] C8.1b Torso twist driven by gait phase:
+       - Scope: Add a subtle counter-rotation twist to the Spine joint that opposes the current gait phase, so the upper body twists slightly against the stride. Read phase from `LegAnimator.Phase` and blend amplitude by `SmoothedInputMag`.
+       - Touchpoints: `BalanceController.cs` or a new lightweight `TorsoExpression` component on the Spine joint.
+       - Done when: The torso counter-rotates visibly during walking and returns to neutral at idle, without injecting angular instability.
+       - Verification: `MovementQualityTests`, `FullStackSanityTests`.
+    - [ ] C8.1c Lateral pelvis sway during single-support:
+       - Scope: Add a small lateral hip shift toward the stance leg during single-support phases. Read the current stance side from `LegAnimator` leg-state ownership and scale by speed.
+       - Touchpoints: `BalanceController.cs` (lateral offset on height-maintenance or COM target).
+       - Done when: The hips visibly shift toward whichever foot is planted, and the sway disappears at idle.
+       - Verification: `MovementQualityTests`, `Arena01BalanceStabilityTests`.
+
+2. [ ] C8.2 Accel and decel body language:
+    - [ ] C8.2a Forward lean on movement start:
+       - Scope: When `CharacterState` transitions from `Standing` to `Moving`, apply a brief forward-lean impulse to the Hips upright target (a few degrees pitched forward, decaying over ~0.3s). This makes the character look like they are pushing off.
+       - Touchpoints: `BalanceController.cs` (transient offset on upright posture target, triggered by `CharacterState.OnStateChanged`).
+       - Done when: Starting to walk produces a visible forward dip that decays to normal posture within a few hundred milliseconds.
+       - Verification: `MovementQualityTests`, `FullStackSanityTests`.
+    - [ ] C8.2b Backward settle on stop:
+       - Scope: When `CharacterState` transitions from `Moving` to `Standing`, apply a brief backward-lean offset (smaller than the start lean) so the character appears to brake. Decay over ~0.2s.
+       - Touchpoints: `BalanceController.cs` (same transient posture mechanism as C8.2a, opposite direction).
+       - Done when: Stopping from a walk produces a small backward rock before settling to idle.
+       - Verification: `MovementQualityTests`, `FullStackSanityTests`.
+    - [ ] C8.2c Reversal weight shift:
+       - Scope: When `LocomotionDirector` classifies a `SharpTurn` or reversal situation, temporarily shift the pelvis toward the plant foot and away from the prior movement direction. Read the situation tag already produced by the director.
+       - Touchpoints: `BalanceController.cs` (short transient bias on COM stabilization offset, gated by director situation).
+       - Done when: A 180-degree input reversal produces a visible weight transfer before the character re-accelerates. Existing `HardSnapRecoveryTests` and `SpinRecoveryTests` still pass.
+       - Verification: `HardSnapRecoveryTests`, `SpinRecoveryTests`, `MovementQualityTests`.
+
+3. [ ] C8.3 Arm-leg coordination:
+    - [ ] C8.3a Speed-reactive arm swing amplitude:
+       - Scope: Scale `ArmAnimator` swing amplitude non-linearly with horizontal speed so arms swing more assertively at higher speeds and stay close to the body at slow walks. Currently amplitude is a linear scale of `SmoothedInputMag` — add a response curve (e.g., smoothstep or AnimationCurve).
+       - Touchpoints: `ArmAnimator.cs`.
+       - Done when: Slow walking shows restrained arms; running shows wide assertive swings. No arm NaN or physics instability.
+       - Verification: `FullStackSanityTests`, `ArmAnimatorPlayModeTests` (add if absent).
+    - [ ] C8.3b Arm brace during recovery:
+       - Scope: When `LocomotionDirector` signals active recovery (stumble, catch-step), temporarily reduce arm swing amplitude and pull elbows inward (increase elbow bend) so the character looks like they're bracing. Read recovery state from the director or `CharacterState`.
+       - Touchpoints: `ArmAnimator.cs`.
+       - Done when: During a stumble recovery the arms visibly tighten rather than swinging freely. Normal swing resumes after recovery ends.
+       - Verification: `StumbleStutterRegressionTests`, `FullStackSanityTests`.
+    - [ ] C8.3c Arm raise during airborne:
+       - Scope: When `CharacterState` enters `Airborne`, blend arm targets toward a raised-outward pose (partial abduction + slight forward reach) to simulate instinctive balance-seeking in the air. Blend out on landing.
+       - Touchpoints: `ArmAnimator.cs` (subscribe to `CharacterState.OnStateChanged`, same pattern as `LegAnimator`'s airborne spring scaling).
+       - Done when: Jumping produces visible arm raise, landing blends arms back to walk swing within ~0.3s.
+       - Verification: `JumpTests`, `FullStackSanityTests`.
+
+4. [ ] C8.4 Protect readability:
+    - [ ] C8.4a Expression amplitude caps:
+       - Scope: Add per-layer amplitude cap fields (pelvis tilt max, torso twist max, arm raise max, sway max) so that no expressive offset can exceed a safe angular or positional bound. Wire them as serialized fields on the relevant components.
+       - Touchpoints: `BalanceController.cs`, `ArmAnimator.cs`.
+       - Done when: Every expressive offset is clamped before being applied to joint targets. No single expression layer can push the character past safe physics bounds.
+       - Verification: `MovementQualityTests`, `Arena01BalanceStabilityTests`, `FullStackSanityTests`.
+    - [ ] C8.4b Expression kill-switch during recovery or fallen:
+       - Scope: Suppress all expressive offsets (pelvis expression, torso twist, accel lean, arm raise) when `CharacterState` is `Fallen` or `GettingUp`. Expression should not fight recovery torques.
+       - Touchpoints: `BalanceController.cs`, `ArmAnimator.cs`.
+       - Done when: Expressive layers are zeroed during fallen/getting-up and resume cleanly when `Standing` or `Moving` is reached.
+       - Verification: `GetUpReliabilityTests`, `MovementQualityTests`, `FullStackSanityTests`.
+    - [ ] C8.4c Regression baseline refresh:
+       - Scope: Run the full PlayMode and EditMode verification gate after all C8.1–C8.3 slices land. Capture updated `LOCOMOTION_BASELINES.md` values. Confirm no degradation in walk-straight, turn-corner, terrain, or recovery outcomes.
+       - Touchpoints: `LOCOMOTION_BASELINES.md`, test result artifacts.
+       - Done when: All existing regression tests pass with the full expression stack enabled, and baseline numbers are documented.
+       - Verification: Full PlayMode + EditMode gate.
+
+5. [ ] C8.5 Physically-motivated jump (crouch-and-spring):
+    - [ ] C8.5a Jump state machine — wind-up phase:
+       - Scope: Replace the instant `AddForce` jump with a multi-phase sequence. When jump is pressed (and the existing Standing/Moving + Grounded gate passes), enter a new `JumpWindUp` phase instead of immediately applying force. During wind-up (~0.15–0.25s): lower the `BalanceController` height-maintenance target (crouch the hips down by ~15–20%), increase knee bend targets on both legs, and suppress gait phase advancement so the legs hold a braced stance.
+       - Touchpoints: `PlayerMovement.cs` (new jump phase enum and timing), `BalanceController.cs` (temporary height target reduction API), `LegAnimator.cs` (temporary knee-bend override and gait suppression during wind-up).
+       - Done when: Pressing jump visibly crouches the character for a short wind-up before any upward force, and the character does not leave the ground during wind-up.
+       - Verification: `JumpTests` (update existing tests to account for delayed launch), `FullStackSanityTests`.
+    - [ ] C8.5b Jump state machine — launch phase:
+       - Scope: At the end of wind-up, apply the upward impulse (same `AddForce` magnitude, or slightly increased to compensate for the brief crouch) and simultaneously drive leg extension targets toward full straighten (knees push to ~0° bend over ~0.1s). Transition to `Airborne` only after the launch impulse is applied.
+       - Touchpoints: `PlayerMovement.cs` (launch trigger at wind-up completion), `LegAnimator.cs` (leg-straighten drive during launch window, overriding the normal swing/stance targets for a few frames).
+       - Done when: The character springs upward with visible leg extension, and the launch impulse fires at the end of the crouch, not at the moment of input.
+       - Verification: `JumpTests`, `FullStackSanityTests`.
+    - [ ] C8.5c Jump arm coordination:
+       - Scope: During the wind-up phase, pull arms slightly back and down (shoulder extension). During the launch phase, swing arms forward and up to amplify the visual thrust. Blend back to the C8.3c airborne arm pose over ~0.2s after launch.
+       - Touchpoints: `ArmAnimator.cs` (new jump-phase arm target blending, reading the jump phase from `PlayerMovement` or a shared jump-state accessor).
+       - Done when: Arms visibly pull back during crouch and thrust forward on launch. Seamless transition into the airborne arm pose.
+       - Verification: `JumpTests`, `FullStackSanityTests`.
+    - [ ] C8.5d Landing absorption:
+       - Scope: When transitioning from `Airborne` to `Standing`/`Moving` (landing detected by `IsGrounded` re-establishing), apply a brief landing-squat: lower hips height target for ~0.15s, increase knee bend momentarily, and apply a small forward-tilt on the pelvis to absorb impact visually. Blend back to normal posture over ~0.2s.
+       - Touchpoints: `BalanceController.cs` (transient height + tilt on landing event), `LegAnimator.cs` (transient knee-bend boost on landing).
+       - Done when: Landing from a jump shows visible knee compression and hip drop before returning to normal stance. Walking or stopping after landing is not disrupted.
+       - Verification: `JumpTests` (add landing-specific assertions), `MovementQualityTests`, `FullStackSanityTests`.
+    - [ ] C8.5e Jump test suite update:
+       - Scope: Update all existing `JumpTests` to account for the delayed impulse (wind-up frames before force appears). Add new test cases: wind-up crouch is visible (hips lower during wind-up), launch produces upward velocity only after wind-up completes, landing absorption lowers hips briefly, and jump cancel (if input is released during wind-up — decide policy: either always commit or allow cancel).
+       - Touchpoints: `Assets/Tests/PlayMode/Character/JumpTests.cs`.
+       - Done when: Jump test suite covers the full wind-up → launch → airborne → land → absorb lifecycle with measurable assertions at each phase.
+       - Verification: `JumpTests` (full suite green), `FullStackSanityTests`.
 
 ## Verification gate
 
 - Assets/Tests/PlayMode/Character/ArmAnimatorPlayModeTests.cs
+- Assets/Tests/PlayMode/Character/JumpTests.cs
 - Assets/Tests/PlayMode/Character/MovementQualityTests.cs
 - Assets/Tests/PlayMode/Character/FullStackSanityTests.cs
+- Assets/Tests/PlayMode/Character/Arena01BalanceStabilityTests.cs
+- Assets/Tests/PlayMode/Character/HardSnapRecoveryTests.cs
+- Assets/Tests/PlayMode/Character/SpinRecoveryTests.cs
+- Assets/Tests/PlayMode/Character/StumbleStutterRegressionTests.cs
+- Assets/Tests/PlayMode/Character/GetUpReliabilityTests.cs
 
 ## Exit criteria
 
 - Motion style is recognizable, but control reliability remains intact.
+- Jump shows a visible crouch → spring → airborne → land-absorb sequence driven by the character's legs, not an invisible upward force.
+- No regression in walk, turn, terrain, recovery, or balance outcomes.

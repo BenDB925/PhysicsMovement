@@ -214,6 +214,20 @@ namespace PhysicsDrivenMovement.Character
                  "The shift nudges the stabilization target toward the facing direction during turns.")]
         private float _maxComLeanOffset = 0.12f;
 
+        // ─── Pelvis Expression ────────────────────────────────────────────────
+
+        [Header("Pelvis Expression")]
+        [SerializeField, Range(0f, 10f)]
+        [Tooltip("Maximum forward/backward pelvis tilt in degrees driven by horizontal " +
+                 "acceleration. Positive acceleration tilts the pelvis forward; deceleration " +
+                 "tilts it backward. Blended by LegAnimator.SmoothedInputMag so it is zero at idle.")]
+        private float _pelvisTiltMaxDeg = 3f;
+
+        [SerializeField, Range(1f, 30f)]
+        [Tooltip("Smoothing speed for the pelvis tilt signal. Higher = more responsive, " +
+                 "lower = more gradual and cinematic.")]
+        private float _pelvisTiltSmoothing = 8f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -276,6 +290,15 @@ namespace PhysicsDrivenMovement.Character
 
         private StartupStandAssist _assist;
         private float _nextRecoveryTelemetryTime;
+
+        /// <summary>Cached LegAnimator for reading SmoothedInputMag in pelvis expression.</summary>
+        private LegAnimator _legAnimator;
+
+        /// <summary>Smoothed forward speed used as a baseline to detect acceleration/deceleration.</summary>
+        private float _smoothedForwardSpeed;
+
+        /// <summary>Smoothed pelvis tilt in degrees (positive = forward lean).</summary>
+        private float _smoothedPelvisTiltDeg;
 
         /// <summary>
         /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
@@ -457,7 +480,7 @@ namespace PhysicsDrivenMovement.Character
             // Cache whether a LegAnimator sibling is present. When true (and
             // _deferLegJointsToAnimator is enabled), we skip all direct forces/drive
             // modifications on the four leg joints so LegAnimator owns them exclusively.
-            _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent<LegAnimator>(out _);
+            _hasLegAnimator = _deferLegJointsToAnimator && TryGetComponent(out _legAnimator);
 
             TryGetComponent(out _characterState);
             ClearBodySupportCommand();
@@ -766,6 +789,31 @@ namespace PhysicsDrivenMovement.Character
                     ForceMode.Force);
             }
 
+            // ─── STEP 3.9: Pelvis expression — acceleration-driven tilt ────────────
+            // Compare instantaneous forward speed against a smoothed baseline to
+            // detect acceleration (speed rising → forward tilt) or deceleration
+            // (speed dropping → backward tilt). This speed-delta approach is much
+            // smoother than raw frame-by-frame velocity differentiation in a ragdoll.
+            float pelvisTiltTarget = 0f;
+            if (_pelvisTiltMaxDeg > 0f && _legAnimator != null && !IsFallen && effectivelyGrounded)
+            {
+                Vector3 hipsHorizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+                Vector3 facingXZ = Vector3.ProjectOnPlane(
+                    _currentBodySupportCommand.FacingDirection, Vector3.up);
+                if (facingXZ.sqrMagnitude > 0.001f)
+                {
+                    float forwardSpeed = Vector3.Dot(hipsHorizontalVel, facingXZ.normalized);
+                    // Smooth baseline tracks the running average of forward speed.
+                    _smoothedForwardSpeed = Mathf.Lerp(_smoothedForwardSpeed, forwardSpeed,
+                        Time.fixedDeltaTime * _pelvisTiltSmoothing * 0.5f);
+                    float speedDelta = forwardSpeed - _smoothedForwardSpeed;
+                    float normalizedDelta = Mathf.Clamp(speedDelta / 1.5f, -1f, 1f);
+                    pelvisTiltTarget = normalizedDelta * _pelvisTiltMaxDeg * _legAnimator.SmoothedInputMag;
+                }
+            }
+            _smoothedPelvisTiltDeg = Mathf.Lerp(_smoothedPelvisTiltDeg, pelvisTiltTarget,
+                Time.fixedDeltaTime * _pelvisTiltSmoothing);
+
             // ─── STEP 4: Compute upright (pitch + roll) torque ─────────────────
             // We isolate the pitch/roll error by comparing the current Hips up-vector
             // to world up. We use Quaternion.FromToRotation to get the shortest-arc
@@ -781,7 +829,20 @@ namespace PhysicsDrivenMovement.Character
             // a separate concern.
             Quaternion currentRot   = _rb.rotation;
             Vector3    currentUp    = currentRot * Vector3.up;
-            Quaternion uprightError = Quaternion.FromToRotation(currentUp, Vector3.up);
+
+            // Apply pelvis expression tilt to the upright target direction.
+            Vector3 uprightTarget = Vector3.up;
+            if (Mathf.Abs(_smoothedPelvisTiltDeg) > 0.01f)
+            {
+                Vector3 tiltFacing = Vector3.ProjectOnPlane(
+                    _currentBodySupportCommand.FacingDirection, Vector3.up);
+                if (tiltFacing.sqrMagnitude > 0.001f)
+                {
+                    Vector3 tiltAxis = Vector3.Cross(Vector3.up, tiltFacing.normalized);
+                    uprightTarget = Quaternion.AngleAxis(_smoothedPelvisTiltDeg, tiltAxis) * Vector3.up;
+                }
+            }
+            Quaternion uprightError = Quaternion.FromToRotation(currentUp, uprightTarget);
 
             uprightError.ToAngleAxis(out float uprightAngleDeg, out Vector3 uprightAxis);
             if (uprightAngleDeg > 180f) uprightAngleDeg -= 360f;
