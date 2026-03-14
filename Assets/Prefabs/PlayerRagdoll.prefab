@@ -1214,6 +1214,7 @@ GameObject:
   - component: {fileID: 4298458342997891819}
   - component: {fileID: 6486983645047844952}
   - component: {fileID: 8103612442498461491}
+  - component: {fileID: 1576826578835935232}
   - component: {fileID: 129253150340205023}
   - component: {fileID: 7966672302456914730}
   - component: {fileID: 3352970662418711214}
@@ -1415,6 +1416,20 @@ MonoBehaviour:
   _armSwingScale: 1
   _armSwingAxis: {x: 0, y: 0, z: 1}
   _elbowAxis: {x: 0, y: 0, z: 1}
+--- !u!114 &1576826578835935232
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3651069376947674363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8a2bedf9b4b4385a485b03f565c68fd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.TorsoExpression
+  _twistMaxDeg: 1
+  _twistSmoothing: 12
 --- !u!114 &129253150340205023
 MonoBehaviour:
   m_ObjectHideFlags: 0

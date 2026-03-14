@@ -21,16 +21,17 @@ Layer character identity only after control architecture is stable. Replace abru
 ## Status
 
 - State: In progress.
-- Current next step: C8.1b torso twist driven by gait phase.
+- Current next step: C8.1c lateral pelvis sway during single-support.
 - Active blockers: None.
-- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests).
-- Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen` fail on baseline (not caused by C8.1a).
+- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1b torso twist driven by gait phase (new TorsoExpression component on Hips, 1° amplitude at Torso ConfigurableJoint, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests).
+- Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen` fail on baseline (not caused by C8.1a/C8.1b).
 
 ## Primary touchpoints
 
 - Assets/Scripts/Character/ArmAnimator.cs
 - Assets/Scripts/Character/LegAnimator.cs
 - Assets/Scripts/Character/BalanceController.cs
+- Assets/Scripts/Character/TorsoExpression.cs
 - Assets/Scripts/Character/PlayerMovement.cs
 - Assets/Scripts/Character/CharacterState.cs
 - Assets/Scripts/Character/Locomotion/LocomotionDirector.cs
@@ -46,10 +47,11 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
        - Touchpoints: `BalanceController.cs` (add tilt offset to upright posture target).
        - Done when: A walking character visibly tilts the pelvis forward when speeding up and backward when slowing down, without affecting balance stability.
        - Verification: `MovementQualityTests`, `Arena01BalanceStabilityTests`.
-    - [ ] C8.1b Torso twist driven by gait phase:
+    - [x] C8.1b Torso twist driven by gait phase:
        - Scope: Add a subtle counter-rotation twist to the Spine joint that opposes the current gait phase, so the upper body twists slightly against the stride. Read phase from `LegAnimator.Phase` and blend amplitude by `SmoothedInputMag`.
-       - Touchpoints: `BalanceController.cs` or a new lightweight `TorsoExpression` component on the Spine joint.
+       - Touchpoints: New `TorsoExpression` component on the Hips GameObject (sets Torso ConfigurableJoint targetRotation).
        - Done when: The torso counter-rotates visibly during walking and returns to neutral at idle, without injecting angular instability.
+       - Implementation notes: Amplitude limited to 1° default because the Torso SLERP spring (650) creates reaction torque on Hips that can destabilize yaw control at higher amplitudes. Higher values available via Inspector for experimentation.
        - Verification: `MovementQualityTests`, `FullStackSanityTests`.
     - [ ] C8.1c Lateral pelvis sway during single-support:
        - Scope: Add a small lateral hip shift toward the stance leg during single-support phases. Read the current stance side from `LegAnimator` leg-state ownership and scale by speed.

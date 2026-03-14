@@ -47,6 +47,7 @@
 │  LocomotionCollapseDetector ─ root stalled-collapse fall trigger   │
 │  LegAnimator            ─── explicit leg-command executor         │
 │  ArmAnimator            ─── counter-swing arm gait                │
+│  TorsoExpression        ─── phase-driven torso counter-twist      │
 │  FallPoseRecorder       ─── rolling fall pose NDJSON diagnostics  │
 │  CameraFollow           ─── orbital third-person camera           │
 │  HandGrabber ★          ─── FixedJoint grab mechanic              │
@@ -192,7 +193,7 @@
 |---------|--------|
 | **What** | MonoBehaviour on Hips; consumes explicit left and right leg command frames, advances them through the internal `LegStateMachine` controllers for the Chapter 3 pass-through path, and applies UpperLeg and LowerLeg ConfigurableJoint `targetRotation` values while retaining a sinusoidal executor fallback. |
 | **Why** | Ragdoll characters still need procedural joint targets, but locomotion intent ownership now lives in `LocomotionDirector` and the per-leg controller layer instead of inside a purely mirrored phase-only animator loop. |
-| **Public Surface** | `Phase: float`, `SmoothedInputMag: float`, `StepAngleDegrees`, `KneeAngleDegrees` — read by `ArmAnimator` and diagnostics; internal command-frame seams are consumed by `LocomotionDirector`. |
+| **Public Surface** | `Phase: float`, `SmoothedInputMag: float`, `StepAngleDegrees`, `KneeAngleDegrees` — read by `ArmAnimator`, `TorsoExpression`, and diagnostics; internal command-frame seams are consumed by `LocomotionDirector`. |
 | **Collaborators** | `CharacterState` (non-ambulatory state gate), `BalanceController` (defers leg joints via `_deferLegJointsToAnimator`), `LocomotionDirector` (publishes explicit command frames and requests pass-through planning during migration), `LegStateMachine` (left/right Chapter 3 state progression). |
 | **Key design** | Supports both legacy local-frame swing and a world-space swing path. Current field default in code is `_useWorldSpaceSwing = false`. Angular velocity spin gate at 8 rad/s. Command frames apply immediately and suppress late writes on non-ambulatory frames to keep timing stable. |
 | **Phase** | 3E |
@@ -206,6 +207,16 @@
 | **Public Surface** | None currently — internally reads `LegAnimator.Phase` and `LegAnimator.SmoothedInputMag`. |
 | **Collaborators** | `LegAnimator` (phase/magnitude), `CharacterState` (state gate). |
 | **Phase** | 3E4 |
+
+### `Character.TorsoExpression` — `Assets/Scripts/Character/TorsoExpression.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on Hips; drives Torso ConfigurableJoint `targetRotation` for phase-driven counter-twist during gait. |
+| **Why** | Layers visible upper-body counter-rotation onto stable locomotion (C8.1b). Separate from BalanceController to keep that class inside size limits. |
+| **Public Surface** | None — internally reads `LegAnimator.Phase` and `LegAnimator.SmoothedInputMag`. |
+| **Collaborators** | `LegAnimator` (phase/magnitude). |
+| **Phase** | C8.1b |
 
 ### `Character.CameraFollow` — `Assets/Scripts/Character/CameraFollow.cs`
 
