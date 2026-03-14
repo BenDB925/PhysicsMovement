@@ -133,6 +133,14 @@ namespace PhysicsDrivenMovement.Character
 
         public bool IsPassThroughMode => _passThroughMode;
 
+        /// <summary>
+        /// True when the director is actively running a recovery strategy for
+        /// a classified situation. <see cref="CharacterState"/> reads this to
+        /// defer collapse-triggered Fallen transitions while recovery has a
+        /// chance to save the character.
+        /// </summary>
+        public bool IsRecoveryActive => _currentRecoveryState.IsActive;
+
         internal DesiredInput CurrentDesiredInput => _currentDesiredInput;
 
         internal LocomotionSensorSnapshot CurrentSensorSnapshot => _currentSensorSnapshot;
@@ -473,6 +481,18 @@ namespace PhysicsDrivenMovement.Character
                     _currentObservation,
                     out _leftLegCommand,
                     out _rightLegCommand);
+
+                // STEP 4b: Stamp recovery context so leg executors can modulate
+                //          recovery/catch-step profiles by situation urgency.
+                if (_currentRecoveryState.IsActive)
+                {
+                    _leftLegCommand = _leftLegCommand.WithRecoveryContext(
+                        _currentRecoveryState.Situation,
+                        recoveryBlend);
+                    _rightLegCommand = _rightLegCommand.WithRecoveryContext(
+                        _currentRecoveryState.Situation,
+                        recoveryBlend);
+                }
             }
             else
             {

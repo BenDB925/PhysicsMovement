@@ -357,6 +357,140 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             field.SetValue(instance, value);
         }
+        // ── C6.4 Collapse Deferral ──
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseWithActiveRecovery_DefersFallenTransition()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            LocomotionDirector director = _player.GetComponent<LocomotionDirector>();
+            Assert.That(collapseDetector, Is.Not.Null);
+            Assert.That(director, Is.Not.Null);
+
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            LocomotionDirectorTestSeams.SetRecoveryState(director, true);
+
+            // Act — run a few frames so the deferral window is active
+            yield return WaitForPhysicsFrames(5);
+
+            // Assert — should NOT have entered Fallen because recovery is deferring collapse
+            Assert.That(_characterState.CurrentState, Is.Not.EqualTo(CharacterStateType.Fallen),
+                "Collapse-triggered Fallen should be deferred while director recovery is active and deferral timer has not expired.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseWithoutRecovery_TransitionsToFallenImmediately()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            LocomotionDirector director = _player.GetComponent<LocomotionDirector>();
+            Assert.That(collapseDetector, Is.Not.Null);
+            Assert.That(director, Is.Not.Null);
+
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            LocomotionDirectorTestSeams.SetRecoveryState(director, false);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert — without recovery, collapse enters Fallen immediately
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Collapse without active recovery should trigger Fallen immediately, same as pre-C6.4 behavior.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenAngleFallenWithActiveRecovery_NeverDeferred()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionDirector director = _player.GetComponent<LocomotionDirector>();
+            Assert.That(director, Is.Not.Null);
+            LocomotionDirectorTestSeams.SetRecoveryState(director, true);
+
+            // Force angle-based fallen (isFallen = true) with NO collapse
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            // Assert — angle-based fallen is never deferred
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Angle-based isFallen must never be deferred regardless of active recovery.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseDeferralExpires_TransitionsToFallen()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            LocomotionDirector director = _player.GetComponent<LocomotionDirector>();
+            Assert.That(collapseDetector, Is.Not.Null);
+            Assert.That(director, Is.Not.Null);
+
+            // Set a short deferral limit so the test doesn't take too long
+            SetPrivateField(_characterState, "_collapseDeferralLimit", 0.05f);
+
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            LocomotionDirectorTestSeams.SetRecoveryState(director, true);
+
+            // Act — wait long enough for the short deferral limit to expire
+            yield return new WaitForSeconds(0.08f);
+            yield return new WaitForFixedUpdate();
+
+            // Assert — deferral expired, Fallen should trigger
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Once the collapse deferral timer exceeds the limit, Fallen must trigger even with active recovery.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenCollapseClears_DeferralTimerResets()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            LocomotionCollapseDetector collapseDetector = _player.GetComponent<LocomotionCollapseDetector>();
+            LocomotionDirector director = _player.GetComponent<LocomotionDirector>();
+            Assert.That(collapseDetector, Is.Not.Null);
+            Assert.That(director, Is.Not.Null);
+
+            collapseDetector.enabled = false;
+            LocomotionDirectorTestSeams.SetRecoveryState(director, true);
+
+            // Start collapse — accumulate some deferral time
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+            yield return WaitForPhysicsFrames(3);
+
+            float timerAfterAccumulation = (float)GetPrivateField(_characterState, "_collapseDeferralTimer");
+            Assert.That(timerAfterAccumulation, Is.GreaterThan(0f),
+                "Precondition: deferral timer should accumulate while collapse is active with recovery.");
+
+            // Clear collapse
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, false);
+            yield return new WaitForFixedUpdate();
+
+            float timerAfterClear = (float)GetPrivateField(_characterState, "_collapseDeferralTimer");
+
+            // Assert
+            Assert.That(timerAfterClear, Is.EqualTo(0f),
+                "Deferral timer must reset to 0 when the collapse signal clears.");
+        }
+
         private void SetCurrentState(CharacterStateType state)
         {
             FieldInfo field = typeof(CharacterState).GetField(

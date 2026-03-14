@@ -7,7 +7,10 @@ namespace PhysicsDrivenMovement.Character
     /// Tracks the high-level locomotion/posture state for a player ragdoll so other
     /// systems can react to deterministic gameplay state transitions.
     /// Part of the Character state machine system and driven by data from
-    /// <see cref="BalanceController"/> and <see cref="PlayerMovement"/>.
+    /// <see cref="BalanceController"/>, <see cref="PlayerMovement"/>,
+    /// <see cref="LocomotionCollapseDetector"/>, and optionally
+    /// <see cref="LocomotionDirector"/> (to defer collapse-triggered Fallen
+    /// while an active recovery strategy is running).
     /// Lifecycle: caches dependencies in Awake and evaluates transitions in FixedUpdate.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
@@ -32,12 +35,18 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0.1f, 10f)]
         private float _getUpTimeout = 3f;
 
+        [Header("Collapse Deferral")]
+        [SerializeField, Range(0f, 3f), Tooltip("Maximum seconds collapse→Fallen can be deferred while director recovery is active.")]
+        private float _collapseDeferralLimit = 1f;
+
         private BalanceController _balanceController;
         private LocomotionCollapseDetector _collapseDetector;
+        private LocomotionDirector _locomotionDirector;
         private PlayerMovement _playerMovement;
         private Rigidbody _rb;
         private float _fallenTimer;
         private float _gettingUpTimer;
+        private float _collapseDeferralTimer;
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
 
@@ -56,9 +65,10 @@ namespace PhysicsDrivenMovement.Character
 
         private void Awake()
         {
-            // STEP 1: Cache BalanceController, collapse detection, PlayerMovement, and Rigidbody dependencies.
+            // STEP 1: Cache BalanceController, collapse detection, LocomotionDirector, PlayerMovement, and Rigidbody dependencies.
             TryGetComponent(out _balanceController);
             TryGetComponent(out _collapseDetector);
+            TryGetComponent(out _locomotionDirector);
             TryGetComponent(out _playerMovement);
             TryGetComponent(out _rb);
 
@@ -114,6 +124,31 @@ namespace PhysicsDrivenMovement.Character
             bool wantsMove = moveMagnitude >= _moveEnterThreshold;
             bool stoppedMove = moveMagnitude <= _moveExitThreshold;
 
+            // STEP 0.5: Collapse deferral — when the collapse detector fires but
+            // the director has an active recovery strategy, defer the Fallen
+            // transition for up to _collapseDeferralLimit seconds so the recovery
+            // has a chance to save the character. Angle-based isFallen is never
+            // deferred because it means the body is already past the posture
+            // threshold.
+            bool isRecoveryDeferringCollapse = false;
+            if (isLocomotionCollapsed && !isFallen)
+            {
+                bool directorRecoveryActive = _locomotionDirector != null &&
+                                              _locomotionDirector.IsRecoveryActive;
+                if (directorRecoveryActive && _collapseDeferralTimer < _collapseDeferralLimit)
+                {
+                    _collapseDeferralTimer += Time.fixedDeltaTime;
+                    isRecoveryDeferringCollapse = true;
+                }
+            }
+
+            if (!isLocomotionCollapsed)
+            {
+                _collapseDeferralTimer = 0f;
+            }
+
+            bool collapseTriggersfall = isLocomotionCollapsed && !isRecoveryDeferringCollapse;
+
             // STEP 1: Track fallen timer only while grounded and in Fallen.
             if (CurrentState == CharacterStateType.Fallen && isGrounded)
             {
@@ -140,7 +175,7 @@ namespace PhysicsDrivenMovement.Character
             switch (CurrentState)
             {
                 case CharacterStateType.Standing:
-                    if (isFallen || isLocomotionCollapsed)
+                    if (isFallen || collapseTriggersfall)
                     {
                         nextState = CharacterStateType.Fallen;
                     }
@@ -155,7 +190,7 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.Moving:
-                    if (isFallen || isLocomotionCollapsed)
+                    if (isFallen || collapseTriggersfall)
                     {
                         nextState = CharacterStateType.Fallen;
                     }
@@ -170,7 +205,7 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.Airborne:
-                    if (isFallen || isLocomotionCollapsed)
+                    if (isFallen || collapseTriggersfall)
                     {
                         nextState = CharacterStateType.Fallen;
                     }

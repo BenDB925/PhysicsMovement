@@ -179,5 +179,43 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(standingHeight, Is.GreaterThan(0.5f).And.LessThan(2f),
                 "StandingHipsHeight should be within a reasonable range for the ragdoll.");
         }
+
+        [Test]
+        public void PlayerRagdollPrefab_LocomotionDirector_ExposesIsRecoveryActive()
+        {
+            // Arrange
+            GameObject prefabRoot = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            LocomotionDirector director = prefabRoot.GetComponent<LocomotionDirector>();
+
+            // Assert
+            Assert.That(prefabRoot, Is.Not.Null, "PlayerRagdoll prefab must exist.");
+            Assert.That(director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for the C6.4 recovery bridge.");
+            Assert.That(director.IsRecoveryActive, Is.False,
+                "IsRecoveryActive should default to false when no recovery is in progress.");
+        }
+
+        [Test]
+        public void PlayerRagdollPrefab_CharacterState_HasCollapseDeferralLimitField()
+        {
+            // Arrange
+            GameObject prefabRoot = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            CharacterState characterState = prefabRoot.GetComponent<CharacterState>();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+
+            FieldInfo deferralLimitField = typeof(CharacterState).GetField("_collapseDeferralLimit", flags);
+
+            // Act
+            float deferralLimit = (float)deferralLimitField.GetValue(characterState);
+
+            // Assert
+            Assert.That(prefabRoot, Is.Not.Null, "PlayerRagdoll prefab must exist.");
+            Assert.That(characterState, Is.Not.Null,
+                "PlayerRagdoll prefab should include CharacterState on Hips.");
+            Assert.That(deferralLimitField, Is.Not.Null,
+                "CharacterState should serialize a collapse deferral limit for C6.4.");
+            Assert.That(deferralLimit, Is.GreaterThan(0f).And.LessThanOrEqualTo(3f),
+                "Collapse deferral limit should be positive and bounded for safety.");
+        }
     }
 }
