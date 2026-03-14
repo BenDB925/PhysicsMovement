@@ -1996,6 +1996,117 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(requestedClearanceHeight, Is.EqualTo(0f).Within(0.0001f));
         }
 
+        // ── C7.4b Terrain-aware catch-step tests ─────────────────────────────────
+
+        [Test]
+        public void StepPlanner_CatchStep_DegradedSurface_ShorterStrideThanFlatCatchStep()
+        {
+            // Arrange — a catch-step on degraded terrain should produce a shorter stride
+            //           than the same catch-step on flat ground, because the landing surface
+            //           is unreliable and a shorter reach is safer.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            object[] flatArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f,
+                surfaceNormalQuality: 1f);
+            object[] degradedArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f,
+                surfaceNormalQuality: 0.3f);
+
+            // Act
+            object flatResult = InvokeComputeSwingTarget(planner, flatArgs);
+            object degradedResult = InvokeComputeSwingTarget(planner, degradedArgs);
+
+            // Assert
+            float flatZ = GetPropertyValue<Vector3>(flatResult, "LandingPosition").z;
+            float degradedZ = GetPropertyValue<Vector3>(degradedResult, "LandingPosition").z;
+            Assert.That(degradedZ, Is.LessThan(flatZ),
+                "Catch-step on degraded terrain should use a shorter stride than on flat ground.");
+        }
+
+        [Test]
+        public void StepPlanner_CatchStep_DegradedSurface_WiderLateralThanFlatCatchStep()
+        {
+            // Arrange — a catch-step on degraded terrain should widen the lateral offset
+            //           beyond the flat-ground catch-step, broadening the support polygon
+            //           on unreliable footing.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            object[] flatArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f,
+                surfaceNormalQuality: 1f);
+            object[] degradedArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f,
+                surfaceNormalQuality: 0.3f);
+
+            // Act
+            object flatResult = InvokeComputeSwingTarget(planner, flatArgs);
+            object degradedResult = InvokeComputeSwingTarget(planner, degradedArgs);
+
+            // Assert — Left leg has negative X lateral; more negative = wider.
+            float flatX = GetPropertyValue<Vector3>(flatResult, "LandingPosition").x;
+            float degradedX = GetPropertyValue<Vector3>(degradedResult, "LandingPosition").x;
+            Assert.That(degradedX, Is.LessThan(flatX),
+                "Catch-step on degraded terrain should widen (more negative X for left leg) beyond flat-ground catch-step.");
+        }
+
+        [Test]
+        public void StepPlanner_CatchStep_DegradedSurface_NetStrideStillExceedsDefaultSwing()
+        {
+            // Arrange — even on maximally degraded terrain, a catch-step should still
+            //           produce a longer stride than a regular swing on the same surface,
+            //           so the catch-step intent is not fully canceled by terrain modulation.
+            object planner = CreateStepPlannerInstance();
+            float lowSupport = 0.3f;
+            float worstQuality = 0f;
+            object[] swingArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "DefaultCadence", turnSeverity: 0f,
+                surfaceNormalQuality: worstQuality);
+            object[] catchArgs = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "CatchStep",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: lowSupport,
+                transitionReason: "StumbleRecovery", turnSeverity: 0f,
+                surfaceNormalQuality: worstQuality);
+
+            // Act
+            object swingResult = InvokeComputeSwingTarget(planner, swingArgs);
+            object catchResult = InvokeComputeSwingTarget(planner, catchArgs);
+
+            // Assert
+            float swingZ = GetPropertyValue<Vector3>(swingResult, "LandingPosition").z;
+            float catchZ = GetPropertyValue<Vector3>(catchResult, "LandingPosition").z;
+            Assert.That(catchZ, Is.GreaterThan(swingZ),
+                "Catch-step on worst terrain should still extend stride beyond a regular swing on the same surface.");
+        }
+
         // ── C7.3b Partial-contact bracing tests ─────────────────────────────────
 
         [Test]

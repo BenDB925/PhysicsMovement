@@ -58,6 +58,14 @@ namespace PhysicsDrivenMovement.Character
         private const float CatchStepWidenScale = 0.12f;
         private const float CatchStepTimingScale = 0.20f;
 
+        // STEP 3d-terrain: Surface-aware catch-step modulation (C7.4b).
+        //          On degraded surfaces, catch-step stride extension is reduced because the
+        //          landing surface is unreliable, while lateral widening is boosted to broaden
+        //          the support polygon. Both scale with surface instability so flat-ground
+        //          catch-steps remain unchanged.
+        private const float TerrainCatchStepStrideRetention = 0.50f;
+        private const float TerrainCatchStepExtraWiden = 0.04f;
+
         // STEP 3e: Partial-contact bracing (C7.3b).
         //          When surface normal quality drops (slope, edge, uneven surface) the planner
         //          shortens stride, widens lateral offset, and shortens timing to plant a more
@@ -118,13 +126,13 @@ namespace PhysicsDrivenMovement.Character
             float strideOffset = ComputeStrideOffset(planarSpeed);
             strideOffset = ApplyTurnStrideAdjustment(strideOffset, transitionReason, observation.TurnSeverity);
             strideOffset = ApplyBrakingStrideAdjustment(strideOffset, transitionReason, planarSpeed);
-            strideOffset = ApplyCatchStepStrideAdjustment(strideOffset, transitionReason, observation.SupportQuality);
+            strideOffset = ApplyCatchStepStrideAdjustment(strideOffset, transitionReason, observation.SupportQuality, observation.MinSurfaceNormalQuality);
             strideOffset = ApplyBracingStrideAdjustment(strideOffset, observation.MinSurfaceNormalQuality);
 
             // STEP 3: Compute lateral offset based on which leg, widened for catch-steps (C4.5)
             //         and surface bracing (C7.3b).
             float lateralOffset = ComputeLateralOffset(leg);
-            lateralOffset = ApplyCatchStepLateralAdjustment(lateralOffset, transitionReason, observation.SupportQuality);
+            lateralOffset = ApplyCatchStepLateralAdjustment(lateralOffset, transitionReason, observation.SupportQuality, observation.MinSurfaceNormalQuality);
             lateralOffset = ApplyBracingLateralAdjustment(lateralOffset, observation.MinSurfaceNormalQuality);
 
             // STEP 4: Compute drift compensation from velocity.
@@ -531,34 +539,46 @@ namespace PhysicsDrivenMovement.Character
         private static float ApplyCatchStepStrideAdjustment(
             float baseStride,
             LegStateTransitionReason reason,
-            float supportQuality)
+            float supportQuality,
+            float minSurfaceNormalQuality)
         {
             // STEP 3d: Catch-step (StumbleRecovery) extends stride so the recovery foot
             //          lands farther forward, providing a wider base to arrest the fall.
             //          The extension scales with support urgency (1 - SupportQuality).
+            //          C7.4b: On degraded surfaces the extension is reduced because the
+            //          landing surface is unreliable — a shorter, more controlled catch-step
+            //          is safer than a long reach onto a slope or step edge.
             if (reason != LegStateTransitionReason.StumbleRecovery)
             {
                 return baseStride;
             }
 
             float urgency = 1f - Mathf.Clamp01(supportQuality);
-            return baseStride + baseStride * CatchStepStrideScale * urgency;
+            float surfaceRetention = Mathf.Lerp(
+                TerrainCatchStepStrideRetention, 1f,
+                Mathf.Clamp01(minSurfaceNormalQuality / BracingSurfaceQualityFloor));
+            return baseStride + baseStride * CatchStepStrideScale * urgency * surfaceRetention;
         }
 
         private static float ApplyCatchStepLateralAdjustment(
             float baseLateral,
             LegStateTransitionReason reason,
-            float supportQuality)
+            float supportQuality,
+            float minSurfaceNormalQuality)
         {
             // STEP 3d: Catch-step widens the lateral offset (away from center) to broaden
             //          the support polygon. The sign of baseLateral already encodes left/right.
+            //          C7.4b: On degraded surfaces, additional widening is applied because
+            //          a broader support polygon is more valuable on unreliable footing.
             if (reason != LegStateTransitionReason.StumbleRecovery)
             {
                 return baseLateral;
             }
 
             float urgency = 1f - Mathf.Clamp01(supportQuality);
-            float widen = CatchStepWidenScale * urgency;
+            float instability = ComputeBracingInstability(minSurfaceNormalQuality);
+            float widen = CatchStepWidenScale * urgency
+                + TerrainCatchStepExtraWiden * instability;
             return baseLateral + Mathf.Sign(baseLateral) * widen;
         }
 
