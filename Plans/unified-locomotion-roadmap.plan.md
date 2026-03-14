@@ -3,19 +3,19 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Continue Chapter 6 with C6.4 (collapse boundary) and C6.5 (expressive outcomes).
+- Current next step: Begin Chapter 7 (Terrain And Contact Robustness).
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1, 2, 3, 4, and 5 are complete. Chapter 6 is in progress: C6.1-C6.3 are committed, C6.4 and C6.5 remain.
-- Chapter 6 so far: situation classification (HardTurn, Reversal, Slip, NearFall, Stumble), typed response profiles with per-situation strength multipliers, and recovery transition guard (debounce, cooldown, ramp-in). Leg smoothing fix also applied between C6.2 and C6.3.
-- Next: C6.4 (collapse boundary — defer collapse→Fallen while director recovery is active, expose `IsRecoveryActive`), then C6.5 (expressive outcomes).
+- Chapters 1 through 6 are complete. Chapter 7 is next.
+- Chapter 6 delivered: situation classification, typed response profiles, recovery transition guard, collapse deferral during active recovery, and situation-aware recovery/catch-step execution profiles.
+- Next: Chapter 7 (terrain robustness) or Chapter 8 (expressive motion) per the recommended execution order.
 
 ## Verified Artifacts
-- `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 work package with C6.1-C6.3 completion notes and C6.4 design notes.
-- `Assets/Scripts/Character/Locomotion/RecoveryTransitionGuard.cs`: C6.3 guard with entry debounce, exit cooldown, and ramp-in blend.
-- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director now classifies situations and applies typed recovery profiles gated by the transition guard.
+- `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 complete with C6.1-C6.5 completion notes and verification gate.
+- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director classifies situations, applies typed recovery profiles gated by the transition guard, defers collapse during active recovery, and stamps recovery context onto leg commands.
+- `Assets/Scripts/Character/CharacterState.cs`: Collapse-triggered Fallen now deferred while director recovery is active (hard ceiling 1s).
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
 
 ## Child docs
@@ -24,7 +24,7 @@
 - [x] Chapter 3: Replace Cycle-Only Gait With Leg States (`Plans/unified-locomotion-roadmap/03-leg-states.md`)
 - [x] Chapter 4: Add Step Planning And Foot Placement (`Plans/unified-locomotion-roadmap/04-step-planning.md`)
 - [x] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
-- [ ] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
+- [x] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
 - [ ] Chapter 7: Terrain And Contact Robustness (`Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`)
 - [ ] Chapter 8: Expressive Motion And Feel (`Plans/unified-locomotion-roadmap/08-expressive-motion-and-feel.md`)
 - [ ] Chapter 9: Validation, Debugging, And Tuning Infrastructure (`Plans/unified-locomotion-roadmap/09-validation-debugging-and-tuning.md`)
@@ -85,3 +85,5 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C6.2 dedicated responses. Added `RecoveryResponseProfile` with per-situation strength multipliers. Director applies profiles to recovery blend and kD blend. 5 new EditMode tests. Verification: EditMode 78/78, PlayMode 67/70. Commit `484575a`.
 - 2026-03-13: Leg smoothing fix: `LegAnimator` smooths resolved angles via `Mathf.MoveTowards` at 720 deg/s to prevent stride snap at state boundaries. Commit `adc5096`.
 - 2026-03-13: Completed C6.3 recovery transitions. Added `RecoveryTransitionGuard` with entry debounce (3 frames, halved for high priority), exit cooldown (20 frames), and ramp-in blend (8 frames). Active recovery bypasses guard for direct extension. 8 new EditMode tests. Verification: EditMode 81/81, PlayMode 82/86 (3 ignored, 1 known fixture-order flake). Commit `b7b6b40`.
+- 2026-03-14: Completed C6.4 collapse boundary. `LocomotionDirector.IsRecoveryActive` bridges director→CharacterState; collapse-triggered Fallen deferred while recovery active (hard ceiling 1s); angle-based isFallen never deferred. 2 EditMode + 5 PlayMode tests. New `LocomotionDirectorTestSeams` utility.
+- 2026-03-14: Completed C6.5 expressive outcomes. `LegCommandOutput` carries `RecoverySituation` + `RecoveryBlend`; director stamps context via `WithRecoveryContext()`; `LegAnimator` recovery/catch-step profiles scale by situation urgency. 3 new EditMode tests. Chapter 6 complete: EditMode 86/86, PlayMode 107 (103 passed, 3 ignored, 1 fixture-order flake).

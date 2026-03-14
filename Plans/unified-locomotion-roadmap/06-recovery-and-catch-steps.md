@@ -4,10 +4,10 @@ Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.
 
 ## Quick Load
 
-- C6.1, C6.2, and C6.3 are complete. C6.4 and C6.5 remain.
-- The director now classifies situations (HardTurn, Reversal, Slip, NearFall, Stumble), maps them to typed response profiles (strength, duration, kD blend), and gates entry/exit through a `RecoveryTransitionGuard` with debounce, cooldown, and ramp-in.
+- Chapter 6 is complete. All five work packages (C6.1-C6.5) have passed their verification gates.
+- The director classifies situations (HardTurn, Reversal, Slip, NearFall, Stumble), maps them to typed response profiles (strength, duration, kD blend), gates entry/exit through a `RecoveryTransitionGuard` with debounce, cooldown, and ramp-in, defers collapse-triggered Fallen while director recovery is active (C6.4), and threads recovery context (situation + blend) through leg commands so recovery/catch-step execution profiles scale by situation urgency (C6.5).
 - Leg smoothing fix (commit `adc5096`) was applied between C6.2 and C6.3 to resolve a jerky-stride visual regression caused by Chapter 3 state-driven leg targeting.
-- Verification baseline entering C6.4: EditMode 81/81, PlayMode 82/86 (3 ignored, 1 known fixture-order flake `CatchStepWithStumbleRecoveryReason`).
+- Chapter 6 completion gate: EditMode 86/86, PlayMode 107 (103 passed, 3 ignored, 1 known fixture-order flake `ConvergesTowardMirroredFallback` — passes in isolation).
 
 ## Read More When
 
@@ -55,11 +55,12 @@ Make hard locomotion cases first-class behaviors, not threshold accidents.
    - 2026-03-13: Complete. Added `RecoveryTransitionGuard` (sealed class) under `Assets/Scripts/Character/Locomotion/` with entry debounce, exit cooldown, and ramp-in blend. High-priority situations (NearFall, Stumble) debounce at half length. Exit cooldown blocks same-or-lower-priority re-entry but allows escalation. Integrated into `LocomotionDirector` with serialized fields: `_recoveryEntryDebounceFrames=3`, `_recoveryExitCooldownFrames=20`, `_recoveryRampInFrames=8`. Active recovery bypasses the guard for direct extension/upgrade so the ramp-in counter advances uninterrupted. 8 new EditMode tests. PlayMode turn-risk test adjusted with debounce override. Verification: EditMode 81/81, PlayMode 82/86 (3 ignored, 1 known fixture-order flake). Commit `b7b6b40`.
 4. C6.4 Collapse boundary:
    - Keep LocomotionCollapseDetector as last resort when strategy fails, not first-line controller.
-   - Status: Not started. Next work package.
-   - Design notes: CharacterState currently treats `isLocomotionCollapsed` identically to `isFallen` for Standing/Moving/Airborne→Fallen transitions. The goal is to defer collapse-triggered Fallen when the director has active recovery, with a hard ceiling so truly unrecoverable situations still fall. LocomotionDirector should expose `IsRecoveryActive` for this purpose.
+   - 2026-03-14: Complete. `LocomotionDirector` now exposes `IsRecoveryActive` so `CharacterState` can defer collapse-triggered Fallen transitions while recovery is active. Deferral has a hard ceiling (`_collapseDeferralLimit = 1s`); angle-based `isFallen` is never deferred. Timer resets when raw collapse clears. 2 new EditMode tests, 5 new PlayMode tests, plus a new `LocomotionDirectorTestSeams` utility for reflection-based recovery state injection.
+   - Verification: EditMode 86/86, PlayMode 18/18 (CharacterState focused). Commit pending.
 5. C6.5 Expressive outcomes:
    - Ensure visible problem-solving behavior before falling back to Fallen and GetUp.
-   - Status: Not started.
+   - 2026-03-14: Complete. `LegCommandOutput` now carries `RecoverySituation` and `RecoveryBlend` fields. `LocomotionDirector` stamps recovery context onto leg commands via `WithRecoveryContext()` after pass-through command generation when recovery is active. `LegAnimator` recovery-step and catch-step execution profiles now scale forward reach and knee targets by situation urgency (0-1 mapping: HardTurn=0.2, Reversal=0.4, Slip=0.6, NearFall=0.8, Stumble=1.0). 3 new EditMode tests. Reflection-based PlayMode test helper updated for new constructor signature.
+   - Verification: EditMode 86/86, PlayMode 103/107 (3 ignored, 1 order-sensitive flake). Commit pending.
 
 ## Verification gate
 
@@ -69,6 +70,12 @@ Make hard locomotion cases first-class behaviors, not threshold accidents.
 - Assets/Tests/PlayMode/Character/SpinRecoveryTests.cs
 - Assets/Tests/PlayMode/Character/StumbleStutterRegressionTests.cs
 - Assets/Tests/PlayMode/Character/GetUpReliabilityTests.cs
+
+## Chapter 6 Completion Verification (2026-03-14)
+
+- EditMode: 86/86 passed.
+- PlayMode Chapter 6 gate: 107 total, 103 passed, 3 ignored, 1 failed (fixture-order-sensitive `ConvergesTowardMirroredFallback` — passes in isolation).
+- No new regressions introduced. The order-sensitive failure matches the existing pattern tracked in `LOCOMOTION_BASELINES.md`.
 
 ## Exit criteria
 
