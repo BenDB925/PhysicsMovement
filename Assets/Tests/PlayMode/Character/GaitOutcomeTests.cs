@@ -68,6 +68,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int StepUpSurfaceSampleCount = 48;
         private const int MaxStepUpConsecutiveFallenFrames = 80;
 
+        private const int SlopeLaneWalkFrames = 500;
+        private const float SlopeSpawnRunUpMetres = 1.0f;
+        private const float SlopeMinForwardProgress = 4.0f;
+        private const int MaxSlopeConsecutiveFallenFrames = 80;
+
         // ─── Scene Setup ──────────────────────────────────────────────────────
 
         [UnityTest]
@@ -424,6 +429,114 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(balance.IsGrounded, Is.True,
                 "Step-up traversal should finish with at least one grounded foot on the raised landing.");
+        }
+
+        [UnityTest]
+        public IEnumerator WalkUpSlopeLane_MaintainsProgressOnInclinedSurface()
+        {
+            // Purpose: catch regressions where the character oscillates, collapses, or
+            // stalls when walking up an inclined surface. The slope ramp degrades
+            // GroundNormalUpAlignment below 1.0, activating the partial-contact
+            // observation pipeline (C7.3a) and, if steep enough, the bracing planner
+            // adjustments (C7.3b). The test asserts physical outcome: forward progress
+            // past the ramp and no extended fallen state.
+
+            yield return LoadArenaScene();
+
+            TerrainScenarioMarker slopeLane = FindTerrainScenarioMarker(TerrainScenarioType.SlopeLane);
+            LegAnimator legAnimator = FindLegAnimator();
+            PlayerMovement movement = legAnimator.GetComponent<PlayerMovement>();
+            Rigidbody hipsRb = legAnimator.GetComponent<Rigidbody>();
+            BalanceController balance = legAnimator.GetComponent<BalanceController>();
+            CharacterState characterState = legAnimator.GetComponent<CharacterState>();
+            RagdollSetup ragdollSetup = legAnimator.GetComponent<RagdollSetup>();
+            GroundSensor leftSensor = FindGroundSensor(legAnimator.gameObject, "Foot_L");
+            GroundSensor rightSensor = FindGroundSensor(legAnimator.gameObject, "Foot_R");
+
+            Assert.That(slopeLane, Is.Not.Null,
+                "Arena_01 must expose a SlopeLane marker for the C7.3c partial-contact outcome regression.");
+            Assert.That(movement, Is.Not.Null, "PlayerMovement component not found on the Arena_01 character.");
+            Assert.That(hipsRb, Is.Not.Null, "Rigidbody not found on the Arena_01 character.");
+            Assert.That(balance, Is.Not.Null, "BalanceController component not found on the Arena_01 character.");
+            Assert.That(characterState, Is.Not.Null, "CharacterState component not found on the Arena_01 character.");
+            Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found on the Arena_01 character.");
+            Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found on the Arena_01 character.");
+
+            ResolveAscendingLaneProfile(
+                slopeLane,
+                out Vector3 travelDirection,
+                out Vector3 lowSidePoint,
+                out Vector3 highSidePoint,
+                out float highSideHeight);
+
+            Vector3 spawnPosition = new Vector3(lowSidePoint.x, hipsRb.position.y, lowSidePoint.z)
+                - travelDirection * SlopeSpawnRunUpMetres;
+            RepositionRagdoll(ragdollSetup, hipsRb, spawnPosition);
+
+            for (int i = 0; i < SettleFrames; i++)
+                yield return new WaitForFixedUpdate();
+
+            Vector3 startPosition = hipsRb.position;
+            Vector2 moveInput = BuildMoveInputForWorldDirection(travelDirection);
+            float maxForwardProgress = 0f;
+            float maxHipsHeight = hipsRb.position.y;
+            float minObservedAlignment = 1f;
+            int degradedQualityFrames = 0;
+            int consecutiveFallenFrames = 0;
+            int maxConsecutiveFallenFrames = 0;
+
+            // Act
+            movement.SetMoveInputForTest(moveInput);
+            for (int i = 0; i < SlopeLaneWalkFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float forwardProgress = Vector3.Dot(hipsRb.position - startPosition, travelDirection);
+                maxForwardProgress = Mathf.Max(maxForwardProgress, forwardProgress);
+                maxHipsHeight = Mathf.Max(maxHipsHeight, hipsRb.position.y);
+
+                float leftAlignment = leftSensor.GroundNormalUpAlignment;
+                float rightAlignment = rightSensor.GroundNormalUpAlignment;
+                float frameMinAlignment = Mathf.Min(leftAlignment, rightAlignment);
+                minObservedAlignment = Mathf.Min(minObservedAlignment, frameMinAlignment);
+                if (frameMinAlignment < 1f - 0.001f)
+                    degradedQualityFrames++;
+
+                if (characterState.CurrentState == CharacterStateType.Fallen)
+                {
+                    consecutiveFallenFrames++;
+                    maxConsecutiveFallenFrames = Mathf.Max(maxConsecutiveFallenFrames, consecutiveFallenFrames);
+                }
+                else
+                {
+                    consecutiveFallenFrames = 0;
+                }
+            }
+            movement.SetMoveInputForTest(Vector2.zero);
+
+            float derivedMinQuality = Mathf.InverseLerp(0.5f, 1f, minObservedAlignment);
+
+            LogBaseline(
+                nameof(WalkUpSlopeLane_MaintainsProgressOnInclinedSurface),
+                $"maxProgress={maxForwardProgress:F2}m maxHipsHeight={maxHipsHeight:F2}m " +
+                $"minAlignment={minObservedAlignment:F3} derivedMinQuality={derivedMinQuality:F3} " +
+                $"degradedFrames={degradedQualityFrames} maxConsecutiveFallenFrames={maxConsecutiveFallenFrames} " +
+                $"highSideHeight={highSideHeight:F2}m groundedEnd={balance.IsGrounded} stateEnd={characterState.CurrentState}");
+
+            // Assert
+            Assert.That(maxForwardProgress, Is.GreaterThanOrEqualTo(SlopeMinForwardProgress),
+                $"Walking up the authored SlopeLane should carry the character past the ramp without stalling. " +
+                $"Needed at least {SlopeMinForwardProgress:F1}m of forward progress, but only reached {maxForwardProgress:F2}m. " +
+                $"Final state={characterState.CurrentState}, groundedEnd={balance.IsGrounded}.");
+
+            Assert.That(maxConsecutiveFallenFrames, Is.LessThanOrEqualTo(MaxSlopeConsecutiveFallenFrames),
+                $"Walking up the slope should not collapse into an extended fallen state. " +
+                $"Observed {maxConsecutiveFallenFrames} consecutive Fallen frames (limit {MaxSlopeConsecutiveFallenFrames}).");
+
+            Assert.That(minObservedAlignment, Is.LessThan(1f),
+                $"At least one frame should register degraded surface-normal alignment on the slope ramp, " +
+                $"proving that the partial-contact observation pipeline detects the incline. " +
+                $"Observed minimum alignment={minObservedAlignment:F3}.");
         }
 
         // ─── Helpers ──────────────────────────────────────────────────────────
