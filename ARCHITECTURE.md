@@ -7,7 +7,8 @@
 
 - Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label and `LocomotionCollapseDetector` as a watchdog input.
 - The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
-- `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity` respectively.
+- `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity`; both now share `TerrainScenarioBuilder` for Chapter 7 terrain galleries.
+- The `Environment` assembly now carries both room metadata (`ArenaRoom`) and terrain scenario metadata (`TerrainScenarioMarker`, `TerrainScenarioType`) so generated scenes expose stable query surfaces at runtime.
 - A live Unity MCP bridge is available for editor automation through the MCP stdio server plus Unity's `ws://localhost:8090/McpUnity` endpoint; use it for editor-state work and keep unattended regression verification on `Tools/Run-UnityTests.ps1`.
 - When ownership boundaries or key collaborators change, keep this file, `TASK_ROUTING.md`, and `.copilot-instructions.md` aligned in the same slice.
 
@@ -76,9 +77,9 @@
 | `PhysicsDrivenMovement.Core` | `Assets/Scripts/Core/` | *(none)* | `GameSettings` singleton |
 | `PhysicsDrivenMovement.Character` | `Assets/Scripts/Character/` | `Core` | Ragdoll physics scripts plus the locomotion contract and director command layer |
 | `PhysicsDrivenMovement.Input` | `Assets/Scripts/Input/` | `Character` | Generated input wrapper |
-| `PhysicsDrivenMovement.Environment` | `Assets/Scripts/Environment/` | *(none)* | Runtime room metadata for generated scenes |
+| `PhysicsDrivenMovement.Environment` | `Assets/Scripts/Environment/` | *(none)* | Runtime room and terrain-scenario metadata for generated scenes |
 | `PhysicsDrivenMovement.Editor` | `Assets/Scripts/Editor/` | `Core`, `Character` | Editor-only build tools |
-| `PhysicsDrivenMovement.Tests.EditMode` | `Assets/Tests/EditMode/` | `Core`, `Character` | NUnit EditMode tests |
+| `PhysicsDrivenMovement.Tests.EditMode` | `Assets/Tests/EditMode/` | `Core`, `Character`, `Environment` | NUnit EditMode tests |
 | `PhysicsDrivenMovement.Tests.PlayMode` | `Assets/Tests/PlayMode/` | `Core`, `Character` | NUnit PlayMode tests |
 
 ---
@@ -232,8 +233,21 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | Static editor class; builds the `Arena_01.unity` test scene with ground plane, lighting, spawn points, and a `GameSettings` object. |
-| **Phase** | 0 |
+| **What** | Static editor class; rebuilds `Arena_01.unity` with the baseline ground, player prefab instance, camera and lap-runner scaffolding, spawn points, and the Chapter 7 terrain gallery. |
+| **Why** | Keeps the shipped Arena validation scene reproducible and aligned with the saved `.unity` asset instead of hand-maintaining terrain variants. |
+| **Public Surface** | `BuildTestScene()`, `BuildAllEnvironmentScenes()` |
+| **Collaborators** | Uses `TerrainScenarioBuilder`, `ArenaBuilder`, `GameSettings`, `CameraFollow`, `LapDemoRunner`, and the generated `PlayerRagdoll.prefab`. |
+| **Phase** | Terrain robustness support |
+
+### `Editor.TerrainScenarioBuilder` — `Assets/Scripts/Editor/TerrainScenarioBuilder.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Shared editor-only helper that builds authored slope, step-up, step-down, uneven-patch, and low-obstacle scenarios for generated scenes. |
+| **Why** | Prevents the Arena and Museum terrain galleries from drifting apart and centralises the stable metadata stamping rules for Chapter 7. |
+| **Public Surface** | Static `Build*Lane(...)` helpers, `BuildUnevenPatch(...)`, `CreateScenarioContainer(...)`, `CreateSurfaceMaterial(...)` |
+| **Collaborators** | Consumed by `SceneBuilder` and `ArenaBuilder`; stamps `TerrainScenarioMarker` using `TerrainScenarioType`. |
+| **Phase** | Chapter 7 |
 
 ---
 
@@ -247,14 +261,24 @@
 | **Collaborators** | Authored by `ArenaBuilder`; intended for future room-aware hazards, scoring, and AI logic. |
 | **Phase** | Concept/prototype support |
 
+### `Environment.TerrainScenarioMarker / TerrainScenarioType` — `Assets/Scripts/Environment/TerrainScenarioMarker.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Runtime metadata surface for authored terrain scenarios, exposing a stable id, scenario type, and world-space bounds for each terrain lane or patch. |
+| **Why** | Lets tests and future terrain-aware locomotion systems query generated scene coverage without hard-coding hierarchy names. |
+| **Public Surface** | `ScenarioId`, `ScenarioType`, `ScenarioBounds`, `ContainsPoint(Vector3)`, `Initialise(string, TerrainScenarioType, Bounds)` |
+| **Collaborators** | Authored by `TerrainScenarioBuilder` through `SceneBuilder` and `ArenaBuilder`; consumed by `TerrainScenarioSceneTests` and future Chapter 7 follow-ups. |
+| **Phase** | Chapter 7 |
+
 ### `Editor.ArenaBuilder` — `Assets/Scripts/Editor/ArenaBuilder.cs`
 
 | Concern | Detail |
 |---------|--------|
-| **What** | Static editor class that procedurally builds the museum concept scene `Museum_01.unity`. |
-| **Why** | Keeps the museum layout reproducible and data-driven instead of hand-editing scene geometry. |
+| **What** | Static editor class that procedurally builds the museum concept scene `Museum_01.unity`, including the Chapter 7 terrain scenarios placed inside selected rooms. |
+| **Why** | Keeps the museum layout, terrain gallery, and supporting props reproducible and data-driven instead of hand-editing scene geometry. |
 | **Public Surface** | `BuildMuseumArena()` (MenuItem). |
-| **Collaborators** | Creates `ArenaRoom` components, `GameSettings`, room geometry, and spawn points. |
+| **Collaborators** | Creates `ArenaRoom` components, `GameSettings`, room geometry, terrain scenarios via `TerrainScenarioBuilder`, spawn points, and supporting props via `PropBuilder`. |
 | **Phase** | Concept/prototype support |
 
 ### `Editor.PropBuilder` — `Assets/Scripts/Editor/PropBuilder.cs`

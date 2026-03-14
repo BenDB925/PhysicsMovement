@@ -10,7 +10,9 @@ namespace PhysicsDrivenMovement.Editor
     /// Editor utility that procedurally builds a 6-room museum arena scene.
     /// Uses a declarative <see cref="RoomDef"/> table (same pattern as RagdollBuilder's
     /// SegmentDef) to define room geometry, then generates floors, ceilings, and walls
-    /// with door cutouts. All geometry uses Layer 12 (Environment) and the shared
+    /// with door cutouts. It also authors the Chapter 7 controlled terrain scenarios
+    /// inside selected rooms and repopulates the museum props so the saved scene stays
+    /// aligned with its builders. All geometry uses Layer 12 (Environment) and the shared
     /// Ragdoll PhysicsMaterial for proper ground-sensor and friction behaviour.
     /// Access via: Tools → PhysicsDrivenMovement → Build Museum Arena.
     /// Collaborators: <see cref="ArenaRoom"/>, <see cref="GameSettings"/>.
@@ -159,10 +161,16 @@ namespace PhysicsDrivenMovement.Editor
                 BuildRoom(room, arenaRoot.transform, physicsMat);
             }
 
-            // STEP 7: Spawn points in Main Lobby corners.
+            // STEP 7: Add the Chapter 7 terrain scenarios inside selected rooms.
+            BuildTerrainScenarios(arenaRoot.transform, physicsMat);
+
+            // STEP 8: Repopulate the supporting museum props now that the shell + terrain exist.
+            PropBuilder.PopulateMuseumProps();
+
+            // STEP 9: Spawn points in Main Lobby corners.
             BuildSpawnPoints();
 
-            // STEP 8: Save scene.
+            // STEP 10: Save scene.
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
 
@@ -264,7 +272,6 @@ namespace PhysicsDrivenMovement.Editor
             }
 
             // Door cutout — split into left section, right section, and top above door.
-            float halfDoor  = DoorWidth * 0.5f;
             float leftWidth = (wallLength - DoorWidth) * 0.5f;
 
             // Left section.
@@ -331,7 +338,6 @@ namespace PhysicsDrivenMovement.Editor
                 return;
             }
 
-            float halfDoor  = DoorWidth * 0.5f;
             float sideWidth = (wallLength - DoorWidth) * 0.5f;
 
             // Bottom section (lower Z).
@@ -394,6 +400,68 @@ namespace PhysicsDrivenMovement.Editor
                 GameObject spawn = new GameObject($"SpawnPoint_{i + 1}");
                 spawn.transform.localPosition = positions[i];
             }
+        }
+
+        private static void BuildTerrainScenarios(Transform museumRoot, PhysicsMaterial physicsMat)
+        {
+            GameObject terrainRoot = TerrainScenarioBuilder.CreateScenarioContainer(museumRoot);
+
+            Material slopeMaterial = TerrainScenarioBuilder.CreateSurfaceMaterial("Museum_SlopeLane", new Color(0.69f, 0.48f, 0.28f));
+            Material stepUpMaterial = TerrainScenarioBuilder.CreateSurfaceMaterial("Museum_StepUpLane", new Color(0.63f, 0.52f, 0.36f));
+            Material stepDownMaterial = TerrainScenarioBuilder.CreateSurfaceMaterial("Museum_StepDownLane", new Color(0.55f, 0.44f, 0.29f));
+            Material unevenMaterial = TerrainScenarioBuilder.CreateSurfaceMaterial("Museum_UnevenPatch", new Color(0.43f, 0.53f, 0.33f));
+            Material obstacleMaterial = TerrainScenarioBuilder.CreateSurfaceMaterial("Museum_LowObstacleLane", new Color(0.47f, 0.35f, 0.22f));
+
+            TerrainScenarioBuilder.BuildSlopeLane(
+                terrainRoot.transform,
+                "Museum_MainLobby_SlopeLane",
+                new Vector3(Rooms[0].CenterX, 0f, Rooms[0].CenterZ),
+                TerrainScenarioBuilder.TerrainLaneAxis.Z,
+                2.8f,
+                7f,
+                0.55f,
+                slopeMaterial,
+                physicsMat);
+
+            TerrainScenarioBuilder.BuildUnevenPatch(
+                terrainRoot.transform,
+                "Museum_WestGallery_UnevenPatch",
+                new Vector3(Rooms[2].CenterX, 0f, Rooms[2].CenterZ),
+                new Vector2(5.5f, 6.5f),
+                unevenMaterial,
+                physicsMat);
+
+            TerrainScenarioBuilder.BuildLowObstacleLane(
+                terrainRoot.transform,
+                "Museum_EastGallery_LowObstacleLane",
+                new Vector3(Rooms[3].CenterX, 0f, Rooms[3].CenterZ),
+                TerrainScenarioBuilder.TerrainLaneAxis.Z,
+                2.8f,
+                7f,
+                obstacleMaterial,
+                physicsMat);
+
+            TerrainScenarioBuilder.BuildStepUpLane(
+                terrainRoot.transform,
+                "Museum_Storage_StepUpLane",
+                new Vector3(Rooms[4].CenterX, 0f, Rooms[4].CenterZ),
+                TerrainScenarioBuilder.TerrainLaneAxis.Z,
+                2.8f,
+                7f,
+                0.6f,
+                stepUpMaterial,
+                physicsMat);
+
+            TerrainScenarioBuilder.BuildStepDownLane(
+                terrainRoot.transform,
+                "Museum_Security_StepDownLane",
+                new Vector3(Rooms[5].CenterX, 0f, Rooms[5].CenterZ),
+                TerrainScenarioBuilder.TerrainLaneAxis.Z,
+                2.8f,
+                7f,
+                0.6f,
+                stepDownMaterial,
+                physicsMat);
         }
 
         // ─── Geometry Helpers ───────────────────────────────────────────────

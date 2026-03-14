@@ -29,4 +29,4 @@ Use the parent plan for current status, quick resume context, execution order, a
 
 ## Maintenance rule
 
-Update the relevant chapter doc under `Plans/unified-locomotion-roadmap/` when roadmap progress, blockers, or artifact locations change. Keep this file as the short index only. Update the instruction file only when the routing behavior changes. If a chapter note grows too large, split it into a linked child doc or bug sheet following [Plans/README.md](Plans/README.md).
+Update the relevant chapter doc under `Plans/unified-locomotion-roadmap/` as the work progresses, not only at handoff time. Record cleared subtasks, new bugs or hypotheses, changed blockers or next steps, and updated artifact locations in the same slice that produced them. Keep this file as the short index only. Update the instruction file only when the routing behavior changes. If another agent owns a different active chapter, put cross-cutting policy updates in shared long-lived docs or the roadmap parent plan instead of editing their in-progress chapter doc. If a chapter note grows too large, split it into a linked child doc or bug sheet following [Plans/README.md](Plans/README.md).

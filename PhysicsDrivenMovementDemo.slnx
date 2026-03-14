@@ -10,6 +10,7 @@
   <Project Path="PhysicsDrivenMovement.Tests.PlayMode.csproj" />
   <Project Path="Unity.Burst.csproj" />
   <Project Path="McpUnity.Editor.csproj" />
+  <Project Path="PhysicsDrivenMovement.Environment.csproj" />
   <Project Path="Unity.VisualStudio.Editor.csproj" />
   <Project Path="Unity.PerformanceTesting.csproj" />
   <Project Path="Unity.Networking.Transport.csproj" />
@@ -31,6 +32,5 @@
   <Project Path="Unity.Collections.CodeGen.csproj" />
   <Project Path="Unity.Mathematics.Editor.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />
-  <Project Path="PhysicsDrivenMovement.Environment.csproj" />
   <Project Path="Unity.Netcode.PackageChecker.Editor.csproj" />
 </Solution>

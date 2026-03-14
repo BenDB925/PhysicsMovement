@@ -30,10 +30,10 @@
 | Camera issues | `Assets/Scripts/Character/CameraFollow.cs` | `Assets/Scripts/Character/PlayerMovement.cs`, `Assets/Scenes/Arena_01.unity` | `Assets/Tests/PlayMode/Character/CameraFollowTests.cs` |
 | Global physics settings, layers, project bootstrapping | `Assets/Scripts/Core/GameSettings.cs` | `ProjectSettings/ProjectVersion.txt`, `ARCHITECTURE.md` physics settings section | `Assets/Tests/EditMode/Core/GameSettingsTests.cs` |
 | Input wiring | `Assets/Scripts/Input/PlayerInputActions.cs`, `Assets/Scripts/Character/PlayerMovement.cs` | `ARCHITECTURE.md` PlayerMovement section, `.copilot-instructions.md` phase tracker | `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs` |
-| Environment, room queries, museum layout, generated arenas | `Assets/Scripts/Environment/ArenaRoom.cs`, `Assets/Scripts/Editor/ArenaBuilder.cs` | `Assets/Scripts/Editor/PropBuilder.cs`, `Assets/Scripts/Editor/SceneBuilder.cs`, `Assets/Scenes/Museum_01.unity`, `Assets/Scenes/Arena_01.unity`, `CONCEPT.md` | Scene-level verification in Unity; no dedicated Environment tests yet |
+| Environment, room queries, terrain scenario metadata, museum layout, generated arenas | `Assets/Scripts/Environment/ArenaRoom.cs`, `Assets/Scripts/Environment/TerrainScenarioMarker.cs`, `Assets/Scripts/Editor/ArenaBuilder.cs`, `Assets/Scripts/Editor/SceneBuilder.cs`, `Assets/Scripts/Editor/TerrainScenarioBuilder.cs` | `Assets/Scripts/Editor/PropBuilder.cs`, `Assets/Scenes/Museum_01.unity`, `Assets/Scenes/Arena_01.unity`, `CONCEPT.md` | `Assets/Tests/EditMode/Environment/TerrainScenarioSceneTests.cs` plus the smallest relevant scene-level PlayMode slice through `Tools/Run-UnityTests.ps1` |
 | Live Unity editor work: scene hierarchy, prefab or component wiring, material edits, menu-item builders, console inspection, or quick in-editor smoke checks | `UNITY_MCP.md` | Relevant runtime or editor scripts, current scene or prefab asset, and `ARCHITECTURE.md` when ownership is unclear | Unity MCP tools for editor-state work; finish with `Tools/Run-UnityTests.ps1` when you need authoritative regression artifacts or fresh XML |
 | Test execution, lock handling, result parsing | `AGENT_TEST_RUNNING.md`, `TestResults/latest-summary.md` when present, `Tools/Run-UnityTests.ps1` | `Tools/Write-TestSummary.ps1`, `Tools/ParseResults.ps1`, `parse_results.ps1`, `summary.ps1` | Fresh summary or XML under `TestResults/`; open the raw Unity log only when the summary or XML is insufficient |
-| Documentation updates | `.copilot-instructions.md`, `ARCHITECTURE.md`, `TASK_ROUTING.md`, `UNITY_MCP.md`, `PLAN.md`, `Plans/unified-locomotion-roadmap.plan.md` | This file, `CODING_STANDARDS.md` F9 rule | Confirm references point to real files and current systems |
+| Documentation updates | `.copilot-instructions.md`, `ARCHITECTURE.md`, `TASK_ROUTING.md`, `UNITY_MCP.md`, `PLAN.md`, `Plans/unified-locomotion-roadmap.plan.md` | `Plans/README.md`, the active roadmap instruction or chapter doc when applicable, and `CODING_STANDARDS.md` F9 rule | Confirm references point to real files and current systems, and that the active parent plan or chapter doc reflects the current status, blockers, next step, and first resume artifacts |
 
 ## Current Implemented Surface
 
@@ -42,9 +42,9 @@
 | `Assets/Scripts/Character/` | Implemented | Core active-ragdoll runtime, internal locomotion contract types, and director-owned support plus leg command publication, plus debug/demo helpers |
 | `Assets/Scripts/Core/` | Implemented | Physics/layer bootstrap via `GameSettings` |
 | `Assets/Scripts/Input/` | Implemented | Generated input wrapper present |
-| `Assets/Scripts/Environment/` | Implemented | `ArenaRoom` supports the museum scene |
+| `Assets/Scripts/Environment/` | Implemented | `ArenaRoom` and `TerrainScenarioMarker` support runtime scene queries for generated rooms and terrain scenarios |
 | `Assets/Scripts/Editor/` | Implemented | Builder utilities for ragdoll, arena, props, and scenes |
-| `Assets/Tests/EditMode/` | Implemented | Core + character edit-time coverage, including locomotion contract shape tests and prefab-side director wiring |
+| `Assets/Tests/EditMode/` | Implemented | Core + character edit-time coverage, plus environment scene-authoring tests for generated terrain scenarios |
 | `Assets/Tests/PlayMode/` | Implemented | Physics and movement regression suite |
 | `Assets/Scripts/Networking/` | Reserved | Folder planned, no runtime code yet |
 | `Assets/Scripts/UI/` | Reserved | Folder planned, no runtime code yet |
@@ -54,13 +54,14 @@
 
 | Scene | Purpose |
 |---|---|
-| `Assets/Scenes/Arena_01.unity` | Main movement and camera validation scene for the current physics prototype |
-| `Assets/Scenes/Museum_01.unity` | Generated museum concept/prototype scene that uses `ArenaRoom` and `ArenaBuilder` |
+| `Assets/Scenes/Arena_01.unity` | Main movement and camera validation scene for the current physics prototype, including the Chapter 7 terrain gallery kept away from the flat baseline corridor |
+| `Assets/Scenes/Museum_01.unity` | Generated museum concept/prototype scene that uses `ArenaRoom`, `ArenaBuilder`, and the Chapter 7 room-based terrain gallery |
 
 ## Guardrails
 
 - If the task mentions networking, UI, lobby, rounds, spectating, or game loop, check whether the user wants new implementation work. Those folders are still empty placeholders.
-- For roadmap locomotion work, treat the active chapter doc as the parent record and update it when ownership boundaries, verification artifacts, or blockers change.
+- For roadmap locomotion work, treat the active chapter doc as the parent record and update it as soon as subtasks close, bugs or hypotheses appear, blockers or next steps change, or verification artifacts move.
+- If a touched class is already near the size cap in `CODING_STANDARDS.md`, split or extract collaborators before adding more logic.
 - Treat `LocomotionCollapseDetector` as watchdog-only in Chapter 1 slices: `CharacterState` consumes it for fall transitions, while movement, balance, and leg execution should react through authoritative state labels or `LocomotionDirector` commands instead of reading the raw detector directly.
 - For movement regressions, prefer outcome-based PlayMode tests over only checking `targetRotation` or internal state.
 - For scene-generation work, look in `Assets/Scripts/Editor/` before assuming the scene was hand-authored.

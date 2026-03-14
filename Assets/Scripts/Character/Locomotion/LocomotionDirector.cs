@@ -199,7 +199,7 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4: Draw optional step target debug visualization after commands are finalized.
             if (_debugStepTargetDraw)
             {
-                DrawStepTargetDebug(_leftLegCommand, _rightLegCommand, Time.fixedDeltaTime);
+                LocomotionDebugDraw.DrawStepTargetDebug(_leftLegCommand, _rightLegCommand, Time.fixedDeltaTime);
             }
         }
 
@@ -282,7 +282,8 @@ namespace PhysicsDrivenMovement.Character
             _currentPredictedDriftDirection = ComputePredictedDriftDirection(_currentSensorSnapshot, _currentObservation);
 
             // STEP 2: Cache the current observation telemetry line so tests and runtime logging share the same source.
-            _currentObservationTelemetryLine = BuildObservationTelemetryLine(
+            _currentObservationTelemetryLine = LocomotionDebugDraw.BuildObservationTelemetryLine(
+                name,
                 _currentSensorSnapshot,
                 _currentObservation,
                 _currentPredictedDriftDirection);
@@ -290,7 +291,7 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Emit optional draw and log visibility without affecting the control path.
             if (_debugObservationDraw)
             {
-                DrawObservationDebug(_currentSensorSnapshot, _currentObservation, _currentPredictedDriftDirection);
+                LocomotionDebugDraw.DrawObservationDebug(_currentSensorSnapshot, _currentObservation, _currentPredictedDriftDirection, _debugObservationDrawHeight);
             }
 
             LogObservationTelemetry();
@@ -345,58 +346,6 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return driftVector.normalized * driftWeight;
-        }
-
-        private string BuildObservationTelemetryLine(
-            LocomotionSensorSnapshot sensorSnapshot,
-            LocomotionObservation observation,
-            Vector3 predictedDriftDirection)
-        {
-            SupportGeometry supportGeometry = sensorSnapshot.SupportGeometry;
-
-            // STEP 1: Summarize support geometry in locomotion language so the draw and log paths stay comparable.
-            string supportStart = FormatPlanarVector(supportGeometry.SupportStart);
-            string supportEnd = FormatPlanarVector(supportGeometry.SupportEnd);
-            string supportCenter = FormatPlanarVector(supportGeometry.SupportCenter);
-            string driftDirection = FormatPlanarVector(predictedDriftDirection);
-
-            // STEP 2: Include the active confidence values and support classifications used by the director.
-            return
-                $"[LocomotionDirector] '{name}' observation: supportStart={supportStart}, supportEnd={supportEnd}, " +
-                $"supportCenter={supportCenter}, supportSpan={supportGeometry.SupportSpan:F2}, supportRadius={supportGeometry.SupportRadius:F2}, " +
-                $"groundedFeet={supportGeometry.GroundedFootCount}, supportQuality={observation.SupportQuality:F2}, " +
-                $"contactConfidence={observation.ContactConfidence:F2}, plantedConfidence={observation.PlantedFootConfidence:F2}, " +
-                $"slip={observation.SlipEstimate:F2}, turnSeverity={observation.TurnSeverity:F2}, " +
-                $"comOutsideSupport={observation.IsComOutsideSupport}, leftPlanted={observation.LeftFoot.IsPlanted}, " +
-                $"rightPlanted={observation.RightFoot.IsPlanted}, driftDir={driftDirection}";
-        }
-
-        private void DrawObservationDebug(
-            LocomotionSensorSnapshot sensorSnapshot,
-            LocomotionObservation observation,
-            Vector3 predictedDriftDirection)
-        {
-            SupportGeometry supportGeometry = sensorSnapshot.SupportGeometry;
-            Vector3 lift = Vector3.up * _debugObservationDrawHeight;
-            Color supportColor = observation.IsComOutsideSupport
-                ? Color.red
-                : Color.Lerp(Color.red, Color.green, observation.SupportQuality);
-            float duration = Time.fixedDeltaTime;
-
-            // STEP 1: Draw the active support capsule approximation so the current support patch is visible in Scene view.
-            DrawSupportCapsule(supportGeometry, lift, supportColor, duration);
-
-            // STEP 2: Draw the COM offset and predicted drift direction over the support patch.
-            Vector3 supportCenter = supportGeometry.SupportCenter + lift;
-            Vector3 centerOfMass = Vector3.ProjectOnPlane(sensorSnapshot.CenterOfMassPosition, Vector3.up) + lift;
-            Debug.DrawLine(supportCenter, centerOfMass, Color.yellow, duration, false);
-            DrawCross(centerOfMass, 0.05f, observation.IsComOutsideSupport ? Color.red : Color.cyan, duration);
-
-            if (predictedDriftDirection.sqrMagnitude > CommandEpsilon)
-            {
-                float driftLength = Mathf.Max(0.25f, supportGeometry.SupportRadius * 2f + observation.TurnSeverity * 0.2f);
-                DrawArrow(centerOfMass, predictedDriftDirection.normalized, driftLength, Color.magenta, duration);
-            }
         }
 
         private void LogObservationTelemetry()
@@ -874,126 +823,6 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return Vector3.forward;
-        }
-
-        private static void DrawStepTargetDebug(
-            LegCommandOutput leftCommand,
-            LegCommandOutput rightCommand,
-            float duration)
-        {
-            // STEP C4.6: Draw a marker at each valid step target's landing position.
-            //            Left leg uses blue, right leg uses green-yellow.
-            //            Marker brightness reflects confidence (lerp from red to the base color).
-            DrawStepTarget(leftCommand, new Color(0.3f, 0.5f, 1f), duration);
-            DrawStepTarget(rightCommand, new Color(0.8f, 0.9f, 0.2f), duration);
-        }
-
-        private static void DrawStepTarget(
-            LegCommandOutput command,
-            Color baseColor,
-            float duration)
-        {
-            StepTarget target = command.StepTarget;
-            if (!target.IsValid)
-            {
-                return;
-            }
-
-            // Color-code by confidence: low confidence shifts toward red, high stays the base color.
-            Color color = Color.Lerp(Color.red, baseColor, target.Confidence);
-
-            // Draw a cross at the planned landing position.
-            Vector3 landingPosition = target.LandingPosition;
-            DrawCross(landingPosition, 0.08f, color, duration);
-
-            // Draw a circle at the landing position whose radius scales with confidence.
-            float radius = Mathf.Lerp(0.04f, 0.12f, target.Confidence);
-            DrawCircle(landingPosition, radius, color, duration);
-
-            // Draw a vertical pillar from the landing to a height proportional to desired timing
-            // so the viewer can gauge how soon the foot is expected to land.
-            float pillarHeight = Mathf.Clamp(target.DesiredTiming, 0.05f, 0.5f);
-            Debug.DrawLine(landingPosition, landingPosition + Vector3.up * pillarHeight, color, duration, false);
-        }
-
-        private static void DrawSupportCapsule(
-            SupportGeometry supportGeometry,
-            Vector3 lift,
-            Color color,
-            float duration)
-        {
-            Vector3 supportStart = supportGeometry.SupportStart + lift;
-            Vector3 supportEnd = supportGeometry.SupportEnd + lift;
-            float radius = supportGeometry.SupportRadius;
-
-            Vector3 supportAxis = supportEnd - supportStart;
-            Vector3 lateral = supportAxis.sqrMagnitude > CommandEpsilon
-                ? Vector3.Cross(Vector3.up, supportAxis.normalized)
-                : Vector3.right;
-            lateral.Normalize();
-            Vector3 lateralOffset = lateral * radius;
-
-            Debug.DrawLine(supportStart + lateralOffset, supportEnd + lateralOffset, color, duration, false);
-            Debug.DrawLine(supportStart - lateralOffset, supportEnd - lateralOffset, color, duration, false);
-
-            DrawCircle(supportStart, radius, color, duration);
-            DrawCircle(supportEnd, radius, color, duration);
-        }
-
-        private static void DrawArrow(
-            Vector3 origin,
-            Vector3 direction,
-            float length,
-            Color color,
-            float duration)
-        {
-            Vector3 arrowDirection = Vector3.ProjectOnPlane(direction, Vector3.up);
-            if (arrowDirection.sqrMagnitude <= CommandEpsilon)
-            {
-                return;
-            }
-
-            arrowDirection.Normalize();
-            Vector3 tip = origin + arrowDirection * length;
-            Debug.DrawLine(origin, tip, color, duration, false);
-
-            Vector3 wing = Quaternion.AngleAxis(150f, Vector3.up) * arrowDirection;
-            Debug.DrawLine(tip, tip + wing * (length * 0.25f), color, duration, false);
-
-            wing = Quaternion.AngleAxis(-150f, Vector3.up) * arrowDirection;
-            Debug.DrawLine(tip, tip + wing * (length * 0.25f), color, duration, false);
-        }
-
-        private static void DrawCross(Vector3 center, float halfSize, Color color, float duration)
-        {
-            Debug.DrawLine(center + Vector3.right * halfSize, center - Vector3.right * halfSize, color, duration, false);
-            Debug.DrawLine(center + Vector3.forward * halfSize, center - Vector3.forward * halfSize, color, duration, false);
-        }
-
-        private static void DrawCircle(Vector3 center, float radius, Color color, float duration)
-        {
-            const int SegmentCount = 12;
-            if (radius <= 0f)
-            {
-                return;
-            }
-
-            Vector3 previousPoint = center + Vector3.forward * radius;
-            for (int segmentIndex = 1; segmentIndex <= SegmentCount; segmentIndex++)
-            {
-                float angleRadians = (segmentIndex / (float)SegmentCount) * Mathf.PI * 2f;
-                Vector3 nextPoint = center + new Vector3(
-                    Mathf.Sin(angleRadians) * radius,
-                    0f,
-                    Mathf.Cos(angleRadians) * radius);
-                Debug.DrawLine(previousPoint, nextPoint, color, duration, false);
-                previousPoint = nextPoint;
-            }
-        }
-
-        private static string FormatPlanarVector(Vector3 value)
-        {
-            return $"({value.x:F2}, {value.z:F2})";
         }
     }
 }

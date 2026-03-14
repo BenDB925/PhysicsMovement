@@ -21,6 +21,7 @@ Every task — bug fix, feature, refactor — MUST follow these phases **in orde
 7. Read `LOCOMOTION_BASELINES.md` only when comparing regressions, triaging known reds, or validating against an earlier baseline.
 8. For roadmap work, load only the chapter docs whose scope matches the task instead of reading every chapter.
 9. For test work, read `TestResults/latest-summary.md` when present, then the relevant XML, and only then the full Unity log if the summary or XML is insufficient.
+10. Before implementation, identify the active parent plan or roadmap chapter that owns the work. Treat it as a live execution record and update it as soon as subtasks close, bugs or hypotheses appear, blockers or next steps change, or better resume artifacts are produced.
 
 ### Phase B: Comment-First Design
 
@@ -108,7 +109,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 | F6 | **XML docs** — Do all new/changed public and protected members have `<summary>` docs? Does every class have a class-level `<summary>`? | Add docs. |
 | F7 | **No warnings** — Does the project compile with zero warnings? | Fix warnings. |
 | F8 | **DESIGN comments** — Are `// STEP n:` comments from Phase B still accurate post-implementation? Were they converted to meaningful inline comments or removed if redundant? | Update or clean up. |
-| F9 | **Agent context files** — If new systems/classes were added, was `.copilot-instructions.md` or `ARCHITECTURE.md` updated to reference them? | Update those files. |
+| F9 | **Agent context files** — If new systems/classes were added, was `.copilot-instructions.md` or `ARCHITECTURE.md` updated to reference them? If the task used a parent plan or roadmap chapter, is that record current with status, blockers, next step, and resume artifacts? | Update those files or task records. |
 | F10 | **Regression** — Did you run the focused regression tests that match the touched system, and were they all green? If the change was cross-cutting, did you escalate to the wider suite? Use [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) to pick the right scope and parse XML results. | Fix regressions before committing. |
 
 **Output format for the self-review:** Present a table of F1–F10 with PASS/FAIL and a brief note. If any FAIL, describe the fix applied. The user should see the review results before they're committed.
@@ -196,7 +197,12 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 
 Design for **future flexibility**. Use interfaces and abstraction proactively when a system is likely to have multiple implementations or when it isolates a subsystem for testing. Abstractions must be **justified** — "this will clearly need to vary" qualifies; "it might someday" does not.
 
-Avoid god classes. Split functionality to avoid context-drain in agents. Keep classes under 400-500 lines.
+Avoid god classes. Split functionality before a class becomes a context sink for humans or agents.
+
+- Target no more than 300-350 lines of executable logic per class.
+- Keep total class length normally under 500 lines, and treat 600 lines including comments, XML docs, and serialized field blocks as a hard ceiling.
+- If a class is already near the cap, extract focused collaborators or helper components before adding more behavior.
+- Do not use partial classes to hide sprawl; reserve them for generated code or truly separate responsibilities.
 
 ### Principles
 
@@ -285,10 +291,12 @@ When a user provides a task list, asks for a plan, or the work becomes a multi-s
 
 1. Use the user-specified folder if one is given. Otherwise default to `Plans/` and follow `Plans/README.md`.
 2. The parent plan file is the canonical summary. Keep it short and current with status, next step, blockers, and links to child docs.
-3. Split a work package out of the parent once that section would exceed 80 lines, needs more than 3 dated progress notes, or requires raw logs or telemetry.
-4. Create a dedicated bug sheet when an investigation section would exceed 120 lines, includes more than 30 lines of raw logs or telemetry, or tracks more than one active bug or hypothesis thread.
-5. Whenever a child doc changes materially, update the parent doc in the same slice. Never leave child docs unlinked.
-6. If the user provides an existing plan document, treat it as the parent record unless they explicitly ask for a new top-level doc.
+3. Update the active parent plan or chapter doc during the work, not only at pause or completion. Record cleared subtasks, new bugs or hypotheses, changed blockers, changed next steps, and new verification artifacts in the same slice that produced them.
+4. Split a work package out of the parent once that section would exceed 80 lines, needs more than 3 dated progress notes, or requires raw logs or telemetry.
+5. Create a dedicated bug sheet when an investigation section would exceed 120 lines, includes more than 30 lines of raw logs or telemetry, or tracks more than one active bug or hypothesis thread.
+6. Whenever a child doc changes materially, update the parent doc in the same slice. Never leave child docs unlinked.
+7. If the user provides an existing plan document, treat it as the parent record unless they explicitly ask for a new top-level doc.
+8. For roadmap work, the touched chapter doc is the parent record for that slice. Avoid editing unrelated in-progress chapter docs for cross-cutting policy changes; put those updates in shared long-lived docs or the roadmap parent plan instead.
 
 ### Layer 1: Class-Level XML Doc (`<summary>`)
 

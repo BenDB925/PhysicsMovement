@@ -3,20 +3,24 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Begin Chapter 7 (Terrain And Contact Robustness).
+- Current next step: Continue Chapter 7 with C7.2 contact-aware planning now that C7.1 terrain scenarios are in both generated scenes.
 - Active blockers: None.
 
 ## Quick Resume
 - Canonical roadmap planning now lives in `Plans/`; the instruction file only routes roadmap tasks into this parent plan and the relevant chapter docs.
-- Chapters 1 through 6 are complete. Chapter 7 is next.
+- Chapters 1 through 6 are complete. Chapter 7 is active.
 - Chapter 6 delivered: situation classification, typed response profiles, recovery transition guard, collapse deferral during active recovery, and situation-aware recovery/catch-step execution profiles.
-- Next: Chapter 7 (terrain robustness) or Chapter 8 (expressive motion) per the recommended execution order.
+- Chapter 7 C7.1 delivered: shared terrain scene authoring, runtime terrain metadata, regenerated Arena and Museum scenes, and a focused EditMode terrain-scene fixture.
+- Next: C7.2 contact-aware planning, then the remaining Chapter 7 terrain robustness slices.
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 complete with C6.1-C6.5 completion notes and verification gate.
+- `Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`: C7.1 complete with scene-builder, runtime-metadata, and focused regression artifacts.
 - `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director classifies situations, applies typed recovery profiles gated by the transition guard, defers collapse during active recovery, and stamps recovery context onto leg commands.
 - `Assets/Scripts/Character/CharacterState.cs`: Collapse-triggered Fallen now deferred while director recovery is active (hard ceiling 1s).
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
+- `Assets/Scripts/Editor/TerrainScenarioBuilder.cs`: Shared slope, step, uneven-patch, and low-obstacle authoring used by both generated environment scenes.
+- `Assets/Tests/EditMode/Environment/TerrainScenarioSceneTests.cs`: Focused environment-scene coverage for scenario presence, room placement, and the flat Arena baseline corridor.
 
 ## Child docs
 - [x] Chapter 1: Define The Single Voice (`Plans/unified-locomotion-roadmap/01-single-voice.md`)
@@ -87,3 +91,4 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 - 2026-03-13: Completed C6.3 recovery transitions. Added `RecoveryTransitionGuard` with entry debounce (3 frames, halved for high priority), exit cooldown (20 frames), and ramp-in blend (8 frames). Active recovery bypasses guard for direct extension. 8 new EditMode tests. Verification: EditMode 81/81, PlayMode 82/86 (3 ignored, 1 known fixture-order flake). Commit `b7b6b40`.
 - 2026-03-14: Completed C6.4 collapse boundary. `LocomotionDirector.IsRecoveryActive` bridges director→CharacterState; collapse-triggered Fallen deferred while recovery active (hard ceiling 1s); angle-based isFallen never deferred. 2 EditMode + 5 PlayMode tests. New `LocomotionDirectorTestSeams` utility.
 - 2026-03-14: Completed C6.5 expressive outcomes. `LegCommandOutput` carries `RecoverySituation` + `RecoveryBlend`; director stamps context via `WithRecoveryContext()`; `LegAnimator` recovery/catch-step profiles scale by situation urgency. 3 new EditMode tests. Chapter 6 complete: EditMode 86/86, PlayMode 107 (103 passed, 3 ignored, 1 fixture-order flake).
+- 2026-03-14: Completed C7.1 terrain scenarios. Added `TerrainScenarioBuilder`, `TerrainScenarioMarker`, and `TerrainScenarioType`; regenerated `Arena_01.unity` and `Museum_01.unity` with controlled slope, step-up, step-down, uneven-patch, and low-obstacle lanes; and added `TerrainScenarioSceneTests`. Verification: EditMode 5/5, PlayMode `Arena01BalanceStabilityTests` 2/2, PlayMode `GaitOutcomeTests` 4/4.

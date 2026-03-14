@@ -97,6 +97,7 @@ When in doubt, split early. A short linked doc is cheaper than a bloated parent 
 
 ## Update rules
 
+- Update the parent plan or active chapter doc as soon as a meaningful subtask is cleared, a new bug or hypothesis appears, the next step changes, or a new artifact becomes the best resume entry point. Do not batch these updates until pause or completion.
 - Every material child-doc update must be reflected in the parent plan in the same slice.
 - Never leave a child doc or bug sheet unlinked.
 - Parent plans summarize the latest truth. Child docs hold the detail.
@@ -106,6 +107,7 @@ When in doubt, split early. A short linked doc is cheaper than a bloated parent 
 - Never paste long raw logs into the parent plan. Summarize them and link the artifact or bug sheet.
 - When a bug is resolved or abandoned, update both the bug sheet and the parent plan with the outcome.
 - If the user provided the initial plan document, treat it as the parent record unless they explicitly ask for a different top-level doc.
+- For roadmap work, the chapter doc is the parent record for that slice. If another agent is clearly working a different chapter or child doc, keep cross-cutting policy updates in shared long-lived docs or the parent plan instead of editing their in-progress file.
 - If the user signals that the task is complete or paused, use that moment to review whether the parent plan, any child docs, and the core project docs need updates before ending the session.
 - After a plan is complete and its durable outcomes have been promoted into long-lived docs, either archive it under `Plans/archive/` or delete it if it no longer adds resume value.
 - Keep only active or recently paused plans at the top level of `Plans/`; old execution history should not crowd the default entry surface.

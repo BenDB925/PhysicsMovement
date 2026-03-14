@@ -19,8 +19,9 @@ Use this instruction only to route roadmap-guided locomotion work into the canon
 
 1. Open the parent roadmap plan: [Plans/unified-locomotion-roadmap.plan.md](../../Plans/unified-locomotion-roadmap.plan.md).
 2. Match the task to the routing table below, then read only the relevant chapter docs plus any dependencies they name.
-3. Keep the touched chapter doc under `Plans/unified-locomotion-roadmap/` current when progress, blockers, or artifact locations change.
+3. Keep the touched chapter doc under `Plans/unified-locomotion-roadmap/` current as the work progresses. Update it when subtasks close, bugs or hypotheses appear, blockers or next steps change, or artifact locations move.
 4. When durable ownership boundaries or reusable workflow rules change, update [ARCHITECTURE.md](../../ARCHITECTURE.md), [TASK_ROUTING.md](../../TASK_ROUTING.md), [.copilot-instructions.md](../../.copilot-instructions.md), and other long-lived docs in the same slice.
+5. Avoid editing unrelated in-progress chapter docs for cross-cutting policy updates. Put those updates in shared long-lived docs or the roadmap parent plan instead.
 
 ## Parent plan
 

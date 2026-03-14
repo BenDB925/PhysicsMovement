@@ -268,10 +268,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private float _groundedTimeSinceFirstContact;
 
-        private ConfigurableJoint[] _startupAssistLegJoints;
-        private JointDrive[] _startupAssistLegBaseDrives;
-        private Rigidbody[] _startupAssistLegBodies;
-        private float _totalBodyMass;
+        private StartupStandAssist _assist;
         private float _nextRecoveryTelemetryTime;
 
         /// <summary>
@@ -443,14 +440,8 @@ namespace PhysicsDrivenMovement.Character
                                  "was resolved. Ground checks may be less reliable.", this);
             }
 
-            CacheStartupAssistLegJoints();
-
-            _totalBodyMass = 0f;
-            Rigidbody[] bodies = GetComponentsInChildren<Rigidbody>(includeInactive: true);
-            for (int i = 0; i < bodies.Length; i++)
-            {
-                _totalBodyMass += bodies[i].mass;
-            }
+            _assist = new StartupStandAssist();
+            _assist.Initialize(transform);
 
             // Cache whether a LegAnimator sibling is present. When true (and
             // _deferLegJointsToAnimator is enabled), we skip all direct forces/drive
@@ -579,9 +570,9 @@ namespace PhysicsDrivenMovement.Character
                     if (_enablePersistentSeatedRecovery)
                     {
                         float weightBasedScale = 0f;
-                        if (_startupStandAssistForce > 0f && _totalBodyMass > 0f)
+                        if (_startupStandAssistForce > 0f && _assist.TotalBodyMass > 0f)
                         {
-                            weightBasedScale = (_totalBodyMass * Physics.gravity.magnitude) / _startupStandAssistForce;
+                            weightBasedScale = (_assist.TotalBodyMass * Physics.gravity.magnitude) / _startupStandAssistForce;
                         }
 
                         minimumPersistentScale = seatedOrFallen
@@ -622,12 +613,16 @@ namespace PhysicsDrivenMovement.Character
 
                         Vector3 assistDirection = Vector3.Slerp(Vector3.up, _rb.transform.up, _startupAssistUseBodyUp).normalized;
                         float assistForce = _startupStandAssistForce * assistScale * commandHeightScale;
-                        ApplyStartupAssistForces(assistDirection, assistForce);
+                        _assist.ApplyForces(_rb, assistDirection, assistForce, _startupAssistLegForceFraction, _hasLegAnimator);
                     }
                 }
             }
 
-            ApplyStartupAssistLegDrive(startupAssistActive ? startupAssistScale : 0f);
+            _assist.ApplyLegDrive(
+                startupAssistActive ? startupAssistScale : 0f,
+                _startupLegSpringMultiplier,
+                _startupLegDamperMultiplier,
+                _hasLegAnimator);
 
             float hipsHeight = _rb.position.y;
             float heightErrorForTelemetry = Mathf.Max(0f, _startupAssistTargetHeight - hipsHeight);
@@ -874,121 +869,6 @@ namespace PhysicsDrivenMovement.Character
                 $"heightError={heightError:F3}, assistScale={assistScale:F3}, " +
                 $"startupAssistActive={startupAssistActive}, persistentRecoveryActive={persistentRecoveryActive}, " +
                 $"grounded={IsGrounded}, fallen={IsFallen}, angle={uprightAngle:F1}°");
-        }
-
-        private void CacheStartupAssistLegJoints()
-        {
-            ConfigurableJoint[] joints = GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
-            int legCount = 0;
-            foreach (ConfigurableJoint joint in joints)
-            {
-                if (IsStartupAssistLegJointName(joint.gameObject.name))
-                {
-                    legCount++;
-                }
-            }
-
-            _startupAssistLegJoints = new ConfigurableJoint[legCount];
-            _startupAssistLegBaseDrives = new JointDrive[legCount];
-            _startupAssistLegBodies = new Rigidbody[legCount];
-
-            int writeIndex = 0;
-            foreach (ConfigurableJoint joint in joints)
-            {
-                if (!IsStartupAssistLegJointName(joint.gameObject.name))
-                {
-                    continue;
-                }
-
-                _startupAssistLegJoints[writeIndex] = joint;
-                _startupAssistLegBaseDrives[writeIndex] = joint.slerpDrive;
-                _startupAssistLegBodies[writeIndex] = joint.GetComponent<Rigidbody>();
-                writeIndex++;
-            }
-        }
-
-        private void ApplyStartupAssistForces(Vector3 assistDirection, float assistForce)
-        {
-            float legForce = assistForce * _startupAssistLegForceFraction;
-            float hipsForce = assistForce - legForce;
-
-            if (hipsForce > 0f)
-            {
-                _rb.AddForce(assistDirection * hipsForce, ForceMode.Force);
-            }
-
-            // When LegAnimator is present and deferred, skip applying direct forces to
-            // leg bodies — LegAnimator owns those joints via targetRotation / SLERP drive.
-            // Applying forces here would fight the joint drive and produce the dragging-feet
-            // symptom. The hips force above is still applied for torso-level startup assist.
-            if (_hasLegAnimator)
-            {
-                return;
-            }
-
-            if (_startupAssistLegBodies == null || _startupAssistLegBodies.Length == 0 || legForce <= 0f)
-            {
-                return;
-            }
-
-            float perLegBodyForce = legForce / _startupAssistLegBodies.Length;
-            for (int i = 0; i < _startupAssistLegBodies.Length; i++)
-            {
-                Rigidbody legBody = _startupAssistLegBodies[i];
-                if (legBody == null)
-                {
-                    continue;
-                }
-
-                legBody.AddForce(assistDirection * perLegBodyForce, ForceMode.Force);
-            }
-        }
-
-        private void ApplyStartupAssistLegDrive(float assistScale)
-        {
-            // When LegAnimator is present and deferred, BC must not touch the SLERP drive
-            // parameters on leg joints. LegAnimator relies on the drives set by RagdollSetup
-            // (spring/damper); BC modifying them mid-flight overwrites those values and
-            // causes the dragging-feet symptom. This is the other half of the cooperative fix.
-            if (_hasLegAnimator)
-            {
-                return;
-            }
-
-            if (_startupAssistLegJoints == null || _startupAssistLegBaseDrives == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < _startupAssistLegJoints.Length; i++)
-            {
-                ConfigurableJoint joint = _startupAssistLegJoints[i];
-                if (joint == null)
-                {
-                    continue;
-                }
-
-                JointDrive baseDrive = _startupAssistLegBaseDrives[i];
-                JointDrive drive = joint.slerpDrive;
-                drive.positionSpring = Mathf.Lerp(
-                    baseDrive.positionSpring,
-                    baseDrive.positionSpring * _startupLegSpringMultiplier,
-                    assistScale);
-                drive.positionDamper = Mathf.Lerp(
-                    baseDrive.positionDamper,
-                    baseDrive.positionDamper * _startupLegDamperMultiplier,
-                    assistScale);
-                drive.maximumForce = baseDrive.maximumForce;
-                joint.slerpDrive = drive;
-            }
-        }
-
-        private static bool IsStartupAssistLegJointName(string segmentName)
-        {
-            return segmentName == "UpperLeg_L" ||
-                   segmentName == "UpperLeg_R" ||
-                   segmentName == "LowerLeg_L" ||
-                   segmentName == "LowerLeg_R";
         }
 
     }
