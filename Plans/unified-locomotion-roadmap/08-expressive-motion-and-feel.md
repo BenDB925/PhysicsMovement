@@ -21,9 +21,9 @@ Layer character identity only after control architecture is stable. Replace abru
 ## Status
 
 - State: In progress.
-- Current next step: C8.1c lateral pelvis sway during single-support.
+- Current next step: C8.2a forward lean on movement start.
 - Active blockers: None.
-- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1b torso twist driven by gait phase (new TorsoExpression component on Hips, 1° amplitude at Torso ConfigurableJoint, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests).
+- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1b torso twist driven by gait phase (new TorsoExpression component on Hips, 1° amplitude at Torso ConfigurableJoint, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1c lateral pelvis sway during single-support (0.02 m max COM shift toward stance foot in BalanceController STEP 3.6c, verified against MovementQualityTests + Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests).
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen` fail on baseline (not caused by C8.1a/C8.1b).
 
 ## Primary touchpoints
@@ -53,10 +53,11 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
        - Done when: The torso counter-rotates visibly during walking and returns to neutral at idle, without injecting angular instability.
        - Implementation notes: Amplitude limited to 1° default because the Torso SLERP spring (650) creates reaction torque on Hips that can destabilize yaw control at higher amplitudes. Higher values available via Inspector for experimentation.
        - Verification: `MovementQualityTests`, `FullStackSanityTests`.
-    - [ ] C8.1c Lateral pelvis sway during single-support:
+    - [x] C8.1c Lateral pelvis sway during single-support:
        - Scope: Add a small lateral hip shift toward the stance leg during single-support phases. Read the current stance side from `LegAnimator` leg-state ownership and scale by speed.
        - Touchpoints: `BalanceController.cs` (lateral offset on height-maintenance or COM target).
        - Done when: The hips visibly shift toward whichever foot is planted, and the sway disappears at idle.
+       - Implementation notes: 0.02 m default max offset applied via STEP 3.6c in COM stabilization. Detects single-support from GroundSensor per-foot IsGrounded. Smoothed at rate 8 to avoid jerky stance transitions. Gated on !IsFallen and SmoothedInputMag.
        - Verification: `MovementQualityTests`, `Arena01BalanceStabilityTests`.
 
 2. [ ] C8.2 Accel and decel body language:

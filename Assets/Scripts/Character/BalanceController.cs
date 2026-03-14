@@ -228,6 +228,17 @@ namespace PhysicsDrivenMovement.Character
                  "lower = more gradual and cinematic.")]
         private float _pelvisTiltSmoothing = 8f;
 
+        [SerializeField, Range(0f, 0.05f)]
+        [Tooltip("Maximum lateral COM target shift (meters) toward the stance foot during " +
+                 "single-support phases. Creates a visible hip sway toward the planted leg. " +
+                 "Blended by LegAnimator.SmoothedInputMag so it is zero at idle.")]
+        private float _pelvisSwayMaxOffset = 0.02f;
+
+        [SerializeField, Range(1f, 30f)]
+        [Tooltip("Smoothing speed for the lateral pelvis sway signal. Higher = more responsive, " +
+                 "lower = more gradual transitions between stance legs.")]
+        private float _pelvisSwaySmoothing = 8f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -299,6 +310,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Smoothed pelvis tilt in degrees (positive = forward lean).</summary>
         private float _smoothedPelvisTiltDeg;
+
+        /// <summary>Smoothed lateral pelvis sway offset vector (world-space horizontal).</summary>
+        private Vector3 _smoothedPelvisSwayOffset;
 
         /// <summary>
         /// True when a <see cref="LegAnimator"/> is found on the same GameObject and
@@ -690,6 +704,36 @@ namespace PhysicsDrivenMovement.Character
                     {
                         feetCenter += facingXZ.normalized * (leanFraction * _maxComLeanOffset);
                     }
+                }
+
+                // STEP 3.6c: Lateral pelvis sway during single-support.
+                // Shifts the COM target toward the stance foot when only one foot is
+                // grounded, creating a visible hip sway toward the planted leg.
+                // Scaled by SmoothedInputMag so it disappears at idle.
+                {
+                    Vector3 swayTarget = Vector3.zero;
+                    if (_pelvisSwayMaxOffset > 0f && _legAnimator != null && !IsFallen)
+                    {
+                        bool leftDown = _footL.IsGrounded;
+                        bool rightDown = _footR.IsGrounded;
+                        if (leftDown != rightDown)
+                        {
+                            Vector3 stancePos = leftDown
+                                ? _footL.transform.position
+                                : _footR.transform.position;
+                            Vector3 toStance = stancePos - feetCenter;
+                            toStance.y = 0f;
+                            if (toStance.sqrMagnitude > 0.0001f)
+                            {
+                                swayTarget = toStance.normalized *
+                                    (_pelvisSwayMaxOffset * _legAnimator.SmoothedInputMag);
+                            }
+                        }
+                    }
+                    _smoothedPelvisSwayOffset = Vector3.Lerp(
+                        _smoothedPelvisSwayOffset, swayTarget,
+                        Time.fixedDeltaTime * _pelvisSwaySmoothing);
+                    feetCenter += _smoothedPelvisSwayOffset;
                 }
 
                 Vector3 hipsPos = _rb.position;
