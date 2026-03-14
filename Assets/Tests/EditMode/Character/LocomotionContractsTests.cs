@@ -361,6 +361,76 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void LocomotionObservation_ConstructedWithForwardObstructionSupport_PromotesPlannerFacingTerrainSignals()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type supportObservationType = RequireType(SupportObservationTypeName);
+            Type observationType = RequireType(LocomotionObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+
+            object leftFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Left"),
+                true,
+                true,
+                0.9f,
+                0.8f,
+                0.1f,
+                true,
+                0.28f,
+                0.7f);
+            object rightFoot = CreateInstance(
+                footObservationType,
+                Enum.Parse(legType, "Right"),
+                true,
+                false,
+                0.75f,
+                0.3f,
+                0.45f,
+                false,
+                0.5f,
+                0.95f);
+            object supportObservation = CreateInstance(
+                supportObservationType,
+                leftFoot,
+                rightFoot,
+                0.8f,
+                0.82f,
+                0.8f,
+                0.45f,
+                false);
+
+            // Act
+            object observation = CreateInstance(
+                observationType,
+                CharacterStateType.Moving,
+                true,
+                false,
+                false,
+                false,
+                6f,
+                new Vector3(1f, 0f, 2f),
+                Vector3.zero,
+                Vector3.forward,
+                Vector3.up,
+                supportObservation,
+                0.2f);
+
+            // Assert
+            Assert.That(GetPropertyValue<bool>(observation, "HasLeftForwardObstruction"), Is.True,
+                "LocomotionObservation should expose the left-foot forward obstruction signal directly for planner-facing reads.");
+            Assert.That(GetPropertyValue<bool>(observation, "HasRightForwardObstruction"), Is.False);
+            Assert.That(GetPropertyValue<bool>(observation, "HasAnyForwardObstruction"), Is.True);
+            Assert.That(GetPropertyValue<float>(observation, "LeftEstimatedStepHeight"), Is.EqualTo(0.28f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(observation, "RightEstimatedStepHeight"), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(observation, "MaxEstimatedStepHeight"), Is.EqualTo(0.28f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(observation, "LeftForwardObstructionConfidence"), Is.EqualTo(0.7f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(observation, "RightForwardObstructionConfidence"), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(GetPropertyValue<float>(observation, "MaxForwardObstructionConfidence"), Is.EqualTo(0.7f).Within(0.0001f));
+        }
+
+        [Test]
         public void SupportObservationFilter_WhenPlantedSignalDipsInsideHysteresis_KeepsFootPlanted()
         {
             // Arrange

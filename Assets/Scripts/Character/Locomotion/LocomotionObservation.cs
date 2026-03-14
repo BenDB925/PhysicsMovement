@@ -104,6 +104,28 @@ namespace PhysicsDrivenMovement.Character
 
         public FootContactObservation RightFoot => Support.RightFoot;
 
+        // STEP 5: Expose planner-facing terrain-obstruction accessors directly on the observation
+        // layer so later step-planning slices do not need to read sensor-specific payloads.
+        public bool HasLeftForwardObstruction => LeftFoot.HasForwardObstruction;
+
+        public bool HasRightForwardObstruction => RightFoot.HasForwardObstruction;
+
+        public bool HasAnyForwardObstruction => HasLeftForwardObstruction || HasRightForwardObstruction;
+
+        public float LeftEstimatedStepHeight => LeftFoot.EstimatedStepHeight;
+
+        public float RightEstimatedStepHeight => RightFoot.EstimatedStepHeight;
+
+        public float MaxEstimatedStepHeight => Mathf.Max(LeftEstimatedStepHeight, RightEstimatedStepHeight);
+
+        public float LeftForwardObstructionConfidence => LeftFoot.ForwardObstructionConfidence;
+
+        public float RightForwardObstructionConfidence => RightFoot.ForwardObstructionConfidence;
+
+        public float MaxForwardObstructionConfidence => Mathf.Max(
+            LeftForwardObstructionConfidence,
+            RightForwardObstructionConfidence);
+
         public float SupportQuality => Support.SupportQuality;
 
         public float ContactConfidence => Support.ContactConfidence;

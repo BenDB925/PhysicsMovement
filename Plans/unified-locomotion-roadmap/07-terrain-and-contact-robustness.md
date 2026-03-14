@@ -20,8 +20,8 @@ Keep the same locomotion logic stable on non-ideal ground and contact, including
 
 ## Status
 
-- State: C7.1 and C7.2a are complete; C7.2b-C7.5 remain split into agent-sized slices; Chapter 7 remains in progress.
-- Current next step: Start C7.2b by exposing the new per-foot forward-obstruction fields through `LocomotionObservation` for planner-facing reads.
+- State: C7.1 through C7.2b are complete; C7.2c-C7.5 remain split into agent-sized slices; Chapter 7 remains in progress.
+- Current next step: Start C7.2c by extending `StepTarget` and `StepPlanner` with explicit clearance intent driven by the promoted forward-obstruction observation fields.
 - Active blockers: None.
 
 ## Primary touchpoints
@@ -59,10 +59,11 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
        - Done when: The per-foot contact payload can represent “step-up ahead” independently from downward grounded state.
        - Verification: `LocomotionContractsTests` plus any focused sensor seam tests added in the same slice.
        - 2026-03-14: Complete. `GroundSensor` now probes for a forward step face plus reachable top surface, `FootContactObservation` carries obstruction, height, and confidence independently from `IsGrounded`, and the existing sensor aggregation/filter path preserves that per-foot payload without changing planning behavior.
-    - [ ] C7.2b Observation promotion:
+    - [x] C7.2b Observation promotion:
        - Scope: Promote the new per-foot forward-obstruction fields from the sensor/foot payload path into `LocomotionObservation` so planning can read terrain-facing state without touching sensors directly.
        - Done when: The aggregated locomotion observation exposes forward obstruction and estimated step height beside slope/contact confidence.
        - Verification: `LocomotionContractsTests`.
+       - 2026-03-14: Complete. `LocomotionObservation` now exposes planner-facing left/right and aggregate forward-obstruction, estimated-step-height, and obstruction-confidence accessors derived from the filtered foot payload, so later planning slices can stay inside the observation layer.
     - [ ] C7.2c Clearance request planning:
        - Scope: Extend `StepTarget` and `StepPlanner` so valid step-up approaches can request extra clearance only when an actual obstruction is ahead.
        - Done when: Planned targets carry explicit clearance intent instead of globally inflating gait.
@@ -119,6 +120,7 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
 
 ## Verification artifacts
 
+- `Tools/Run-UnityTests.ps1 -Platform EditMode -TestFilter "PhysicsDrivenMovement.Tests.EditMode.Character.LocomotionContractsTests"` -> `Passed, Total=69, Passed=69, Failed=0`
 - `Tools/Run-UnityTests.ps1 -Platform EditMode -TestFilter "PhysicsDrivenMovement.Tests.EditMode.Character.LocomotionContractsTests;PhysicsDrivenMovement.Tests.EditMode.Character.GroundSensorTests"` -> `Passed, Total=70, Passed=70, Failed=0`
 - `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_DetectsEnvironmentLayerGround;PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_SingleFrameContactLoss_DoesNotClearGrounded;PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_DoesNotDetectWrongLayerGround;PhysicsDrivenMovement.Tests.PlayMode.BalanceControllerIntegrationTests.GroundSensor_SustainedContactLoss_ClearsGrounded"` -> `Passed, Total=4, Passed=4, Failed=0`
 - `Tools/Run-UnityTests.ps1 -Platform EditMode -TestFilter "PhysicsDrivenMovement.Tests.EditMode.Environment.TerrainScenarioSceneTests"` -> `Passed, Total=5, Passed=5, Failed=0`
@@ -132,6 +134,7 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
 
 ## Progress notes
 
+- 2026-03-14: Completed C7.2b. Promoted the per-foot forward-obstruction payload into planner-facing `LocomotionObservation` accessors for left/right/any obstruction, per-foot step height, and obstruction confidence so future terrain planning slices do not need to touch `GroundSensor` or nested foot payloads directly. Verified with focused `LocomotionContractsTests` (`69/69`).
 - 2026-03-14: Completed C7.2a. Added forward step-face plus top-surface sensing to `GroundSensor`, extended `FootContactObservation` with forward-obstruction height/confidence fields that remain independent from downward grounded state, added the focused `GroundSensorTests` seam, and verified the slice with `LocomotionContractsTests` plus the existing PlayMode GroundSensor regression checks.
 - 2026-03-14: Split C7.2-C7.5 into agent-sized slices with explicit scope, done conditions, and focused verification so future terrain work can land as one-shot tasks. The new first slice is C7.2a forward obstruction sensing.
 - 2026-03-14: Sandbox follow-up added to C7.2. Direct approaches into the step-up lane can still stall because the runtime only senses ground below each foot and the current `StepTarget` payload does not yet shape swing clearance. Plan the next slice around forward step-face sensing, obstacle-height promotion through the locomotion observation stack, and clearance-aware `StepPlanner` plus `LegExecutionProfileResolver` updates rather than a collision-reactive knee boost.
