@@ -1160,15 +1160,20 @@ namespace PhysicsDrivenMovement.Character
             //         instead of replaying the old static stuck pose. Early recovery braces
             //         the leg back under the body; late recovery reaches further forward with
             //         more knee tuck so the leg can reclaim support.
+            // STEP 1b: Scale the recovery reach by situation urgency so high-priority
+            //          situations (Stumble, NearFall) produce visibly wider, faster recovery.
+            float situationUrgency = GetSituationUrgency(command.RecoverySituation);
+            float urgencyScale = Mathf.Lerp(1f, 1f + situationUrgency * 0.3f, command.RecoveryBlend);
+
             float recoveryStepProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
             float easedRecoveryProgress = Mathf.SmoothStep(0f, 1f, recoveryStepProgress);
             float recoverySwingTarget = Mathf.Lerp(
                 -_stepAngle * 0.28f,
-                _stepAngle * 0.72f,
+                _stepAngle * 0.72f * urgencyScale,
                 easedRecoveryProgress) * command.BlendWeight;
             float recoveryKneeTarget = Mathf.Lerp(
                 _kneeAngle * 0.12f,
-                _kneeAngle * 0.7f,
+                _kneeAngle * 0.7f * urgencyScale,
                 easedRecoveryProgress) * command.BlendWeight;
 
             swingAngleDegrees = command.Mode == LegCommandMode.HoldPose
@@ -1184,15 +1189,38 @@ namespace PhysicsDrivenMovement.Character
         {
             // STEP 1: Catch steps need a more assertive forward placement than normal swing
             //         so the recovery leg reaches under the body instead of tracing the old arc.
+            // STEP 1b: High-urgency situations (NearFall, Stumble) push the catch-step further
+            //          forward and lift the knee higher so recovery is visibly more aggressive.
+            float situationUrgency = GetSituationUrgency(command.RecoverySituation);
+            float urgencyScale = Mathf.Lerp(1f, 1f + situationUrgency * 0.25f, command.RecoveryBlend);
+
             float catchStepProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
             float catchStepForwardTarget = Mathf.Lerp(
                 _stepAngle * 0.64f,
-                _stepAngle * 0.78f,
+                _stepAngle * 0.78f * urgencyScale,
                 Mathf.SmoothStep(0f, 1f, catchStepProgress)) * command.BlendWeight;
-            float catchStepKneeTarget = _kneeAngle * 0.65f * command.BlendWeight;
+            float catchStepKneeTarget = _kneeAngle * 0.65f * urgencyScale * command.BlendWeight;
 
             swingAngleDegrees = Mathf.Max(swingAngleDegrees, catchStepForwardTarget);
             kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, catchStepKneeTarget);
+        }
+
+        /// <summary>
+        /// Maps a <see cref="RecoverySituation"/> to a 0-1 urgency scalar used to scale
+        /// recovery and catch-step execution profiles. Higher urgency produces wider,
+        /// faster recovery arcs.
+        /// </summary>
+        private static float GetSituationUrgency(RecoverySituation situation)
+        {
+            switch (situation)
+            {
+                case RecoverySituation.HardTurn:  return 0.2f;
+                case RecoverySituation.Reversal:  return 0.4f;
+                case RecoverySituation.Slip:      return 0.6f;
+                case RecoverySituation.NearFall:  return 0.8f;
+                case RecoverySituation.Stumble:   return 1.0f;
+                default:                          return 0f;
+            }
         }
 
         private void EnsureLegStateMachines()

@@ -805,6 +805,89 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(isValid, Is.False, "Disabled command should carry an invalid StepTarget.");
         }
 
+        // ── LegCommandOutput recovery context tests (C6.5) ───────────────────
+
+        [Test]
+        public void LegCommandOutput_DisabledDefault_HasNoneRecoverySituation()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type commandOutputType = RequireType(LegCommandOutputTypeName);
+            Type recoverySituationType = RequireType(RecoverySituationTypeName);
+            MethodInfo disabledMethod = RequireStaticMethod(commandOutputType, "Disabled", legType);
+            object leftLeg = Enum.Parse(legType, "Left");
+
+            // Act
+            object command = disabledMethod.Invoke(null, new[] { leftLeg });
+
+            // Assert
+            object situation = GetPropertyValue<object>(command, "RecoverySituation");
+            float blend = GetPropertyValue<float>(command, "RecoveryBlend");
+            Assert.That(situation, Is.EqualTo(Enum.Parse(recoverySituationType, "None")),
+                "Disabled command should default to RecoverySituation.None.");
+            Assert.That(blend, Is.EqualTo(0f).Within(0.0001f),
+                "Disabled command should default to zero RecoveryBlend.");
+        }
+
+        [Test]
+        public void LegCommandOutput_WithRecoveryContext_StampsSituationAndBlend()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type commandOutputType = RequireType(LegCommandOutputTypeName);
+            Type recoverySituationType = RequireType(RecoverySituationTypeName);
+            MethodInfo disabledMethod = RequireStaticMethod(commandOutputType, "Disabled", legType);
+            object leftLeg = Enum.Parse(legType, "Left");
+            object original = disabledMethod.Invoke(null, new[] { leftLeg });
+
+            // Act — stamp recovery context onto a disabled command.
+            MethodInfo withRecoveryMethod = commandOutputType.GetMethod(
+                "WithRecoveryContext",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(withRecoveryMethod, Is.Not.Null,
+                "LegCommandOutput should expose a WithRecoveryContext method for C6.5.");
+            object stumble = Enum.Parse(recoverySituationType, "Stumble");
+            object stamped = withRecoveryMethod.Invoke(original, new object[] { stumble, 0.75f });
+
+            // Assert
+            object situation = GetPropertyValue<object>(stamped, "RecoverySituation");
+            float blend = GetPropertyValue<float>(stamped, "RecoveryBlend");
+            Assert.That(situation, Is.EqualTo(stumble),
+                "WithRecoveryContext should stamp the situation onto the copy.");
+            Assert.That(blend, Is.EqualTo(0.75f).Within(0.0001f),
+                "WithRecoveryContext should stamp the blend onto the copy.");
+        }
+
+        [Test]
+        public void LegCommandOutput_WithRecoveryContext_PreservesOriginalFields()
+        {
+            // Arrange
+            Type legType = RequireType(LocomotionLegTypeName);
+            Type commandModeType = RequireType(LegCommandModeTypeName);
+            Type commandOutputType = RequireType(LegCommandOutputTypeName);
+            Type recoverySituationType = RequireType(RecoverySituationTypeName);
+            MethodInfo disabledMethod = RequireStaticMethod(commandOutputType, "Disabled", legType);
+            object leftLeg = Enum.Parse(legType, "Left");
+            object original = disabledMethod.Invoke(null, new[] { leftLeg });
+
+            // Act
+            MethodInfo withRecoveryMethod = commandOutputType.GetMethod(
+                "WithRecoveryContext",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            object stumble = Enum.Parse(recoverySituationType, "Stumble");
+            object stamped = withRecoveryMethod.Invoke(original, new object[] { stumble, 0.5f });
+
+            // Assert — original fields must survive the copy.
+            object leg = GetPropertyValue<object>(stamped, "Leg");
+            object mode = GetPropertyValue<object>(stamped, "Mode");
+            float cyclePhase = GetPropertyValue<float>(stamped, "CyclePhase");
+            float blendWeight = GetPropertyValue<float>(stamped, "BlendWeight");
+            Assert.That(leg, Is.EqualTo(leftLeg));
+            Assert.That(mode, Is.EqualTo(Enum.Parse(commandModeType, "Disabled")));
+            Assert.That(cyclePhase, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(blendWeight, Is.EqualTo(0f).Within(0.0001f));
+        }
+
         // ── StepPlanner tests (C4.2) ──────────────────────────────────────────
 
         [Test]

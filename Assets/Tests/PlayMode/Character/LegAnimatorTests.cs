@@ -2386,6 +2386,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Type stateFrameType = RequireLocomotionType(characterAssembly, "LegStateFrame");
             Type commandType = RequireLocomotionType(characterAssembly, "LegCommandOutput");
             Type stepTargetType = RequireLocomotionType(characterAssembly, "StepTarget");
+            Type recoverySituationType = RequireLocomotionType(characterAssembly, "RecoverySituation");
 
             object leg = Enum.Parse(legType, legName);
             object mode = Enum.Parse(modeType, modeName);
@@ -2424,6 +2425,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     typeof(float),
                     typeof(float),
                     stepTargetType,
+                    recoverySituationType,
+                    typeof(float),
                 },
                 modifiers: null);
             if (commandConstructor == null)
@@ -2432,6 +2435,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     "Missing expected LegCommandOutput constructor for Chapter 4 command injection tests.");
             }
 
+            object recoverySituationNone = Enum.Parse(recoverySituationType, "None");
             return commandConstructor.Invoke(new object[]
             {
                 leg,
@@ -2442,6 +2446,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 kneeAngleDegrees,
                 blendWeight,
                 stepTarget,
+                recoverySituationNone,
+                0f,
             });
         }
 

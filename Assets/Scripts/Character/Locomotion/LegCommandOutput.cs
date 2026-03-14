@@ -4,8 +4,9 @@ namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
     /// Per-leg command payload emitted by the locomotion coordination layer.
-    /// Carries swing parameters, state labels, and an optional world-space step target
-    /// so executors can combine phase-driven swing with foothold-aware placement.
+    /// Carries swing parameters, state labels, an optional world-space step target,
+    /// and recovery context so executors can combine phase-driven swing with
+    /// foothold-aware placement and situation-aware recovery expression.
     /// Collaborators: <see cref="LocomotionDirector"/> (producer), <see cref="LegAnimator"/> (consumer).
     /// </summary>
     internal readonly struct LegCommandOutput
@@ -18,7 +19,9 @@ namespace PhysicsDrivenMovement.Character
             float swingAngleDegrees,
             float kneeAngleDegrees,
             float blendWeight,
-            StepTarget stepTarget)
+            StepTarget stepTarget,
+            RecoverySituation recoverySituation = RecoverySituation.None,
+            float recoveryBlend = 0f)
         {
             // STEP 1: Preserve the leg identity and requested command mode exactly as issued.
             Leg = leg;
@@ -36,6 +39,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Carry the step target through for foothold-aware execution.
             StepTarget = stepTarget;
             FootTarget = stepTarget.IsValid ? stepTarget.LandingPosition : Vector3.zero;
+
+            // STEP 4: Carry recovery context so leg executors can modulate profiles by situation.
+            RecoverySituation = recoverySituation;
+            RecoveryBlend = Mathf.Clamp01(recoveryBlend);
         }
 
         public LocomotionLeg Leg { get; }
@@ -67,6 +74,37 @@ namespace PhysicsDrivenMovement.Character
         /// the target is valid, or <see cref="Vector3.zero"/> otherwise.
         /// </summary>
         public Vector3 FootTarget { get; }
+
+        /// <summary>
+        /// The active recovery situation classified by the director, or
+        /// <see cref="RecoverySituation.None"/> during normal locomotion.
+        /// </summary>
+        public RecoverySituation RecoverySituation { get; }
+
+        /// <summary>
+        /// How far into the active recovery the system currently is (0 = just entered,
+        /// 1 = fully blended). Zero when no recovery is active.
+        /// </summary>
+        public float RecoveryBlend { get; }
+
+        /// <summary>
+        /// Returns a copy of this command with the recovery context stamped in.
+        /// Used by the director to inject recovery state after pass-through command generation.
+        /// </summary>
+        public LegCommandOutput WithRecoveryContext(RecoverySituation situation, float blend)
+        {
+            return new LegCommandOutput(
+                Leg,
+                Mode,
+                StateFrame,
+                CyclePhase,
+                SwingAngleDegrees,
+                KneeAngleDegrees,
+                BlendWeight,
+                StepTarget,
+                situation,
+                blend);
+        }
 
         public static LegCommandOutput Disabled(LocomotionLeg leg)
         {
