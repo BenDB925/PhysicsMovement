@@ -25,15 +25,13 @@ Layer character identity only after control architecture is stable.
 
 ## Work packages
 
-1. C8.1 Style profile:
-   - Define serialized style presets (heavy, athletic, scrappy) for stride, lean, sway, and recovery aggression.
-2. C8.2 Pelvis and torso expression:
+2. C8.1 Pelvis and torso expression:
    - Add controlled pelvis and torso offsets driven by planned movement state.
-3. C8.3 Accel and decel body language:
+3. C8.2 Accel and decel body language:
    - Add start, stop, and reversal posture signatures tied to locomotion situation tags.
-4. C8.4 Arm-leg coordination:
+4. C8.3 Arm-leg coordination:
    - Expand ArmAnimator contribution from phase mirror to state-aware support and expression.
-5. C8.5 Protect readability:
+5. C8.4 Protect readability:
    - Keep expressive layers bounded so they never hide true locomotion intent or destabilize physics.
 
 ## Verification gate

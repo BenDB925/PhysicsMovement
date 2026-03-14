@@ -73,6 +73,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float SlopeMinForwardProgress = 4.0f;
         private const int MaxSlopeConsecutiveFallenFrames = 80;
 
+        private const int StepDownWalkFrames = 600;
+        private const float StepDownSpawnRunUpMetres = 1.0f;
+        private const float StepDownMinForwardProgress = 4.0f;
+        private const int MaxStepDownConsecutiveFallenFrames = 80;
+
         // ─── Scene Setup ──────────────────────────────────────────────────────
 
         [UnityTest]
@@ -539,6 +544,140 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Observed minimum alignment={minObservedAlignment:F3}.");
         }
 
+        [UnityTest]
+        public IEnumerator WalkDownStepDownLane_RecoversThroughDescentWithoutExtendedFall()
+        {
+            // Purpose: terrain-specific recovery reproduction (C7.4a). Walking down
+            // steps naturally destabilises the character as each foot drops off a ledge.
+            // The test proves catch-step or stumble recovery keeps the character upright
+            // through the descent instead of collapsing into an extended Fallen state.
+            // This locks terrain recovery as a focused PlayMode repro so Chapter 7 no
+            // longer relies on flat-ground recovery tests alone.
+
+            yield return LoadArenaScene();
+
+            TerrainScenarioMarker stepDownLane = FindTerrainScenarioMarker(TerrainScenarioType.StepDownLane);
+            LegAnimator legAnimator = FindLegAnimator();
+            PlayerMovement movement = legAnimator.GetComponent<PlayerMovement>();
+            Rigidbody hipsRb = legAnimator.GetComponent<Rigidbody>();
+            BalanceController balance = legAnimator.GetComponent<BalanceController>();
+            CharacterState characterState = legAnimator.GetComponent<CharacterState>();
+            RagdollSetup ragdollSetup = legAnimator.GetComponent<RagdollSetup>();
+            LocomotionDirector director = legAnimator.GetComponent<LocomotionDirector>();
+            GroundSensor leftSensor = FindGroundSensor(legAnimator.gameObject, "Foot_L");
+            GroundSensor rightSensor = FindGroundSensor(legAnimator.gameObject, "Foot_R");
+
+            Assert.That(stepDownLane, Is.Not.Null,
+                "Arena_01 must expose a StepDownLane marker for the C7.4a terrain recovery repro.");
+            Assert.That(movement, Is.Not.Null, "PlayerMovement component not found on the Arena_01 character.");
+            Assert.That(hipsRb, Is.Not.Null, "Rigidbody not found on the Arena_01 character.");
+            Assert.That(balance, Is.Not.Null, "BalanceController component not found on the Arena_01 character.");
+            Assert.That(characterState, Is.Not.Null, "CharacterState component not found on the Arena_01 character.");
+            Assert.That(director, Is.Not.Null, "LocomotionDirector component not found on the Arena_01 character.");
+            Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found on the Arena_01 character.");
+            Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found on the Arena_01 character.");
+
+            // Allow a few physics frames for the broadphase to register all loaded
+            // scene colliders; terrain lane box colliders may not be raycastable in
+            // the first FixedUpdate after LoadSceneAsync completes.
+            Physics.SyncTransforms();
+            for (int i = 0; i < 5; i++)
+                yield return new WaitForFixedUpdate();
+
+            ResolveDescendingLaneProfile(
+                stepDownLane,
+                out Vector3 travelDirection,
+                out Vector3 highSidePoint,
+                out Vector3 lowSidePoint,
+                out float highSideHeight);
+
+            // The marker bounds encode the lane rise as center.y * 2 for step lanes.
+            // Use that as a fallback if the raycast-based height resolution cannot
+            // distinguish the elevated start platform from the ground plane.
+            float boundsRise = stepDownLane.ScenarioBounds.center.y * 2f;
+            if (highSideHeight < 0.1f && boundsRise > 0.1f)
+            {
+                highSideHeight = boundsRise;
+            }
+
+            Assert.That(highSideHeight, Is.GreaterThanOrEqualTo(0.1f),
+                $"StepDownLane high-side height should be above ground level " +
+                $"(got {highSideHeight:F3}m, bounds rise={boundsRise:F3}m). " +
+                $"Scene may need rebuilding.");
+
+            // For descending: spawn ON the elevated Start platform, inset from
+            // the high-side edge toward the lane interior so the character has
+            // solid ground underneath during settle.
+            Vector3 spawnPosition = new Vector3(highSidePoint.x, hipsRb.position.y + highSideHeight, highSidePoint.z)
+                + travelDirection * StepDownSpawnRunUpMetres;
+            RepositionRagdoll(ragdollSetup, hipsRb, spawnPosition);
+
+            for (int i = 0; i < SettleFrames; i++)
+                yield return new WaitForFixedUpdate();
+
+            Vector3 startPosition = hipsRb.position;
+            Vector2 moveInput = BuildMoveInputForWorldDirection(travelDirection);
+            float maxForwardProgress = 0f;
+            float maxHipsHeight = hipsRb.position.y;
+            int consecutiveFallenFrames = 0;
+            int maxConsecutiveFallenFrames = 0;
+            int totalFallenTransitions = 0;
+            int recoveryActiveFrames = 0;
+            float minObservedAlignment = 1f;
+            CharacterStateType previousState = characterState.CurrentState;
+
+            // Act
+            movement.SetMoveInputForTest(moveInput);
+            for (int i = 0; i < StepDownWalkFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float forwardProgress = Vector3.Dot(hipsRb.position - startPosition, travelDirection);
+                maxForwardProgress = Mathf.Max(maxForwardProgress, forwardProgress);
+                maxHipsHeight = Mathf.Max(maxHipsHeight, hipsRb.position.y);
+
+                float leftAlignment = leftSensor.GroundNormalUpAlignment;
+                float rightAlignment = rightSensor.GroundNormalUpAlignment;
+                minObservedAlignment = Mathf.Min(minObservedAlignment, Mathf.Min(leftAlignment, rightAlignment));
+
+                if (director.IsRecoveryActive)
+                    recoveryActiveFrames++;
+
+                CharacterStateType currentState = characterState.CurrentState;
+                if (currentState == CharacterStateType.Fallen && previousState != CharacterStateType.Fallen)
+                    totalFallenTransitions++;
+                previousState = currentState;
+
+                if (currentState == CharacterStateType.Fallen)
+                {
+                    consecutiveFallenFrames++;
+                    maxConsecutiveFallenFrames = Mathf.Max(maxConsecutiveFallenFrames, consecutiveFallenFrames);
+                }
+                else
+                {
+                    consecutiveFallenFrames = 0;
+                }
+            }
+            movement.SetMoveInputForTest(Vector2.zero);
+
+            LogBaseline(
+                nameof(WalkDownStepDownLane_RecoversThroughDescentWithoutExtendedFall),
+                $"maxProgress={maxForwardProgress:F2}m maxHipsHeight={maxHipsHeight:F2}m " +
+                $"maxConsecutiveFallenFrames={maxConsecutiveFallenFrames} totalFallenTransitions={totalFallenTransitions} " +
+                $"recoveryActiveFrames={recoveryActiveFrames} minAlignment={minObservedAlignment:F3} " +
+                $"highSideHeight={highSideHeight:F2}m groundedEnd={balance.IsGrounded} stateEnd={characterState.CurrentState}");
+
+            // Assert
+            Assert.That(maxForwardProgress, Is.GreaterThanOrEqualTo(StepDownMinForwardProgress),
+                $"Walking down the authored StepDownLane should carry the character through the descent. " +
+                $"Needed at least {StepDownMinForwardProgress:F1}m of forward progress, but only reached {maxForwardProgress:F2}m. " +
+                $"Final state={characterState.CurrentState}, groundedEnd={balance.IsGrounded}.");
+
+            Assert.That(maxConsecutiveFallenFrames, Is.LessThanOrEqualTo(MaxStepDownConsecutiveFallenFrames),
+                $"Descent through the StepDownLane should not collapse into an extended fallen state. " +
+                $"Observed {maxConsecutiveFallenFrames} consecutive Fallen frames (limit {MaxStepDownConsecutiveFallenFrames}).");
+        }
+
         // ─── Helpers ──────────────────────────────────────────────────────────
 
         private static IEnumerator LoadArenaScene()
@@ -726,6 +865,58 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             object requestedHeight = stepTarget.GetType().GetProperty("RequestedClearanceHeight")?.GetValue(stepTarget);
             return requestedHeight is float height ? height : 0f;
+        }
+
+        private static void ResolveDescendingLaneProfile(
+            TerrainScenarioMarker marker,
+            out Vector3 travelDirection,
+            out Vector3 highSidePoint,
+            out Vector3 lowSidePoint,
+            out float highSideHeight)
+        {
+            // Sample multiple interior points along the lane to robustly determine
+            // the descending direction, even if endpoint raycasts return ground-level
+            // heights due to Physics broadphase timing after scene load.
+            Bounds bounds = marker.ScenarioBounds;
+            bool laneRunsAlongX = bounds.size.x >= bounds.size.z;
+            Vector3 laneAxis = laneRunsAlongX ? Vector3.right : Vector3.forward;
+            float laneLength = laneRunsAlongX ? bounds.size.x : bounds.size.z;
+            float rayOriginHeight = bounds.max.y + 2f;
+
+            float negativeQuarterHeight = 0f;
+            float positiveQuarterHeight = 0f;
+            int samplesPerSide = 5;
+
+            for (int i = 0; i < samplesPerSide; i++)
+            {
+                float tNeg = 0.05f + 0.2f * i / (samplesPerSide - 1);
+                float tPos = 0.55f + 0.2f * i / (samplesPerSide - 1);
+                Vector3 negPt = bounds.center - laneAxis * (laneLength * (0.5f - tNeg));
+                Vector3 posPt = bounds.center - laneAxis * (laneLength * (0.5f - tPos));
+                negativeQuarterHeight = Mathf.Max(negativeQuarterHeight, SampleEnvironmentHeight(negPt, rayOriginHeight));
+                positiveQuarterHeight = Mathf.Max(positiveQuarterHeight, SampleEnvironmentHeight(posPt, rayOriginHeight));
+            }
+
+            float sampleInset = Mathf.Min(StepUpSurfaceProbeInset, laneLength * 0.1f);
+            Vector3 negativeEndPoint = bounds.center - laneAxis * (laneLength * 0.5f - sampleInset);
+            Vector3 positiveEndPoint = bounds.center + laneAxis * (laneLength * 0.5f - sampleInset);
+
+            if (negativeQuarterHeight > positiveQuarterHeight)
+            {
+                // Negative end is higher — descend from negative toward positive.
+                travelDirection = laneAxis;
+                highSidePoint = negativeEndPoint;
+                lowSidePoint = positiveEndPoint;
+                highSideHeight = negativeQuarterHeight;
+            }
+            else
+            {
+                // Positive end is higher — descend from positive toward negative.
+                travelDirection = -laneAxis;
+                highSidePoint = positiveEndPoint;
+                lowSidePoint = negativeEndPoint;
+                highSideHeight = positiveQuarterHeight;
+            }
         }
 
         private static void ResolveAscendingLaneProfile(
