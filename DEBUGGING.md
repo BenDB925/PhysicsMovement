@@ -139,6 +139,18 @@ Useful physics-style signals:
 - forces / torques / drive strength
 - progress through a course or task
 
+### "Step-up planning says yes, but the body still stalls on the riser"
+**Most likely issue:** the bug has moved past sensing and basic planner carry into execution or support transfer.
+
+**Useful discriminator:** in the same failing outcome test, log both the best planned touchdown and the best real support result.
+
+Compare:
+- planned landing progress versus the plateau-entry distance
+- planned landing height error versus the target step or landing height
+- maximum grounded support height actually achieved by either foot
+
+If planned landing clears the plateau entry but grounded support height stays pinned on the lower riser, stop changing obstruction sensing and planner carry first. The remaining miss is in how execution or support transfer turns that touchdown plan into real raised contact.
+
 ### "A feature only works when another system is disabled"
 **Most likely issue:** the bug lives at the integration boundary, not fully inside either system in isolation.
 

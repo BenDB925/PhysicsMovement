@@ -3,7 +3,8 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// World-space step target describing where and when a foot should land.
+    /// World-space step target describing where and when a foot should land,
+    /// plus any explicit terrain-clearance request for step-up approaches.
     /// Part of the Chapter 4 step-planning layer. Produced by the step planner and
     /// consumed by <see cref="LegAnimator"/> for foothold-aware swing execution.
     /// Collaborators: StepPlanner (producer), <see cref="LegCommandOutput"/> (carrier),
@@ -27,6 +28,12 @@ namespace PhysicsDrivenMovement.Character
         //         Low confidence means the executor should fall back to default swing.
         public float Confidence { get; }
 
+        // STEP 4b: Terrain clearance intent — positive only when the planner has detected
+        //          a real step-up ahead and wants the swing executor to lift higher.
+        public float RequestedClearanceHeight { get; }
+
+        public bool HasClearanceRequest { get; }
+
         // STEP 5: Validity flag — distinguishes computed targets from defaults.
         public bool IsValid { get; }
 
@@ -36,12 +43,31 @@ namespace PhysicsDrivenMovement.Character
             float widthBias,
             float brakingBias,
             float confidence)
+            : this(
+                landingPosition,
+                desiredTiming,
+                widthBias,
+                brakingBias,
+                confidence,
+                0f)
+        {
+        }
+
+        public StepTarget(
+            Vector3 landingPosition,
+            float desiredTiming,
+            float widthBias,
+            float brakingBias,
+            float confidence,
+            float requestedClearanceHeight)
         {
             LandingPosition = landingPosition;
             DesiredTiming = Mathf.Max(0f, desiredTiming);
             WidthBias = Mathf.Clamp(widthBias, -1f, 1f);
             BrakingBias = Mathf.Clamp(brakingBias, -1f, 1f);
             Confidence = Mathf.Clamp01(confidence);
+            RequestedClearanceHeight = Mathf.Max(0f, requestedClearanceHeight);
+            HasClearanceRequest = RequestedClearanceHeight > 0f;
             IsValid = true;
         }
 

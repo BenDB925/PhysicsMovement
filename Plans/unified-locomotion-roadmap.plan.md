@@ -3,7 +3,7 @@
 ## Status
 - State: In Progress
 - Acceptance target: Finish the locomotion authority migration through validation, terrain robustness, and expression without regressing the focused chapter gates or baseline artifacts.
-- Current next step: Continue Chapter 7 with C7.2c clearance request planning so `StepTarget` and `StepPlanner` can express extra swing clearance only when promoted obstruction signals indicate a real step-up ahead.
+- Current next step: Continue Chapter 7 with C7.2e direct step-up outcome coverage so the generated step-up lane proves forward progress instead of a face-stall.
 - Active blockers: None.
 
 ## Quick Resume
@@ -13,11 +13,17 @@
 - Chapter 7 C7.1 delivered: shared terrain scene authoring, runtime terrain metadata, regenerated Arena and Museum scenes, and a focused EditMode terrain-scene fixture.
 - Chapter 7 C7.2a delivered: `GroundSensor` now reports step-up-style forward obstruction with estimated rise and confidence, and `FootContactObservation` plus the sensor aggregation/filter path preserve that per-foot signal without changing planner behavior.
 - Chapter 7 C7.2b delivered: `LocomotionObservation` now surfaces planner-facing left/right and aggregate forward-obstruction, step-height, and obstruction-confidence accessors derived from the filtered foot payload.
-- Next: Start C7.2c by extending `StepTarget` and `StepPlanner` with explicit clearance intent driven by the promoted observation fields, then continue with clearance-aware execution.
+- Chapter 7 C7.2c delivered: `StepTarget` now carries explicit `RequestedClearanceHeight` / `HasClearanceRequest` metadata, and `StepPlanner` promotes strong per-foot forward-obstruction samples into swing-target clearance intent without changing flat-ground gait.
+- Chapter 7 C7.2d delivered: `LegExecutionProfileResolver` now turns `StepTarget` clearance intent into extra swing/knee lift for swing-like execution, and `LegAnimator` exposes the clearance tuning that feeds that path without changing flat-ground gait.
+- Next: Start C7.2e by locking a direct step-up PlayMode outcome regression around forward progress over the generated step-up lane.
 
 ## Verified Artifacts
 - `Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`: Chapter 6 complete with C6.1-C6.5 completion notes and verification gate.
-- `Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`: C7.1 through C7.2b complete, with the remaining terrain slices split into agent-sized steps and fresh focused verification artifacts.
+- `Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`: C7.1 through C7.2d complete, with C7.2e as the active restart point and fresh focused verification artifacts.
+- `Assets/Scripts/Character/Locomotion/StepPlanner.cs`: Chapter 7 clearance-request planning now promotes paired forward-obstruction samples into `StepTarget` metadata without altering flat-ground stride/timing logic.
+- `Assets/Scripts/Character/Locomotion/StepTarget.cs`: Step targets now carry the explicit clearance-request fields consumed by the execution slice.
+- `Assets/Scripts/Character/Locomotion/LegExecutionProfileResolver.cs`: Swing-like execution profiles now convert `StepTarget.RequestedClearanceHeight` into extra terrain-clearance lift.
+- `Assets/Tests/PlayMode/Character/LegAnimatorTests.cs`: Outcome-based C7.2d coverage now proves a clearance-tagged swing physically raises the knee or foot more than the same flat-ground swing.
 - `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Director classifies situations, applies typed recovery profiles gated by the transition guard, defers collapse during active recovery, and stamps recovery context onto leg commands.
 - `Assets/Scripts/Character/CharacterState.cs`: Collapse-triggered Fallen now deferred while director recovery is active (hard ceiling 1s).
 - `Assets/Tests/PlayMode/Utilities/PlayModeSceneIsolation.cs`: PlayMode-safe scene isolation helper used to stop mixed-slice scene bleed in prefab-backed locomotion fixtures.
@@ -75,6 +81,8 @@ Input -> LocomotionDirector -> LegStateMachine + StepPlanner -> Actuators -> Saf
 6. Chapter 9 continues throughout and scales with each chapter.
 
 ## Progress notes
+- 2026-03-14: Completed Chapter 7 C7.2d. `LegExecutionProfileResolver` now turns `StepTarget` clearance intent into extra knee tuck and swing lift for swing-like execution profiles, and `LegAnimator` exposes the clearance tuning that feeds that path. Verified with the new outcome-based `LegAnimatorTests.SetCommandFrame_WhenSwingStepTargetRequestsClearance_RaisesKneeAndFootHigherThanFlatSwing` (`1/1`), the broader `LegAnimatorTests` + `GaitOutcomeTests` PlayMode slice (`63 passed, 3 ignored, 0 failed`), and a focused `LocomotionContractsTests` EditMode rerun (`74/74`). The active restart point is now C7.2e direct step-up outcome coverage.
+- 2026-03-14: Completed Chapter 7 C7.2c. `StepTarget` now carries explicit clearance-request metadata, and `StepPlanner` promotes the strongest valid paired forward-obstruction sample into swing targets so step-up approaches can request extra clearance without globally inflating gait. Verified with focused `LocomotionContractsTests` (`74/74`) plus an outcome-based `GaitOutcomeTests` smoke (`4/4`). The active restart point is now C7.2d clearance-aware swing execution.
 - 2026-03-14: Completed Chapter 7 C7.2b. `LocomotionObservation` now promotes left/right/any forward obstruction plus per-foot step height and obstruction confidence for planner-facing reads, verified by focused `LocomotionContractsTests` (`69/69`). The active restart point is now C7.2c clearance request planning.
 - 2026-03-14: Completed Chapter 7 C7.2a. Added forward step-face sensing in `GroundSensor`, extended `FootContactObservation` with obstruction height/confidence, preserved the new per-foot payload through `LocomotionSensorAggregator` and `SupportObservationFilter`, and verified with focused EditMode contracts/seam tests (`70/70`) plus the existing PlayMode GroundSensor regression slice (`4/4`).
 - 2026-03-14: Split Chapter 7 C7.2-C7.5 into agent-sized slices so terrain work can be picked up one step at a time. The active restart point is now C7.2a forward step-up sensing in `GroundSensor` and `FootContactObservation`.

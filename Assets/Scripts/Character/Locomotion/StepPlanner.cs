@@ -3,7 +3,8 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
-    /// Computes world-space step targets from locomotion intent, body state, and observation data.
+    /// Computes world-space step targets from locomotion intent, body state, and observation data,
+    /// including explicit clearance requests for detected step-up approaches.
     /// Part of the Chapter 4 step-planning layer. Produces <see cref="StepTarget"/> values
     /// consumed by <see cref="LegAnimator"/> through <see cref="LegCommandOutput"/>.
     /// Stateless computation unit — all decisions are derived from the inputs passed each call.
@@ -69,6 +70,14 @@ namespace PhysicsDrivenMovement.Character
         //         confidence so the executor knows how much to trust the planned target.
         private const float MinConfidence = 0.2f;
 
+        // STEP 6b: Clearance request gating — only promote terrain clearance intent when
+        //          the obstruction sample is tall and confident enough to represent a real step-up.
+        private const float MinimumClearanceRequestHeight = 0.05f;
+        private const float MinimumClearanceRequestConfidence = 0.35f;
+        private const float MinimumStepUpLandingCarryDistance = 0.08f;
+        private const float SevereStepCarryStartHeight = 0.15f;
+        private const float SevereStepCarryFullHeight = 0.35f;
+
         /// <summary>
         /// Computes a step target for a single leg that is currently in a swing-like state.
         /// Returns <see cref="StepTarget.Invalid"/> when the leg is not in swing or
@@ -118,6 +127,28 @@ namespace PhysicsDrivenMovement.Character
                 + lateral * lateralOffset
                 + driftCompensation;
 
+            float confidence = ComputeConfidence(observation);
+            float requestedClearanceHeight = ComputeRequestedClearanceHeight(leg, observation);
+            if (TryGetPreferredStepUpLandingSample(
+                leg,
+                observation,
+                out Vector3 topSurfacePoint,
+                out float landingStepHeight,
+                out float landingObstructionConfidence))
+            {
+                landingPosition = ApplyStepUpLandingPlacement(
+                    hipsPosition,
+                    forward,
+                    lateral,
+                    lateralOffset,
+                    driftCompensation,
+                    strideOffset,
+                    topSurfacePoint,
+                    landingStepHeight,
+                    confidence,
+                    landingObstructionConfidence);
+            }
+
             // STEP 6: Compute timing, biases, and confidence.
             //         C4.3: Outside turn leg gets extended timing for the wider arc.
             //         C4.4: Braking leg gets shortened timing for quicker plant.
@@ -129,9 +160,14 @@ namespace PhysicsDrivenMovement.Character
             float widthBias = ComputeWidthBias(leg, observation.TurnSeverity,
                 gaitReferenceDirection, observation.BodyForward);
             float brakingBias = ComputeBrakingBias(desiredInput, planarSpeed);
-            float confidence = ComputeConfidence(observation);
 
-            return new StepTarget(landingPosition, desiredTiming, widthBias, brakingBias, confidence);
+            return new StepTarget(
+                landingPosition,
+                desiredTiming,
+                widthBias,
+                brakingBias,
+                confidence,
+                requestedClearanceHeight);
         }
 
         private static bool IsSwingLikeState(LegStateType state)
@@ -234,6 +270,176 @@ namespace PhysicsDrivenMovement.Character
             // STEP 8: Map support quality directly to confidence with a minimum floor.
             float raw = observation.SupportQuality;
             return Mathf.Clamp(Mathf.Lerp(MinConfidence, 1f, raw), 0f, 1f);
+        }
+
+        private static float ComputeRequestedClearanceHeight(
+            LocomotionLeg swingLeg,
+            LocomotionObservation observation)
+        {
+            // STEP 6b: Clearance requests stay tied to height/confidence even when the touch-down
+            //          top-surface sample is not yet available. That preserves the original contract
+            //          while letting the planner optionally use richer touchdown data when present.
+            float swingLegClearance = GetValidClearanceHeightForLeg(swingLeg, observation);
+            float oppositeLegClearance = GetValidClearanceHeightForLeg(GetOppositeLeg(swingLeg), observation);
+            return Mathf.Max(swingLegClearance, oppositeLegClearance);
+        }
+
+        private static bool TryGetPreferredStepUpLandingSample(
+            LocomotionLeg swingLeg,
+            LocomotionObservation observation,
+            out Vector3 topSurfacePoint,
+            out float stepHeight,
+            out float obstructionConfidence)
+        {
+            // STEP 6b: Prefer the swing leg's own obstruction sample when it is valid, but also
+            //          consider the opposite foot because the planted foot often sees the step face
+            //          one stride earlier than the next swing foot. Pick the strongest valid sample
+            //          so the request remains tied to a real measured obstruction instead of a global gait mode.
+            bool hasSwingLegSample = TryGetValidStepUpLandingSampleForLeg(
+                swingLeg,
+                observation,
+                out Vector3 swingLegTopSurfacePoint,
+                out float swingLegStepHeight,
+                out float swingLegConfidence);
+            bool hasOppositeLegSample = TryGetValidStepUpLandingSampleForLeg(
+                GetOppositeLeg(swingLeg),
+                observation,
+                out Vector3 oppositeLegTopSurfacePoint,
+                out float oppositeLegStepHeight,
+                out float oppositeLegConfidence);
+
+            if (!hasSwingLegSample && !hasOppositeLegSample)
+            {
+                topSurfacePoint = Vector3.zero;
+                stepHeight = 0f;
+                obstructionConfidence = 0f;
+                return false;
+            }
+
+            if (hasSwingLegSample && (!hasOppositeLegSample || swingLegConfidence >= oppositeLegConfidence))
+            {
+                topSurfacePoint = swingLegTopSurfacePoint;
+                stepHeight = swingLegStepHeight;
+                obstructionConfidence = swingLegConfidence;
+                return true;
+            }
+
+            topSurfacePoint = oppositeLegTopSurfacePoint;
+            stepHeight = oppositeLegStepHeight;
+            obstructionConfidence = oppositeLegConfidence;
+            return true;
+        }
+
+        private static float GetValidClearanceHeightForLeg(
+            LocomotionLeg leg,
+            LocomotionObservation observation)
+        {
+            bool hasForwardObstruction;
+            float estimatedStepHeight;
+            float obstructionConfidence;
+
+            if (leg == LocomotionLeg.Left)
+            {
+                hasForwardObstruction = observation.HasLeftForwardObstruction;
+                estimatedStepHeight = observation.LeftEstimatedStepHeight;
+                obstructionConfidence = observation.LeftForwardObstructionConfidence;
+            }
+            else
+            {
+                hasForwardObstruction = observation.HasRightForwardObstruction;
+                estimatedStepHeight = observation.RightEstimatedStepHeight;
+                obstructionConfidence = observation.RightForwardObstructionConfidence;
+            }
+
+            if (!hasForwardObstruction ||
+                estimatedStepHeight < MinimumClearanceRequestHeight ||
+                obstructionConfidence < MinimumClearanceRequestConfidence)
+            {
+                return 0f;
+            }
+
+            return Mathf.Max(0f, estimatedStepHeight);
+        }
+
+        private static bool TryGetValidStepUpLandingSampleForLeg(
+            LocomotionLeg leg,
+            LocomotionObservation observation,
+            out Vector3 topSurfacePoint,
+            out float stepHeight,
+            out float obstructionConfidence)
+        {
+            bool hasForwardObstruction;
+            float estimatedStepHeight;
+            bool hasTopSurfacePoint;
+
+            if (leg == LocomotionLeg.Left)
+            {
+                hasForwardObstruction = observation.HasLeftForwardObstruction;
+                estimatedStepHeight = observation.LeftEstimatedStepHeight;
+                obstructionConfidence = observation.LeftForwardObstructionConfidence;
+                hasTopSurfacePoint = observation.HasLeftForwardObstructionTopSurfacePoint;
+                topSurfacePoint = observation.LeftForwardObstructionTopSurfacePoint;
+            }
+            else
+            {
+                hasForwardObstruction = observation.HasRightForwardObstruction;
+                estimatedStepHeight = observation.RightEstimatedStepHeight;
+                obstructionConfidence = observation.RightForwardObstructionConfidence;
+                hasTopSurfacePoint = observation.HasRightForwardObstructionTopSurfacePoint;
+                topSurfacePoint = observation.RightForwardObstructionTopSurfacePoint;
+            }
+
+            if (!hasForwardObstruction ||
+                !hasTopSurfacePoint ||
+                estimatedStepHeight < MinimumClearanceRequestHeight ||
+                obstructionConfidence < MinimumClearanceRequestConfidence)
+            {
+                topSurfacePoint = Vector3.zero;
+                stepHeight = 0f;
+                obstructionConfidence = 0f;
+                return false;
+            }
+
+            stepHeight = Mathf.Max(0f, estimatedStepHeight);
+            return true;
+        }
+
+        private static Vector3 ApplyStepUpLandingPlacement(
+            Vector3 hipsPosition,
+            Vector3 forward,
+            Vector3 lateral,
+            float lateralOffset,
+            Vector3 driftCompensation,
+            float defaultStrideOffset,
+            Vector3 topSurfacePoint,
+            float stepHeight,
+            float plannerConfidence,
+            float obstructionConfidence)
+        {
+            float obstructionForwardOffset = Vector3.Dot(
+                Vector3.ProjectOnPlane(topSurfacePoint - hipsPosition, Vector3.up),
+                forward);
+            float baseForwardOffset = Mathf.Max(defaultStrideOffset, obstructionForwardOffset);
+            float carryTrust = Mathf.Sqrt(Mathf.Clamp01(plannerConfidence) * Mathf.Clamp01(obstructionConfidence));
+            float severeStepBlend = Mathf.InverseLerp(SevereStepCarryStartHeight, SevereStepCarryFullHeight, stepHeight);
+            float carryBaseDistance = Mathf.Lerp(
+                Mathf.Max(defaultStrideOffset * 0.5f, stepHeight * 1.5f),
+                defaultStrideOffset + stepHeight,
+                severeStepBlend);
+            float carryDistance = Mathf.Max(
+                MinimumStepUpLandingCarryDistance,
+                carryBaseDistance) * carryTrust;
+            float landingForwardOffset = baseForwardOffset + carryDistance;
+
+            return new Vector3(hipsPosition.x, topSurfacePoint.y, hipsPosition.z)
+                + forward * landingForwardOffset
+                + lateral * lateralOffset
+                + driftCompensation;
+        }
+
+        private static LocomotionLeg GetOppositeLeg(LocomotionLeg leg)
+        {
+            return leg == LocomotionLeg.Left ? LocomotionLeg.Right : LocomotionLeg.Left;
         }
 
         private static float ApplyTurnStrideAdjustment(

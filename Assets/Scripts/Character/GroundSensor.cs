@@ -63,6 +63,7 @@ namespace PhysicsDrivenMovement.Character
         private Collider _footCollider;
         private float _estimatedStepHeight;
         private float _forwardObstructionConfidence;
+        private Vector3 _forwardObstructionTopSurfacePoint;
         private Vector3 _groundPoint;
         private float _ungroundedTimer;
 
@@ -96,6 +97,11 @@ namespace PhysicsDrivenMovement.Character
         /// Confidence that the detected forward obstruction represents a real step-up surface.
         /// </summary>
         public float ForwardObstructionConfidence => _forwardObstructionConfidence;
+
+        /// <summary>
+        /// World-space point sampled on the reachable top surface above the detected step face.
+        /// </summary>
+        public Vector3 ForwardObstructionTopSurfacePoint => _forwardObstructionTopSurfacePoint;
 
         // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -265,6 +271,7 @@ namespace PhysicsDrivenMovement.Character
             _hasForwardObstruction = true;
             _estimatedStepHeight = stepHeight;
             _forwardObstructionConfidence = Mathf.Clamp01(Mathf.Lerp(0.4f, 1f, distanceFactor) * Mathf.Lerp(0.7f, 1f, surfaceFactor));
+            _forwardObstructionTopSurfacePoint = topHit.point;
         }
 
         private void ClearForwardObstruction()
@@ -272,6 +279,7 @@ namespace PhysicsDrivenMovement.Character
             _hasForwardObstruction = false;
             _estimatedStepHeight = 0f;
             _forwardObstructionConfidence = 0f;
+            _forwardObstructionTopSurfacePoint = Vector3.zero;
         }
 
         private float GetSupportReferenceHeight(Vector3 castOrigin)

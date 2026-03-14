@@ -23,6 +23,9 @@ namespace PhysicsDrivenMovement.Character
             bool useStateDrivenExecution,
             float stepAngle,
             float kneeAngle,
+            float clearanceReferenceHeight,
+            float clearanceSwingBoost,
+            float clearanceKneeBoost,
             out float swingAngleDegrees,
             out float kneeAngleDegrees)
         {
@@ -44,7 +47,15 @@ namespace PhysicsDrivenMovement.Character
             switch (command.State)
             {
                 case LegStateType.Swing:
-                    ApplySwingProfile(command, stepAngle, kneeAngle, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    ApplySwingProfile(
+                        command,
+                        stepAngle,
+                        kneeAngle,
+                        clearanceReferenceHeight,
+                        clearanceSwingBoost,
+                        clearanceKneeBoost,
+                        ref swingAngleDegrees,
+                        ref kneeAngleDegrees);
                     break;
 
                 case LegStateType.Stance:
@@ -56,11 +67,27 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case LegStateType.RecoveryStep:
-                    ApplyRecoveryStepProfile(command, stepAngle, kneeAngle, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    ApplyRecoveryStepProfile(
+                        command,
+                        stepAngle,
+                        kneeAngle,
+                        clearanceReferenceHeight,
+                        clearanceSwingBoost,
+                        clearanceKneeBoost,
+                        ref swingAngleDegrees,
+                        ref kneeAngleDegrees);
                     break;
 
                 case LegStateType.CatchStep:
-                    ApplyCatchStepProfile(command, stepAngle, kneeAngle, ref swingAngleDegrees, ref kneeAngleDegrees);
+                    ApplyCatchStepProfile(
+                        command,
+                        stepAngle,
+                        kneeAngle,
+                        clearanceReferenceHeight,
+                        clearanceSwingBoost,
+                        clearanceKneeBoost,
+                        ref swingAngleDegrees,
+                        ref kneeAngleDegrees);
                     break;
             }
         }
@@ -98,6 +125,9 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput command,
             float stepAngle,
             float kneeAngle,
+            float clearanceReferenceHeight,
+            float clearanceSwingBoost,
+            float clearanceKneeBoost,
             ref float swingAngleDegrees,
             ref float kneeAngleDegrees)
         {
@@ -106,9 +136,29 @@ namespace PhysicsDrivenMovement.Character
                 stepAngle * 0.58f,
                 stepAngle * 0.68f,
                 Mathf.SmoothStep(0f, 1f, swingProgress)) * command.BlendWeight;
+            float swingClearanceBoost = ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceSwingBoost);
+            float kneeClearanceBoost = ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceKneeBoost);
+            float clearanceReachBlend = Mathf.SmoothStep(0.15f, 1f, swingProgress);
+            float clearanceLiftBlend = 1f - Mathf.SmoothStep(0.65f, 0.95f, swingProgress);
+            float swingClearanceContribution = swingClearanceBoost * Mathf.Lerp(0.35f, 1f, clearanceReachBlend);
+            float kneeClearanceContribution = kneeClearanceBoost * clearanceLiftBlend;
+
+            // STEP 1: Apply clearance additively to the resolved live command so step-up intent
+            //         still changes the swing even when the base gait has already produced a large arc.
+            swingAngleDegrees += swingClearanceContribution;
+            kneeAngleDegrees += kneeClearanceContribution;
+
+            // STEP 2: Keep the existing profile floors, but bias late swing toward more forward reach
+            //         while letting the extra knee tuck taper off before touchdown.
+            //         The clearance forward floor ramps with clearanceReachBlend so the leg
+            //         lifts before it reaches forward, preventing the shin from driving into
+            //         a step face before the clearance knee tuck has established height.
+            swingForwardTarget += swingClearanceBoost * clearanceReachBlend;
 
             swingAngleDegrees = Mathf.Max(swingAngleDegrees, swingForwardTarget);
-            kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, kneeAngle * 0.35f * command.BlendWeight);
+            kneeAngleDegrees = Mathf.Max(
+                kneeAngleDegrees,
+                kneeAngle * 0.35f * command.BlendWeight + kneeClearanceContribution);
         }
 
         private static void ApplyStanceProfile(
@@ -153,6 +203,9 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput command,
             float stepAngle,
             float kneeAngle,
+            float clearanceReferenceHeight,
+            float clearanceSwingBoost,
+            float clearanceKneeBoost,
             ref float swingAngleDegrees,
             ref float kneeAngleDegrees)
         {
@@ -169,6 +222,8 @@ namespace PhysicsDrivenMovement.Character
                 kneeAngle * 0.12f,
                 kneeAngle * 0.7f * urgencyScale,
                 easedRecoveryProgress) * command.BlendWeight;
+            recoverySwingTarget += ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceSwingBoost);
+            recoveryKneeTarget += ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceKneeBoost);
 
             swingAngleDegrees = command.Mode == LegCommandMode.HoldPose
                 ? recoverySwingTarget
@@ -180,6 +235,9 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput command,
             float stepAngle,
             float kneeAngle,
+            float clearanceReferenceHeight,
+            float clearanceSwingBoost,
+            float clearanceKneeBoost,
             ref float swingAngleDegrees,
             ref float kneeAngleDegrees)
         {
@@ -192,9 +250,31 @@ namespace PhysicsDrivenMovement.Character
                 stepAngle * 0.78f * urgencyScale,
                 Mathf.SmoothStep(0f, 1f, catchStepProgress)) * command.BlendWeight;
             float catchStepKneeTarget = kneeAngle * 0.65f * urgencyScale * command.BlendWeight;
+            catchStepForwardTarget += ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceSwingBoost);
+            catchStepKneeTarget += ComputeClearanceBoost(command, clearanceReferenceHeight, clearanceKneeBoost);
 
             swingAngleDegrees = Mathf.Max(swingAngleDegrees, catchStepForwardTarget);
             kneeAngleDegrees = Mathf.Max(kneeAngleDegrees, catchStepKneeTarget);
+        }
+
+        private static float ComputeClearanceBoost(
+            LegCommandOutput command,
+            float clearanceReferenceHeight,
+            float maximumBoost)
+        {
+            if (!command.StepTarget.HasClearanceRequest ||
+                clearanceReferenceHeight <= 0f ||
+                maximumBoost <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalizedHeight = Mathf.Clamp01(
+                command.StepTarget.RequestedClearanceHeight / clearanceReferenceHeight);
+            float clearanceBlend = Mathf.SmoothStep(0f, 1f, normalizedHeight) *
+                command.StepTarget.Confidence *
+                command.BlendWeight;
+            return maximumBoost * clearanceBlend;
         }
 
         /// <summary>

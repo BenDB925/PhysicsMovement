@@ -246,6 +246,12 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Right-foot GroundSensor, located in Awake via component search.</summary>
         private GroundSensor _footR;
 
+        /// <summary>Left-foot Rigidbody, cached from the GroundSensor's GameObject for step-up lift assist.</summary>
+        private Rigidbody _footRbL;
+
+        /// <summary>Right-foot Rigidbody, cached from the GroundSensor's GameObject for step-up lift assist.</summary>
+        private Rigidbody _footRbR;
+
         /// <summary>
         /// Desired world-space rotation (yaw + upright). Updated via
         /// <see cref="SetFacingDirection"/>. Defaults to forward-facing upright.
@@ -439,6 +445,11 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning($"[BalanceController] '{name}': only one named foot sensor " +
                                  "was resolved. Ground checks may be less reliable.", this);
             }
+
+            if (_footL != null)
+                _footRbL = _footL.GetComponent<Rigidbody>();
+            if (_footR != null)
+                _footRbR = _footR.GetComponent<Rigidbody>();
 
             _assist = new StartupStandAssist();
             _assist.Initialize(transform);
@@ -684,9 +695,27 @@ namespace PhysicsDrivenMovement.Character
             // character from settling into a seated basin-of-attraction.
             // HeightMaintenanceScale from the director command modulates the force
             // so the locomotion plan can boost or suppress height recovery.
+            // Ground-relative offset: when a grounded foot reports a contact point
+            // above world-origin (step-up, raised platform), the target rises by the
+            // highest grounded contact height so the character physically climbs.
+            // Step-up anticipation: when either foot detects a forward obstruction,
+            // the estimated step height is added preemptively so the body rises
+            // before the swing foot reaches the face, giving the foot arc clearance.
             if (_enableHeightMaintenance && effectivelyGrounded)
             {
-                float hipsHeightError = _standingHipsHeight - _rb.position.y;
+                float groundContactHeight = 0f;
+                if (_footL != null && _footL.IsGrounded)
+                    groundContactHeight = Mathf.Max(groundContactHeight, _footL.GroundPoint.y);
+                if (_footR != null && _footR.IsGrounded)
+                    groundContactHeight = Mathf.Max(groundContactHeight, _footR.GroundPoint.y);
+
+                float anticipatedStepHeight = 0f;
+                if (_footL != null && _footL.HasForwardObstruction)
+                    anticipatedStepHeight = Mathf.Max(anticipatedStepHeight, _footL.EstimatedStepHeight);
+                if (_footR != null && _footR.HasForwardObstruction)
+                    anticipatedStepHeight = Mathf.Max(anticipatedStepHeight, _footR.EstimatedStepHeight);
+
+                float hipsHeightError = (_standingHipsHeight + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
                     float heightScale = _currentBodySupportCommand.HeightMaintenanceScale;
@@ -694,6 +723,34 @@ namespace PhysicsDrivenMovement.Character
                                         - _rb.linearVelocity.y * (_heightMaintenanceDamping * heightScale);
                     heightForce = Mathf.Max(0f, heightForce);
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
+                }
+            }
+
+            // STEP 3.7b: Step-up foot lift assist.
+            // When the character is grounded and a forward obstruction is detected,
+            // apply a direct upward spring-damper force to each non-grounded (swing)
+            // foot Rigidbody. This supplements the joint drive target angles by
+            // physically lifting the foot box collider above the step face before
+            // the spring-based joint drives converge to the clearance target.
+            if (IsGrounded)
+            {
+                float maxDetectedStepHeight = 0f;
+                if (_footL != null && _footL.HasForwardObstruction)
+                    maxDetectedStepHeight = Mathf.Max(maxDetectedStepHeight, _footL.EstimatedStepHeight);
+                if (_footR != null && _footR.HasForwardObstruction)
+                    maxDetectedStepHeight = Mathf.Max(maxDetectedStepHeight, _footR.EstimatedStepHeight);
+
+                if (maxDetectedStepHeight > 0f)
+                {
+                    float groundRef = 0f;
+                    if (_footL != null && _footL.IsGrounded)
+                        groundRef = Mathf.Max(groundRef, _footL.GroundPoint.y);
+                    if (_footR != null && _footR.IsGrounded)
+                        groundRef = Mathf.Max(groundRef, _footR.GroundPoint.y);
+
+                    float targetFootY = groundRef + maxDetectedStepHeight;
+                    ApplyStepUpFootLiftAssist(_footRbL, _footL, targetFootY);
+                    ApplyStepUpFootLiftAssist(_footRbR, _footR, targetFootY);
                 }
             }
 
@@ -840,6 +897,33 @@ namespace PhysicsDrivenMovement.Character
                     }
                 }
             }
+        }
+
+        // ─── Step-Up Foot Lift Assist ─────────────────────────────────────────
+
+        private const float StepUpFootLiftStrength = 400f;
+        private const float StepUpFootLiftDamping = 40f;
+
+        /// <summary>
+        /// Applies an upward spring-damper force to a non-grounded foot when a step-up
+        /// is detected ahead. Only fires for swing-phase feet (not grounded).
+        /// </summary>
+        private static void ApplyStepUpFootLiftAssist(
+            Rigidbody footRb,
+            GroundSensor foot,
+            float targetY)
+        {
+            if (footRb == null || foot == null || foot.IsGrounded)
+                return;
+
+            float deficit = targetY - footRb.position.y;
+            if (deficit <= 0f)
+                return;
+
+            float liftForce = deficit * StepUpFootLiftStrength
+                              - footRb.linearVelocity.y * StepUpFootLiftDamping;
+            liftForce = Mathf.Max(0f, liftForce);
+            footRb.AddForce(Vector3.up * liftForce, ForceMode.Force);
         }
 
         private void LogRecoveryTelemetry(

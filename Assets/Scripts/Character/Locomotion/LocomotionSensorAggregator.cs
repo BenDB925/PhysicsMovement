@@ -148,6 +148,7 @@ namespace PhysicsDrivenMovement.Character
             bool hasForwardObstruction = sensor != null && sensor.HasForwardObstruction;
             float estimatedStepHeight = sensor != null ? sensor.EstimatedStepHeight : 0f;
             float forwardObstructionConfidence = sensor != null ? sensor.ForwardObstructionConfidence : 0f;
+            Vector3 forwardObstructionTopSurfacePoint = sensor != null ? sensor.ForwardObstructionTopSurfacePoint : Vector3.zero;
 
             return new FootContactObservation(
                 leg,
@@ -157,7 +158,8 @@ namespace PhysicsDrivenMovement.Character
                 slipEstimate,
                 hasForwardObstruction,
                 estimatedStepHeight,
-                forwardObstructionConfidence);
+                forwardObstructionConfidence,
+                forwardObstructionTopSurfacePoint);
         }
 
         private static float ComputeSupportQuality(SupportGeometry supportGeometry)

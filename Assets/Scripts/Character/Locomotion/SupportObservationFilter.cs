@@ -126,7 +126,8 @@ namespace PhysicsDrivenMovement.Character
                 slipEstimate,
                 instantaneousFoot.HasForwardObstruction,
                 instantaneousFoot.EstimatedStepHeight,
-                instantaneousFoot.ForwardObstructionConfidence);
+                instantaneousFoot.ForwardObstructionConfidence,
+                instantaneousFoot.ForwardObstructionTopSurfacePoint);
         }
 
         private static float MoveTowards(float current, float target, float speed, float deltaTime)

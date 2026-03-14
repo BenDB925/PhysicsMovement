@@ -540,6 +540,347 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator SetCommandFrame_WhenSwingStepTargetRequestsClearance_RaisesKneeAndFootHigherThanFlatSwing()
+        {
+            // Arrange
+            yield return null;
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 5f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true);
+
+            object flatSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.45f,
+                swingAngleDegrees: 14f,
+                kneeAngleDegrees: 20f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0f);
+
+            object clearanceSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.45f,
+                swingAngleDegrees: 14f,
+                kneeAngleDegrees: 20f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            object flatStepTarget = GetPropertyValue<object>(flatSwingCommand, "StepTarget");
+            object clearanceStepTarget = GetPropertyValue<object>(clearanceSwingCommand, "StepTarget");
+            Assert.That(GetPropertyValue<bool>(flatStepTarget, "HasClearanceRequest"), Is.False,
+                "Flat-ground command injection should preserve a valid step target without a clearance request.");
+            Assert.That(GetPropertyValue<bool>(clearanceStepTarget, "HasClearanceRequest"), Is.True,
+                "Clearance command injection must preserve the explicit step-up clearance request into LegCommandOutput.");
+
+            ExplicitSwingLiftOutcome flatOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                flatSwingCommand,
+                rightSupportCommand,
+                outcome => flatOutcome = outcome);
+
+            ExplicitSwingLiftOutcome clearanceOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                clearanceSwingCommand,
+                rightSupportCommand,
+                outcome => clearanceOutcome = outcome);
+
+            // Assert
+            bool raisedKneeMore = clearanceOutcome.MaxKneeFlexionIncreaseDegrees >
+                flatOutcome.MaxKneeFlexionIncreaseDegrees + 1f;
+            bool raisedFootMore = clearanceOutcome.MaxFootRiseMetres >
+                flatOutcome.MaxFootRiseMetres + 0.005f;
+
+            Assert.That(raisedKneeMore || raisedFootMore, Is.True,
+                $"A swing command tagged with step-up clearance should physically raise the knee or foot more than the same flat-ground swing. " +
+                $"Flat knee flexion increase={flatOutcome.MaxKneeFlexionIncreaseDegrees:F2}°, " +
+                $"clearance knee flexion increase={clearanceOutcome.MaxKneeFlexionIncreaseDegrees:F2}°, " +
+                $"flat foot rise={flatOutcome.MaxFootRiseMetres:F4} m, clearance foot rise={clearanceOutcome.MaxFootRiseMetres:F4} m.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenRuntimeLikeSwingAlreadyHasLargeAngles_ClearanceStillRaisesKneeAndFootHigher()
+        {
+            // Arrange
+            yield return null;
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 5f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true);
+
+            object flatSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.45f,
+                swingAngleDegrees: 39f,
+                kneeAngleDegrees: 60f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0f);
+
+            object clearanceSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.45f,
+                swingAngleDegrees: 39f,
+                kneeAngleDegrees: 60f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            ExplicitSwingLiftOutcome flatOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                flatSwingCommand,
+                rightSupportCommand,
+                outcome => flatOutcome = outcome);
+
+            ExplicitSwingLiftOutcome clearanceOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                clearanceSwingCommand,
+                rightSupportCommand,
+                outcome => clearanceOutcome = outcome);
+
+            // Assert
+            bool raisedKneeMore = clearanceOutcome.MaxKneeFlexionIncreaseDegrees >
+                flatOutcome.MaxKneeFlexionIncreaseDegrees + 0.5f;
+            bool raisedFootMore = clearanceOutcome.MaxFootRiseMetres >
+                flatOutcome.MaxFootRiseMetres + 0.0025f;
+
+            Assert.That(raisedKneeMore || raisedFootMore, Is.True,
+                $"A step-up clearance request should still add meaningful lift when the base swing already carries runtime-like angles. " +
+                $"Flat knee flexion increase={flatOutcome.MaxKneeFlexionIncreaseDegrees:F2}°, " +
+                $"clearance knee flexion increase={clearanceOutcome.MaxKneeFlexionIncreaseDegrees:F2}°, " +
+                $"flat foot rise={flatOutcome.MaxFootRiseMetres:F4} m, clearance foot rise={clearanceOutcome.MaxFootRiseMetres:F4} m.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenClearanceStepTargetLandsFartherAhead_ExtendsForwardSwingTowardTouchdown()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            Vector3 nearFootTarget = _hips.transform.position + Vector3.forward * 0.25f;
+            Vector3 farFootTarget = _hips.transform.position + Vector3.forward * 0.85f;
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 5f,
+                blendWeight: 1f,
+                footTarget: _hips.transform.position + Vector3.right * 0.1f,
+                stepTargetValid: true);
+
+            object nearTargetSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.82f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 52f,
+                blendWeight: 1f,
+                footTarget: nearFootTarget,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            object farTargetSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.82f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 52f,
+                blendWeight: 1f,
+                footTarget: farFootTarget,
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            // Act
+            ApplyExplicitCommandFrame(nearTargetSwingCommand, rightSupportCommand);
+            float nearUpperLegTargetAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            ApplyExplicitCommandFrame(farTargetSwingCommand, rightSupportCommand);
+            float farUpperLegTargetAngle = Quaternion.Angle(Quaternion.identity, _upperLegLJoint.targetRotation);
+
+            // Assert
+            Assert.That(farUpperLegTargetAngle, Is.GreaterThan(nearUpperLegTargetAngle + 3f),
+                $"A clearance-tagged swing should reach farther forward when the planned touchdown is farther ahead. " +
+                $"Near target upper-leg angle={nearUpperLegTargetAngle:F2}°, far target upper-leg angle={farUpperLegTargetAngle:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenClearanceStepTargetLandsHigher_KeepsLateSwingLiftedTowardRaisedTouchdown()
+        {
+            // Arrange
+            yield return null;
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 5f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true);
+
+            object lowLandingSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.88f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 38f,
+                blendWeight: 1f,
+                footTarget: new Vector3(0f, 0.05f, 0.68f),
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            object highLandingSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.88f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 38f,
+                blendWeight: 1f,
+                footTarget: new Vector3(0f, 0.28f, 0.68f),
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            ExplicitSwingLiftOutcome lowLandingOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                lowLandingSwingCommand,
+                rightSupportCommand,
+                outcome => lowLandingOutcome = outcome);
+
+            ExplicitSwingLiftOutcome highLandingOutcome = default;
+            yield return MeasureExplicitSwingLiftOutcome(
+                highLandingSwingCommand,
+                rightSupportCommand,
+                outcome => highLandingOutcome = outcome);
+
+            // Assert
+            bool keptFootHigher = highLandingOutcome.MaxFootRiseMetres >
+                lowLandingOutcome.MaxFootRiseMetres + 0.003f;
+            bool keptKneeHigher = highLandingOutcome.MaxKneeFlexionIncreaseDegrees >
+                lowLandingOutcome.MaxKneeFlexionIncreaseDegrees + 0.5f;
+
+            Assert.That(keptFootHigher || keptKneeHigher, Is.True,
+                $"A higher planned touchdown plane should keep late swing lifted toward the raised landing. " +
+                $"Low landing foot rise={lowLandingOutcome.MaxFootRiseMetres:F4} m, high landing foot rise={highLandingOutcome.MaxFootRiseMetres:F4} m, " +
+                $"low landing knee flexion increase={lowLandingOutcome.MaxKneeFlexionIncreaseDegrees:F2}°, " +
+                $"high landing knee flexion increase={highLandingOutcome.MaxKneeFlexionIncreaseDegrees:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetCommandFrame_WhenClearanceStepTargetLandsHigher_StraightensOppositeSupportLeg()
+        {
+            // Arrange
+            yield return null;
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_legAnimator, "_useWorldSpaceSwing", false);
+            yield return new WaitForFixedUpdate();
+
+            object lowLandingSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.72f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 42f,
+                blendWeight: 1f,
+                footTarget: new Vector3(0f, 0.05f, 0.68f),
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            object highLandingSwingCommand = CreateLegCommand(
+                legName: "Left",
+                modeName: "Cycle",
+                stateName: "Swing",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 0.72f,
+                swingAngleDegrees: 32f,
+                kneeAngleDegrees: 42f,
+                blendWeight: 1f,
+                footTarget: new Vector3(0f, 0.28f, 0.68f),
+                stepTargetValid: true,
+                requestedClearanceHeight: 0.24f);
+
+            object rightSupportCommand = CreateLegCommand(
+                legName: "Right",
+                modeName: "Cycle",
+                stateName: "Stance",
+                transitionReasonName: "DefaultCadence",
+                cyclePhase: Mathf.PI * 1.35f,
+                swingAngleDegrees: -4f,
+                kneeAngleDegrees: 18f,
+                blendWeight: 1f,
+                footTarget: Vector3.forward,
+                stepTargetValid: true);
+
+            // Act
+            ApplyExplicitCommandFrame(lowLandingSwingCommand, rightSupportCommand);
+            float lowLandingSupportKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegRJoint.targetRotation);
+
+            ApplyExplicitCommandFrame(highLandingSwingCommand, rightSupportCommand);
+            float highLandingSupportKneeAngle = Quaternion.Angle(Quaternion.identity, _lowerLegRJoint.targetRotation);
+
+            // Assert
+            Assert.That(highLandingSupportKneeAngle, Is.LessThan(lowLandingSupportKneeAngle - 1f),
+                $"A higher planned touchdown should temporarily straighten the opposite support leg to help lift the body during step-up transfer. " +
+                $"Low landing support-knee angle={lowLandingSupportKneeAngle:F2}°, high landing support-knee angle={highLandingSupportKneeAngle:F2}°.");
+        }
+
+        [UnityTest]
         public IEnumerator SetCommandFrame_WhenOppositeLegIsInStance_ExtendsSupportKneeRelativeToSwingLeg()
         {
             // Arrange
@@ -2350,10 +2691,102 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return angle * Mathf.Sign(xzComponent != 0f ? xzComponent : 1f);
         }
 
+        private IEnumerator MeasureExplicitSwingLiftOutcome(
+            object leftCommand,
+            object rightCommand,
+            Action<ExplicitSwingLiftOutcome> captureOutcome)
+        {
+            const int SettleFrames = 10;
+            const int PhysicsFrames = 20;
+            const float GroundY = 0f;
+
+            GameObject rigRoot = BuildGaitQualityRig(out PlayerMovement physMovement,
+                out GameObject physUpperLegL, out GameObject physUpperLegR,
+                out GameObject physLowerLegL, out GameObject physLowerLegR,
+                out GameObject physFootL, out GameObject physFootR);
+
+            GameObject physicsHips = physMovement.gameObject;
+            Rigidbody hipsRb = physicsHips.GetComponent<Rigidbody>();
+            BalanceController balance = physicsHips.GetComponent<BalanceController>();
+            CharacterState characterState = physicsHips.GetComponent<CharacterState>();
+            LegAnimator legAnimator = physicsHips.GetComponent<LegAnimator>();
+            LocomotionDirector director = physicsHips.GetComponent<LocomotionDirector>();
+
+            Assert.That(hipsRb, Is.Not.Null, "Outcome rig must include a Rigidbody on the hips root.");
+            Assert.That(balance, Is.Not.Null, "Outcome rig must include BalanceController.");
+            Assert.That(characterState, Is.Not.Null, "Outcome rig must include CharacterState.");
+            Assert.That(legAnimator, Is.Not.Null, "Outcome rig must include LegAnimator.");
+            Assert.That(director, Is.Not.Null, "Outcome rig must include LocomotionDirector.");
+
+            SetPrivateField(legAnimator, "_useWorldSpaceSwing", false);
+            SetPrivateField(legAnimator, "_useStateDrivenExecution", true);
+            SetPrivateField(legAnimator, "_spinSuppressFrames", 5);
+            characterState.SetStateForTest(CharacterStateType.Moving);
+            balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            physMovement.SetMoveInputForTest(Vector2.up);
+
+            yield return null;
+
+            for (int i = 0; i < SettleFrames; i++)
+            {
+                hipsRb.linearVelocity = Vector3.zero;
+                hipsRb.angularVelocity = Vector3.zero;
+                yield return new WaitForFixedUpdate();
+            }
+
+            float settledFootClearance = GetFootSoleClearance(physFootL, GroundY);
+            float settledKneeFlexion = GetKneeFlexionAngle(physUpperLegL, physLowerLegL, physFootL);
+
+            director.enabled = false;
+
+            RigidbodyConstraints originalConstraints = hipsRb.constraints;
+            hipsRb.constraints = RigidbodyConstraints.FreezePosition | RigidbodyConstraints.FreezeRotation;
+            hipsRb.linearVelocity = Vector3.zero;
+            hipsRb.angularVelocity = Vector3.zero;
+
+            ApplyExplicitCommandFrame(legAnimator, director, leftCommand, rightCommand);
+
+            float maxFootRise = 0f;
+            float maxKneeFlexionIncrease = 0f;
+
+            for (int i = 0; i < PhysicsFrames; i++)
+            {
+                hipsRb.linearVelocity = Vector3.zero;
+                hipsRb.angularVelocity = Vector3.zero;
+                yield return new WaitForFixedUpdate();
+
+                float footRise = GetFootSoleClearance(physFootL, GroundY) - settledFootClearance;
+                float kneeFlexionIncrease = GetKneeFlexionAngle(physUpperLegL, physLowerLegL, physFootL) - settledKneeFlexion;
+
+                if (footRise > maxFootRise)
+                {
+                    maxFootRise = footRise;
+                }
+
+                if (kneeFlexionIncrease > maxKneeFlexionIncrease)
+                {
+                    maxKneeFlexionIncrease = kneeFlexionIncrease;
+                }
+            }
+
+            hipsRb.constraints = originalConstraints;
+            captureOutcome?.Invoke(new ExplicitSwingLiftOutcome(maxFootRise, maxKneeFlexionIncrease));
+            UnityEngine.Object.Destroy(rigRoot);
+        }
+
         private void ApplyExplicitCommandFrame(object leftCommand, object rightCommand)
         {
-            object desiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
-            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+            ApplyExplicitCommandFrame(_legAnimator, _director, leftCommand, rightCommand);
+        }
+
+        private static void ApplyExplicitCommandFrame(
+            LegAnimator legAnimator,
+            LocomotionDirector director,
+            object leftCommand,
+            object rightCommand)
+        {
+            object desiredInput = GetPropertyValue<object>(director, "CurrentDesiredInput");
+            object observation = GetPropertyValue<object>(director, "CurrentObservation");
 
             MethodInfo setCommandFrameMethod = typeof(LegAnimator).GetMethod(
                 "SetCommandFrame",
@@ -2364,7 +2797,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     "Missing expected internal method 'SetCommandFrame' on LegAnimator.");
             }
 
-            setCommandFrameMethod.Invoke(_legAnimator, new[] { desiredInput, observation, leftCommand, rightCommand });
+            setCommandFrameMethod.Invoke(legAnimator, new[] { desiredInput, observation, leftCommand, rightCommand });
         }
 
         private static object CreateLegCommand(
@@ -2376,7 +2809,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float swingAngleDegrees,
             float kneeAngleDegrees,
             float blendWeight,
-            Vector3 footTarget)
+            Vector3 footTarget,
+            bool stepTargetValid = false,
+            float requestedClearanceHeight = 0f,
+            float stepTargetConfidence = 1f)
         {
             Assembly characterAssembly = typeof(LegAnimator).Assembly;
             Type legType = RequireLocomotionType(characterAssembly, "LocomotionLeg");
@@ -2409,8 +2845,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             PropertyInfo invalidProp = stepTargetType.GetProperty(
                 "Invalid",
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-            object stepTarget = invalidProp?.GetValue(null)
-                ?? Activator.CreateInstance(stepTargetType);
+            object stepTarget = stepTargetValid
+                ? CreateStepTarget(stepTargetType, footTarget, stepTargetConfidence, requestedClearanceHeight)
+                : invalidProp?.GetValue(null) ?? Activator.CreateInstance(stepTargetType);
 
             ConstructorInfo commandConstructor = commandType.GetConstructor(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
@@ -2449,6 +2886,79 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 recoverySituationNone,
                 0f,
             });
+        }
+
+        private static object CreateStepTarget(
+            Type stepTargetType,
+            Vector3 landingPosition,
+            float confidence,
+            float requestedClearanceHeight)
+        {
+            ConstructorInfo fullConstructor = stepTargetType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    typeof(Vector3),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                },
+                modifiers: null);
+            if (fullConstructor != null)
+            {
+                return fullConstructor.Invoke(new object[]
+                {
+                    landingPosition,
+                    0.18f,
+                    0f,
+                    0f,
+                    confidence,
+                    requestedClearanceHeight,
+                });
+            }
+
+            ConstructorInfo legacyConstructor = stepTargetType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    typeof(Vector3),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                },
+                modifiers: null);
+            if (legacyConstructor == null)
+            {
+                throw new InvalidOperationException(
+                    "Missing expected StepTarget constructor for command-injection tests.");
+            }
+
+            return legacyConstructor.Invoke(new object[]
+            {
+                landingPosition,
+                0.18f,
+                0f,
+                0f,
+                confidence,
+            });
+        }
+
+        private readonly struct ExplicitSwingLiftOutcome
+        {
+            public ExplicitSwingLiftOutcome(float maxFootRiseMetres, float maxKneeFlexionIncreaseDegrees)
+            {
+                MaxFootRiseMetres = maxFootRiseMetres;
+                MaxKneeFlexionIncreaseDegrees = maxKneeFlexionIncreaseDegrees;
+            }
+
+            public float MaxFootRiseMetres { get; }
+
+            public float MaxKneeFlexionIncreaseDegrees { get; }
         }
 
         private static Type RequireLocomotionType(Assembly assembly, string typeName)

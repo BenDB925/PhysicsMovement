@@ -1,4 +1,5 @@
 using System.IO;
+using PhysicsDrivenMovement.Core;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -47,6 +48,21 @@ namespace PhysicsDrivenMovement.Character
                  "forward-swing phase (sin(phase) > 0). Biases the knee toward the chest " +
                  "for a powerful, high-stepping gait. Default 15°.")]
         private float _upperLegLiftBoost = 31.9f;
+
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Requested clearance height (metres) that maps to the full step-up execution boost. " +
+             "Smaller planner requests scale proportionally below this reference height.")]
+        private float _stepUpClearanceReferenceHeight = 0.25f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra upper-leg swing angle (degrees) available to step-up-tagged swings when the " +
+             "planner requests terrain clearance.")]
+           private float _stepUpClearanceSwingBoost = 16f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra knee-bend angle (degrees) available to step-up-tagged swings when the " +
+             "planner requests terrain clearance.")]
+        private float _stepUpClearanceKneeBoost = 42f;
 
         [SerializeField, Range(0f, 20f)]
         [Tooltip("Controls three related smooth-transition behaviours:\n" +
@@ -265,6 +281,15 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Right foot Transform, found by name ("Foot_R") in Awake. May be null if the hierarchy lacks it.</summary>
         private Transform _footR;
 
+        /// <summary>Original physics layer of the foot GameObjects, cached in Awake for step-up collision bypass.</summary>
+        private int _originalFootLayer;
+
+        /// <summary>True while the left foot is temporarily on the LowerLegParts layer to bypass step face collision.</summary>
+        private bool _footLOnBypassLayer;
+
+        /// <summary>True while the right foot is temporarily on the LowerLegParts layer to bypass step face collision.</summary>
+        private bool _footROnBypassLayer;
+
         /// <summary>
         /// True when the stranded-foot forward bias is active this frame: both feet are
         /// behind the hips and the player has active movement input. Exposed for test
@@ -397,6 +422,10 @@ namespace PhysicsDrivenMovement.Character
             //         hierarchy lacks them (e.g. minimal test rigs) the bias feature degrades
             //         gracefully — IsFootBehindHips returns false when the transform is null.
             CacheFootTransforms();
+            if (_footL != null)
+                _originalFootLayer = _footL.gameObject.layer;
+            else if (_footR != null)
+                _originalFootLayer = _footR.gameObject.layer;
 
             // STEP 5: Create the joint driver that owns swing target application.
             _jointDriver = new LegJointDriver(_upperLegL, _upperLegR, _lowerLegL, _lowerLegR, _swingAxis, _kneeAxis);
@@ -948,10 +977,51 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            LegExecutionProfileResolver.Resolve(_leftLegCommand, _useStateDrivenExecution, _stepAngle, _kneeAngle, out float leftSwingDeg, out float leftKneeBendDeg);
-            LegExecutionProfileResolver.Resolve(_rightLegCommand, _useStateDrivenExecution, _stepAngle, _kneeAngle, out float rightSwingDeg, out float rightKneeBendDeg);
+            LegExecutionProfileResolver.Resolve(
+                _leftLegCommand,
+                _useStateDrivenExecution,
+                _stepAngle,
+                _kneeAngle,
+                _stepUpClearanceReferenceHeight,
+                _stepUpClearanceSwingBoost,
+                _stepUpClearanceKneeBoost,
+                out float leftSwingDeg,
+                out float leftKneeBendDeg);
+            LegExecutionProfileResolver.Resolve(
+                _rightLegCommand,
+                _useStateDrivenExecution,
+                _stepAngle,
+                _kneeAngle,
+                _stepUpClearanceReferenceHeight,
+                _stepUpClearanceSwingBoost,
+                _stepUpClearanceKneeBoost,
+                out float rightSwingDeg,
+                out float rightKneeBendDeg);
+
+            Vector3 gaitForward = LegJointDriver.GetWorldGaitForward(_commandDesiredInput, _commandObservation);
+            leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, leftSwingDeg);
+            rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, rightSwingDeg);
+            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, ref leftSwingDeg, ref leftKneeBendDeg);
+            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, ref rightSwingDeg, ref rightKneeBendDeg);
+            ApplyStepUpSupportLegExtension(
+                _leftLegCommand,
+                _footR,
+                _rightLegCommand.State,
+                ref rightKneeBendDeg);
+            ApplyStepUpSupportLegExtension(
+                _rightLegCommand,
+                _footL,
+                _leftLegCommand.State,
+                ref leftKneeBendDeg);
 
             _jointDriver.ApplySwingTargets(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg, _useWorldSpaceSwing, _commandDesiredInput, _commandObservation);
+
+            // STEP 8: Temporarily bypass foot-Environment collision during clearance-tagged swing
+            //         so the foot box collider does not jam against the step face. The foot is
+            //         moved to the LowerLegParts layer (same as the shins) and restored once
+            //         the foot is above the planned landing height or the swing phase ends.
+            ManageStepUpFootCollision(_leftLegCommand, _footL, ref _footLOnBypassLayer);
+            ManageStepUpFootCollision(_rightLegCommand, _footR, ref _footROnBypassLayer);
         }
 
         private void EnsureLegStateMachines()
@@ -1179,6 +1249,33 @@ namespace PhysicsDrivenMovement.Character
         /// If the hierarchy lacks foot objects (e.g. minimal test rigs), the fields stay null
         /// and <see cref="IsFootBehindHips"/> degrades gracefully (returns false).
         /// </summary>
+        private void ManageStepUpFootCollision(
+            LegCommandOutput command,
+            Transform foot,
+            ref bool isOnBypassLayer)
+        {
+            if (foot == null)
+                return;
+
+            bool isSwingLike = command.State == LegStateType.Swing ||
+                               command.State == LegStateType.CatchStep;
+            bool needsBypass = isSwingLike &&
+                               command.StepTarget.HasClearanceRequest &&
+                               command.StepTarget.IsValid &&
+                               foot.position.y < command.StepTarget.LandingPosition.y;
+
+            if (needsBypass && !isOnBypassLayer)
+            {
+                foot.gameObject.layer = GameSettings.LayerLowerLegParts;
+                isOnBypassLayer = true;
+            }
+            else if (!needsBypass && isOnBypassLayer)
+            {
+                foot.gameObject.layer = _originalFootLayer;
+                isOnBypassLayer = false;
+            }
+        }
+
         private void CacheFootTransforms()
         {
             Transform[] children = GetComponentsInChildren<Transform>(includeInactive: true);
@@ -1208,6 +1305,112 @@ namespace PhysicsDrivenMovement.Character
             return GetFootForwardOffsetFromHips(footTransform, referenceDirection) < 0f;
         }
 
+        private float ApplyStepTargetReachFloor(
+            LegCommandOutput command,
+            Transform footTransform,
+            Vector3 gaitReferenceDirection,
+            float swingAngleDegrees)
+        {
+            if (!command.StepTarget.IsValid ||
+                !command.StepTarget.HasClearanceRequest ||
+                footTransform == null ||
+                command.BlendWeight <= 0f)
+            {
+                return swingAngleDegrees;
+            }
+
+            float currentFootForwardOffset = GetFootForwardOffsetFromHips(footTransform, gaitReferenceDirection);
+            float targetForwardOffset = GetPointForwardOffsetFromHips(command.StepTarget.LandingPosition, gaitReferenceDirection);
+            float reachDeficit = targetForwardOffset - currentFootForwardOffset;
+            if (reachDeficit <= 0f)
+            {
+                return swingAngleDegrees;
+            }
+
+            float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
+            float reachBlend = Mathf.SmoothStep(0.2f, 1f, swingProgress);
+            float normalizedReach = Mathf.Clamp01(reachDeficit / 0.65f) * reachBlend;
+            float reachFloor = Mathf.Lerp(_stepAngle * 0.62f, _stepAngle * 1.08f, normalizedReach) * command.BlendWeight;
+            return Mathf.Max(swingAngleDegrees, reachFloor);
+        }
+
+        private void ApplyStepTargetLandingHeightFloor(
+            LegCommandOutput command,
+            Transform footTransform,
+            ref float swingAngleDegrees,
+            ref float kneeAngleDegrees)
+        {
+            if (!command.StepTarget.IsValid ||
+                !command.StepTarget.HasClearanceRequest ||
+                footTransform == null ||
+                command.BlendWeight <= 0f ||
+                _stepUpClearanceReferenceHeight <= 0f)
+            {
+                return;
+            }
+
+            float landingHeightDelta = command.StepTarget.LandingPosition.y - footTransform.position.y;
+            if (landingHeightDelta <= 0f)
+            {
+                return;
+            }
+
+            float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
+            float lateSwingBlend = Mathf.SmoothStep(0.45f, 1f, swingProgress);
+            if (lateSwingBlend <= 0f)
+            {
+                return;
+            }
+
+            float normalizedLandingHeight = Mathf.Clamp01(landingHeightDelta / _stepUpClearanceReferenceHeight);
+            float landingHeightBlend = Mathf.SmoothStep(0f, 1f, normalizedLandingHeight) * lateSwingBlend;
+            if (landingHeightBlend <= 0f)
+            {
+                return;
+            }
+
+            float landingSwingContribution = Mathf.Lerp(0f, _stepAngle * 0.22f, landingHeightBlend) * command.BlendWeight;
+            float landingKneeContribution = Mathf.Lerp(0f, _kneeAngle * 0.48f, landingHeightBlend) * command.BlendWeight;
+
+            swingAngleDegrees += landingSwingContribution;
+            kneeAngleDegrees += landingKneeContribution;
+        }
+
+        private void ApplyStepUpSupportLegExtension(
+            LegCommandOutput swingCommand,
+            Transform supportFootTransform,
+            LegStateType supportLegState,
+            ref float supportKneeBendDegrees)
+        {
+            if (!swingCommand.StepTarget.IsValid ||
+                !swingCommand.StepTarget.HasClearanceRequest ||
+                supportFootTransform == null ||
+                supportLegState != LegStateType.Stance ||
+                swingCommand.BlendWeight <= 0f ||
+                _stepUpClearanceReferenceHeight <= 0f)
+            {
+                return;
+            }
+
+            float landingRiseAboveSupport = swingCommand.StepTarget.LandingPosition.y - supportFootTransform.position.y;
+            if (landingRiseAboveSupport <= 0f)
+            {
+                return;
+            }
+
+            float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(swingCommand.CyclePhase, Mathf.PI));
+            float supportExtensionBlend = Mathf.SmoothStep(0.2f, 0.85f, swingProgress) * swingCommand.BlendWeight;
+            if (supportExtensionBlend <= 0f)
+            {
+                return;
+            }
+
+            float normalizedRise = Mathf.Clamp01(landingRiseAboveSupport / _stepUpClearanceReferenceHeight);
+            float extensionStrength = Mathf.SmoothStep(0f, 1f, normalizedRise) * supportExtensionBlend;
+            float supportKneeCeiling = Mathf.Lerp(_kneeAngle * 0.18f, _kneeAngle * 0.04f, extensionStrength);
+            supportKneeBendDegrees = Mathf.Min(supportKneeBendDegrees, supportKneeCeiling);
+        }
+
         private float GetFootForwardOffsetFromHips(Transform footTransform, Vector3 referenceDirection)
         {
             if (footTransform == null) return 0f;
@@ -1231,6 +1434,28 @@ namespace PhysicsDrivenMovement.Character
                 referenceDirection);
 
             return forwardDot;
+        }
+
+        private float GetPointForwardOffsetFromHips(Vector3 point, Vector3 referenceDirection)
+        {
+            Vector3 hipToPoint = point - transform.position;
+
+            if (referenceDirection.sqrMagnitude >= 0.0001f)
+            {
+                referenceDirection = new Vector3(referenceDirection.x, 0f, referenceDirection.z);
+            }
+            else
+            {
+                referenceDirection = new Vector3(transform.forward.x, 0f, transform.forward.z);
+            }
+
+            if (referenceDirection.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            referenceDirection.Normalize();
+            return Vector3.Dot(new Vector3(hipToPoint.x, 0f, hipToPoint.z), referenceDirection);
         }
 
         /// <summary>

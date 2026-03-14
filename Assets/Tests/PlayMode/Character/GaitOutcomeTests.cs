@@ -1,6 +1,9 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
+using PhysicsDrivenMovement.Core;
+using PhysicsDrivenMovement.Environment;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -56,6 +59,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// regression is caught before physics even begins.
         /// </summary>
         private const float MinLegSpringAfterStart = 800f;
+
+        private const int StepUpWalkFrames = 700;
+        private const float StepUpSpawnRunUpMetres = 1.1f;
+        private const float StepUpPlateauClearanceMetres = 0.25f;
+        private const float StepUpPlateauHeightTolerance = 0.05f;
+        private const float StepUpSurfaceProbeInset = 0.2f;
+        private const int StepUpSurfaceSampleCount = 48;
+        private const int MaxStepUpConsecutiveFallenFrames = 80;
 
         // ─── Scene Setup ──────────────────────────────────────────────────────
 
@@ -268,6 +279,153 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"This suggests the left/right phase offset (π) is missing or the gait phase is broken.");
         }
 
+        [UnityTest]
+        public IEnumerator DirectApproachIntoStepUpLane_MakesForwardProgressOverRaisedLanding()
+        {
+            // Arrange
+            yield return LoadArenaScene();
+
+            TerrainScenarioMarker stepUpLane = FindTerrainScenarioMarker(TerrainScenarioType.StepUpLane);
+            LegAnimator legAnimator = FindLegAnimator();
+            PlayerMovement movement = legAnimator.GetComponent<PlayerMovement>();
+            Rigidbody hipsRb = legAnimator.GetComponent<Rigidbody>();
+            BalanceController balance = legAnimator.GetComponent<BalanceController>();
+            CharacterState characterState = legAnimator.GetComponent<CharacterState>();
+            RagdollSetup ragdollSetup = legAnimator.GetComponent<RagdollSetup>();
+            LocomotionDirector director = legAnimator.GetComponent<LocomotionDirector>();
+            GroundSensor leftSensor = FindGroundSensor(legAnimator.gameObject, "Foot_L");
+            GroundSensor rightSensor = FindGroundSensor(legAnimator.gameObject, "Foot_R");
+
+            Assert.That(stepUpLane, Is.Not.Null, "Arena_01 must expose a StepUpLane marker for the Chapter 7 outcome regression.");
+            Assert.That(movement, Is.Not.Null, "PlayerMovement component not found on the Arena_01 character.");
+            Assert.That(hipsRb, Is.Not.Null, "Rigidbody not found on the Arena_01 character.");
+            Assert.That(balance, Is.Not.Null, "BalanceController component not found on the Arena_01 character.");
+            Assert.That(characterState, Is.Not.Null, "CharacterState component not found on the Arena_01 character.");
+            Assert.That(director, Is.Not.Null, "LocomotionDirector component not found on the Arena_01 character.");
+            Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found on the Arena_01 character.");
+            Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found on the Arena_01 character.");
+
+            ResolveAscendingLaneProfile(
+                stepUpLane,
+                out Vector3 travelDirection,
+                out Vector3 lowSidePoint,
+                out Vector3 highSidePoint,
+                out float highSideHeight);
+
+            float plateauEntryDistance = FindRaisedPlateauEntryDistance(lowSidePoint, highSidePoint, travelDirection, highSideHeight);
+            Vector3 desiredSpawnPosition = new Vector3(lowSidePoint.x, hipsRb.position.y, lowSidePoint.z)
+                - travelDirection * StepUpSpawnRunUpMetres;
+            RepositionRagdoll(ragdollSetup, hipsRb, desiredSpawnPosition);
+
+            for (int i = 0; i < SettleFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            Vector3 startPosition = hipsRb.position;
+            Vector2 moveInput = BuildMoveInputForWorldDirection(travelDirection);
+            float requiredProgress = plateauEntryDistance + StepUpSpawnRunUpMetres + StepUpPlateauClearanceMetres;
+            float maxForwardProgress = 0f;
+            float maxHipsHeight = hipsRb.position.y;
+            int consecutiveFallenFrames = 0;
+            int maxConsecutiveFallenFrames = 0;
+            int obstructionFrames = 0;
+            int clearanceRequestFrames = 0;
+            float maxDetectedStepHeight = 0f;
+            float maxRequestedClearanceHeight = 0f;
+            float maxFacingAlignment = -1f;
+            float maxGroundedSupportHeight = Mathf.Max(leftSensor.GroundPoint.y, rightSensor.GroundPoint.y);
+            float maxPlannedLandingProgress = float.NegativeInfinity;
+            float minPlannedLandingHeightErrorToPlateau = float.PositiveInfinity;
+
+            // Act
+            movement.SetMoveInputForTest(moveInput);
+            for (int i = 0; i < StepUpWalkFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float forwardProgress = Vector3.Dot(hipsRb.position - startPosition, travelDirection);
+                maxForwardProgress = Mathf.Max(maxForwardProgress, forwardProgress);
+                maxHipsHeight = Mathf.Max(maxHipsHeight, hipsRb.position.y);
+                maxFacingAlignment = Mathf.Max(
+                    maxFacingAlignment,
+                    Vector3.Dot(Vector3.ProjectOnPlane(legAnimator.transform.forward, Vector3.up).normalized, travelDirection));
+                maxGroundedSupportHeight = Mathf.Max(
+                    maxGroundedSupportHeight,
+                    Mathf.Max(leftSensor.GroundPoint.y, rightSensor.GroundPoint.y));
+
+                bool hasForwardObstruction = leftSensor.HasForwardObstruction || rightSensor.HasForwardObstruction;
+                if (hasForwardObstruction)
+                {
+                    obstructionFrames++;
+                }
+
+                maxDetectedStepHeight = Mathf.Max(
+                    maxDetectedStepHeight,
+                    Mathf.Max(leftSensor.EstimatedStepHeight, rightSensor.EstimatedStepHeight));
+
+                float requestedClearanceHeight = GetMaximumRequestedClearanceHeight(director);
+                if (requestedClearanceHeight > 0f)
+                {
+                    clearanceRequestFrames++;
+                }
+
+                maxRequestedClearanceHeight = Mathf.Max(maxRequestedClearanceHeight, requestedClearanceHeight);
+
+                if (TryGetPlannedLandingMetrics(
+                    director,
+                    highSideHeight,
+                    startPosition,
+                    travelDirection,
+                    out float plannedLandingProgress,
+                    out float plannedLandingHeightErrorToPlateau))
+                {
+                    maxPlannedLandingProgress = Mathf.Max(maxPlannedLandingProgress, plannedLandingProgress);
+                    minPlannedLandingHeightErrorToPlateau = Mathf.Min(
+                        minPlannedLandingHeightErrorToPlateau,
+                        plannedLandingHeightErrorToPlateau);
+                }
+
+                if (characterState.CurrentState == CharacterStateType.Fallen)
+                {
+                    consecutiveFallenFrames++;
+                    maxConsecutiveFallenFrames = Mathf.Max(maxConsecutiveFallenFrames, consecutiveFallenFrames);
+                }
+                else
+                {
+                    consecutiveFallenFrames = 0;
+                }
+            }
+
+            movement.SetMoveInputForTest(Vector2.zero);
+
+            float finalForwardProgress = Vector3.Dot(hipsRb.position - startPosition, travelDirection);
+
+            LogBaseline(
+                nameof(DirectApproachIntoStepUpLane_MakesForwardProgressOverRaisedLanding),
+                $"requiredProgress={requiredProgress:F2}m plateauEntry={plateauEntryDistance + StepUpSpawnRunUpMetres:F2}m " +
+                $"finalProgress={finalForwardProgress:F2}m maxProgress={maxForwardProgress:F2}m maxHipsHeight={maxHipsHeight:F2}m " +
+                $"maxConsecutiveFallenFrames={maxConsecutiveFallenFrames} obstructionFrames={obstructionFrames} " +
+                $"clearanceRequestFrames={clearanceRequestFrames} maxDetectedStepHeight={maxDetectedStepHeight:F3}m " +
+                $"maxRequestedClearanceHeight={maxRequestedClearanceHeight:F3}m maxFacingAlignment={maxFacingAlignment:F2} " +
+                $"maxGroundedSupportHeight={maxGroundedSupportHeight:F3}m maxPlannedLandingProgress={maxPlannedLandingProgress:F2}m " +
+                $"minPlannedLandingHeightErrorToPlateau={minPlannedLandingHeightErrorToPlateau:F3}m " +
+                $"groundedEnd={balance.IsGrounded} stateEnd={characterState.CurrentState}");
+
+            // Assert
+            Assert.That(maxForwardProgress, Is.GreaterThanOrEqualTo(requiredProgress),
+                $"Direct movement into the authored StepUpLane should carry the character onto the raised landing instead of stalling at the face. " +
+                $"Needed at least {requiredProgress:F2}m of forward progress from spawn, but only reached {maxForwardProgress:F2}m. " +
+                $"Final progress={finalForwardProgress:F2}m, final state={characterState.CurrentState}, groundedEnd={balance.IsGrounded}.");
+
+            Assert.That(maxConsecutiveFallenFrames, Is.LessThanOrEqualTo(MaxStepUpConsecutiveFallenFrames),
+                $"Direct step-up traversal should stay in planning/execution, not collapse into a long fallen recovery. " +
+                $"Observed {maxConsecutiveFallenFrames} consecutive Fallen frames (limit {MaxStepUpConsecutiveFallenFrames}).");
+
+            Assert.That(balance.IsGrounded, Is.True,
+                "Step-up traversal should finish with at least one grounded foot on the raised landing.");
+        }
+
         // ─── Helpers ──────────────────────────────────────────────────────────
 
         private static IEnumerator LoadArenaScene()
@@ -285,6 +443,322 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             Assert.That(animators.Length, Is.GreaterThan(0), "No active LegAnimator found in scene.");
             return animators[0];
+        }
+
+        private static TerrainScenarioMarker FindTerrainScenarioMarker(TerrainScenarioType scenarioType)
+        {
+            TerrainScenarioMarker[] markers = Object.FindObjectsByType<TerrainScenarioMarker>(
+                FindObjectsInactive.Exclude,
+                FindObjectsSortMode.None);
+
+            for (int i = 0; i < markers.Length; i++)
+            {
+                if (markers[i].ScenarioType == scenarioType)
+                {
+                    return markers[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static GroundSensor FindGroundSensor(GameObject root, string footName)
+        {
+            GroundSensor[] sensors = root.GetComponentsInChildren<GroundSensor>(includeInactive: false);
+            for (int i = 0; i < sensors.Length; i++)
+            {
+                Transform sensorTransform = sensors[i].transform;
+                if (sensorTransform != null && sensorTransform.name == footName)
+                {
+                    return sensors[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static float GetMaximumRequestedClearanceHeight(LocomotionDirector director)
+        {
+            if (director == null)
+            {
+                return 0f;
+            }
+
+            object leftCommand = typeof(LocomotionDirector)
+                .GetField("_leftLegCommand", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(director);
+            object rightCommand = typeof(LocomotionDirector)
+                .GetField("_rightLegCommand", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(director);
+
+            return Mathf.Max(
+                GetRequestedClearanceHeight(leftCommand),
+                GetRequestedClearanceHeight(rightCommand));
+        }
+
+        private static bool TryGetPlannedLandingMetrics(
+            LocomotionDirector director,
+            float plateauHeight,
+            Vector3 startPosition,
+            Vector3 travelDirection,
+            out float maximumLandingProgress,
+            out float minimumLandingHeightErrorToPlateau)
+        {
+            maximumLandingProgress = float.NegativeInfinity;
+            minimumLandingHeightErrorToPlateau = float.PositiveInfinity;
+
+            if (director == null)
+            {
+                return false;
+            }
+
+            object leftCommand = typeof(LocomotionDirector)
+                .GetField("_leftLegCommand", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(director);
+            object rightCommand = typeof(LocomotionDirector)
+                .GetField("_rightLegCommand", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(director);
+
+            bool foundLanding = false;
+            AccumulateLandingMetrics(
+                leftCommand,
+                plateauHeight,
+                startPosition,
+                travelDirection,
+                ref foundLanding,
+                ref maximumLandingProgress,
+                ref minimumLandingHeightErrorToPlateau);
+            AccumulateLandingMetrics(
+                rightCommand,
+                plateauHeight,
+                startPosition,
+                travelDirection,
+                ref foundLanding,
+                ref maximumLandingProgress,
+                ref minimumLandingHeightErrorToPlateau);
+            return foundLanding;
+        }
+
+        private static void AccumulateLandingMetrics(
+            object legCommand,
+            float plateauHeight,
+            Vector3 startPosition,
+            Vector3 travelDirection,
+            ref bool foundLanding,
+            ref float maximumLandingProgress,
+            ref float minimumLandingHeightErrorToPlateau)
+        {
+            if (!TryGetLandingPosition(legCommand, out Vector3 landingPosition))
+            {
+                return;
+            }
+
+            foundLanding = true;
+            maximumLandingProgress = Mathf.Max(
+                maximumLandingProgress,
+                Vector3.Dot(landingPosition - startPosition, travelDirection));
+            minimumLandingHeightErrorToPlateau = Mathf.Min(
+                minimumLandingHeightErrorToPlateau,
+                Mathf.Abs(landingPosition.y - plateauHeight));
+        }
+
+        private static bool TryGetLandingPosition(object legCommand, out Vector3 landingPosition)
+        {
+            landingPosition = Vector3.zero;
+            if (legCommand == null)
+            {
+                return false;
+            }
+
+            object stepTarget = legCommand.GetType().GetProperty("StepTarget")?.GetValue(legCommand);
+            if (stepTarget == null)
+            {
+                return false;
+            }
+
+            object isValid = stepTarget.GetType().GetProperty("IsValid")?.GetValue(stepTarget);
+            if (isValid is not bool hasValidLanding || !hasValidLanding)
+            {
+                return false;
+            }
+
+            object rawLandingPosition = stepTarget.GetType().GetProperty("LandingPosition")?.GetValue(stepTarget);
+            if (rawLandingPosition is not Vector3 landing)
+            {
+                return false;
+            }
+
+            landingPosition = landing;
+            return true;
+        }
+
+        private static float GetRequestedClearanceHeight(object legCommand)
+        {
+            if (legCommand == null)
+            {
+                return 0f;
+            }
+
+            object stepTarget = legCommand.GetType().GetProperty("StepTarget")?.GetValue(legCommand);
+            if (stepTarget == null)
+            {
+                return 0f;
+            }
+
+            object hasClearanceRequest = stepTarget.GetType().GetProperty("HasClearanceRequest")?.GetValue(stepTarget);
+            if (hasClearanceRequest is not bool hasRequest || !hasRequest)
+            {
+                return 0f;
+            }
+
+            object requestedHeight = stepTarget.GetType().GetProperty("RequestedClearanceHeight")?.GetValue(stepTarget);
+            return requestedHeight is float height ? height : 0f;
+        }
+
+        private static void ResolveAscendingLaneProfile(
+            TerrainScenarioMarker marker,
+            out Vector3 travelDirection,
+            out Vector3 lowSidePoint,
+            out Vector3 highSidePoint,
+            out float highSideHeight)
+        {
+            Bounds bounds = marker.ScenarioBounds;
+            bool laneRunsAlongX = bounds.size.x >= bounds.size.z;
+            Vector3 laneAxis = laneRunsAlongX ? Vector3.right : Vector3.forward;
+            float laneLength = laneRunsAlongX ? bounds.size.x : bounds.size.z;
+            float sampleInset = Mathf.Min(StepUpSurfaceProbeInset, laneLength * 0.1f);
+            Vector3 negativePoint = bounds.center - laneAxis * (laneLength * 0.5f - sampleInset);
+            Vector3 positivePoint = bounds.center + laneAxis * (laneLength * 0.5f - sampleInset);
+
+            float negativeHeight = SampleEnvironmentHeight(negativePoint, bounds.max.y + 2f);
+            float positiveHeight = SampleEnvironmentHeight(positivePoint, bounds.max.y + 2f);
+
+            if (positiveHeight >= negativeHeight)
+            {
+                travelDirection = laneAxis;
+                lowSidePoint = negativePoint;
+                highSidePoint = positivePoint;
+                highSideHeight = positiveHeight;
+                return;
+            }
+
+            travelDirection = -laneAxis;
+            lowSidePoint = positivePoint;
+            highSidePoint = negativePoint;
+            highSideHeight = negativeHeight;
+        }
+
+        private static float FindRaisedPlateauEntryDistance(
+            Vector3 lowSidePoint,
+            Vector3 highSidePoint,
+            Vector3 travelDirection,
+            float highSideHeight)
+        {
+            float scanLength = Vector3.Distance(lowSidePoint, highSidePoint);
+            float plateauHeightThreshold = highSideHeight - StepUpPlateauHeightTolerance;
+
+            for (int sampleIndex = 0; sampleIndex <= StepUpSurfaceSampleCount; sampleIndex++)
+            {
+                float t = sampleIndex / (float)StepUpSurfaceSampleCount;
+                float distanceAlongLane = scanLength * t;
+                Vector3 samplePoint = lowSidePoint + travelDirection * distanceAlongLane;
+                float sampleHeight = SampleEnvironmentHeight(samplePoint, highSidePoint.y + 2f);
+
+                if (sampleHeight >= plateauHeightThreshold)
+                {
+                    return distanceAlongLane;
+                }
+            }
+
+            Assert.Fail(
+                $"Unable to resolve the raised landing entry for the authored StepUpLane. " +
+                $"Expected to find a surface near y={highSideHeight:F2} within {scanLength:F2}m.");
+            return 0f;
+        }
+
+        private static float SampleEnvironmentHeight(Vector3 samplePoint, float rayOriginHeight)
+        {
+            Ray ray = new Ray(
+                new Vector3(samplePoint.x, rayOriginHeight, samplePoint.z),
+                Vector3.down);
+
+            bool hit = Physics.Raycast(
+                ray,
+                out RaycastHit hitInfo,
+                rayOriginHeight + 5f,
+                1 << GameSettings.LayerEnvironment,
+                QueryTriggerInteraction.Ignore);
+
+            Assert.That(hit, Is.True,
+                $"Expected an environment surface below sample point {samplePoint} when resolving the StepUpLane profile.");
+
+            return hitInfo.point.y;
+        }
+
+        private static void RepositionRagdoll(RagdollSetup ragdollSetup, Rigidbody hipsBody, Vector3 desiredHipsPosition)
+        {
+            Vector3 translation = desiredHipsPosition - hipsBody.position;
+
+            if (ragdollSetup != null && ragdollSetup.AllBodies != null && ragdollSetup.AllBodies.Count > 0)
+            {
+                for (int i = 0; i < ragdollSetup.AllBodies.Count; i++)
+                {
+                    Rigidbody body = ragdollSetup.AllBodies[i];
+                    if (body == null)
+                    {
+                        continue;
+                    }
+
+                    body.position += translation;
+                    body.linearVelocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
+                }
+
+                Physics.SyncTransforms();
+                return;
+            }
+
+            Rigidbody[] bodies = hipsBody.GetComponentsInChildren<Rigidbody>(includeInactive: false);
+            for (int i = 0; i < bodies.Length; i++)
+            {
+                Rigidbody body = bodies[i];
+                if (body == null)
+                {
+                    continue;
+                }
+
+                body.position += translation;
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+
+            Physics.SyncTransforms();
+        }
+
+        private static Vector2 BuildMoveInputForWorldDirection(Vector3 desiredWorldDirection)
+        {
+            Vector3 planarDirection = Vector3.ProjectOnPlane(desiredWorldDirection, Vector3.up);
+            Assert.That(planarDirection.sqrMagnitude, Is.GreaterThan(0.0001f),
+                "Step-up traversal requires a valid planar direction.");
+
+            planarDirection.Normalize();
+
+            if (Camera.main == null)
+            {
+                return new Vector2(planarDirection.x, planarDirection.z).normalized;
+            }
+
+            float cameraYaw = Camera.main.transform.eulerAngles.y;
+            Vector3 cameraForward = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.forward;
+            Vector3 cameraRight = Quaternion.Euler(0f, cameraYaw, 0f) * Vector3.right;
+            Vector2 moveInput = new Vector2(
+                Vector3.Dot(planarDirection, cameraRight),
+                Vector3.Dot(planarDirection, cameraForward));
+
+            Assert.That(moveInput.sqrMagnitude, Is.GreaterThan(0.0001f),
+                "Unable to derive a non-zero move input for the StepUpLane traversal.");
+
+            return moveInput.normalized;
         }
 
         private static ConfigurableJoint FindJointByName(GameObject root, string name)

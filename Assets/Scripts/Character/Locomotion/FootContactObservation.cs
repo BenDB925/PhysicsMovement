@@ -22,7 +22,9 @@ namespace PhysicsDrivenMovement.Character
                 slipEstimate,
                 false,
                 0f,
-                0f)
+                0f,
+                false,
+                Vector3.zero)
         {
         }
 
@@ -44,7 +46,34 @@ namespace PhysicsDrivenMovement.Character
                 slipEstimate,
                 hasForwardObstruction,
                 estimatedStepHeight,
-                forwardObstructionConfidence)
+                forwardObstructionConfidence,
+                false,
+                Vector3.zero)
+        {
+        }
+
+        public FootContactObservation(
+            LocomotionLeg leg,
+            bool isGrounded,
+            float contactConfidence,
+            float plantedConfidence,
+            float slipEstimate,
+            bool hasForwardObstruction,
+            float estimatedStepHeight,
+            float forwardObstructionConfidence,
+            Vector3 forwardObstructionTopSurfacePoint)
+            : this(
+                leg,
+                isGrounded,
+                isGrounded && plantedConfidence >= 0.5f,
+                contactConfidence,
+                plantedConfidence,
+                slipEstimate,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence,
+                hasForwardObstruction,
+                forwardObstructionTopSurfacePoint)
         {
         }
 
@@ -64,7 +93,9 @@ namespace PhysicsDrivenMovement.Character
                 slipEstimate,
                 false,
                 0f,
-                0f)
+                0f,
+                false,
+                Vector3.zero)
         {
         }
 
@@ -78,6 +109,59 @@ namespace PhysicsDrivenMovement.Character
             bool hasForwardObstruction,
             float estimatedStepHeight,
             float forwardObstructionConfidence)
+            : this(
+                leg,
+                isGrounded,
+                isPlanted,
+                contactConfidence,
+                plantedConfidence,
+                slipEstimate,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence,
+                false,
+                Vector3.zero)
+        {
+        }
+
+        public FootContactObservation(
+            LocomotionLeg leg,
+            bool isGrounded,
+            bool isPlanted,
+            float contactConfidence,
+            float plantedConfidence,
+            float slipEstimate,
+            bool hasForwardObstruction,
+            float estimatedStepHeight,
+            float forwardObstructionConfidence,
+            Vector3 forwardObstructionTopSurfacePoint)
+            : this(
+                leg,
+                isGrounded,
+                isPlanted,
+                contactConfidence,
+                plantedConfidence,
+                slipEstimate,
+                hasForwardObstruction,
+                estimatedStepHeight,
+                forwardObstructionConfidence,
+                hasForwardObstruction,
+                forwardObstructionTopSurfacePoint)
+        {
+        }
+
+        private FootContactObservation(
+            LocomotionLeg leg,
+            bool isGrounded,
+            bool isPlanted,
+            float contactConfidence,
+            float plantedConfidence,
+            float slipEstimate,
+            bool hasForwardObstruction,
+            float estimatedStepHeight,
+            float forwardObstructionConfidence,
+            bool hasForwardObstructionTopSurfacePoint,
+            Vector3 forwardObstructionTopSurfacePoint)
         {
             // STEP 1: Preserve the authoritative leg identity and grounded state exactly as reported.
             Leg = leg;
@@ -95,6 +179,10 @@ namespace PhysicsDrivenMovement.Character
             ForwardObstructionConfidence = HasForwardObstruction
                 ? Mathf.Clamp01(forwardObstructionConfidence)
                 : 0f;
+            HasForwardObstructionTopSurfacePoint = HasForwardObstruction && hasForwardObstructionTopSurfacePoint;
+            ForwardObstructionTopSurfacePoint = HasForwardObstructionTopSurfacePoint
+                ? forwardObstructionTopSurfacePoint
+                : Vector3.zero;
         }
 
         public LocomotionLeg Leg { get; }
@@ -114,5 +202,9 @@ namespace PhysicsDrivenMovement.Character
         public float EstimatedStepHeight { get; }
 
         public float ForwardObstructionConfidence { get; }
+
+        public bool HasForwardObstructionTopSurfacePoint { get; }
+
+        public Vector3 ForwardObstructionTopSurfacePoint { get; }
     }
 }

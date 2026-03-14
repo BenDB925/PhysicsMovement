@@ -169,6 +169,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstruction"), Is.False);
             Assert.That(GetPropertyValue<float>(footObservation, "EstimatedStepHeight"), Is.EqualTo(0f).Within(0.0001f));
             Assert.That(GetPropertyValue<float>(footObservation, "ForwardObstructionConfidence"), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstructionTopSurfacePoint"), Is.False);
         }
 
         [Test]
@@ -200,6 +201,39 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstruction"), Is.True);
             Assert.That(GetPropertyValue<float>(footObservation, "EstimatedStepHeight"), Is.EqualTo(0.45f).Within(0.0001f));
             Assert.That(GetPropertyValue<float>(footObservation, "ForwardObstructionConfidence"), Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstructionTopSurfacePoint"), Is.False,
+                "Legacy obstruction samples without a promoted top-surface point should remain explicitly marked as missing touchdown data.");
+        }
+
+        [Test]
+        public void FootContactObservation_ConstructedWithForwardObstructionTopSurfacePoint_PreservesTouchdownSample()
+        {
+            // Arrange
+            Type footObservationType = RequireType(FootContactObservationTypeName);
+            Type legType = RequireType(LocomotionLegTypeName);
+            object leftLeg = Enum.Parse(legType, "Left");
+            Vector3 topSurfacePoint = new Vector3(-0.18f, 0.42f, 0.63f);
+
+            // Act
+            object footObservation = CreateInstance(
+                footObservationType,
+                leftLeg,
+                true,
+                true,
+                0.8f,
+                0.75f,
+                0.1f,
+                true,
+                0.42f,
+                0.85f,
+                topSurfacePoint);
+
+            // Assert
+            Assert.That(GetPropertyValue<bool>(footObservation, "HasForwardObstructionTopSurfacePoint"), Is.True);
+            AssertVector3Equal(
+                GetPropertyValue<Vector3>(footObservation, "ForwardObstructionTopSurfacePoint"),
+                topSurfacePoint,
+                "ForwardObstructionTopSurfacePoint");
         }
 
         [Test]
@@ -379,7 +413,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 0.1f,
                 true,
                 0.28f,
-                0.7f);
+                0.7f,
+                new Vector3(-0.16f, 0.28f, 0.62f));
             object rightFoot = CreateInstance(
                 footObservationType,
                 Enum.Parse(legType, "Right"),
@@ -428,6 +463,12 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(GetPropertyValue<float>(observation, "LeftForwardObstructionConfidence"), Is.EqualTo(0.7f).Within(0.0001f));
             Assert.That(GetPropertyValue<float>(observation, "RightForwardObstructionConfidence"), Is.EqualTo(0f).Within(0.0001f));
             Assert.That(GetPropertyValue<float>(observation, "MaxForwardObstructionConfidence"), Is.EqualTo(0.7f).Within(0.0001f));
+            Assert.That(GetPropertyValue<bool>(observation, "HasLeftForwardObstructionTopSurfacePoint"), Is.True);
+            Assert.That(GetPropertyValue<bool>(observation, "HasRightForwardObstructionTopSurfacePoint"), Is.False);
+            AssertVector3Equal(
+                GetPropertyValue<Vector3>(observation, "LeftForwardObstructionTopSurfacePoint"),
+                new Vector3(-0.16f, 0.28f, 0.62f),
+                "LeftForwardObstructionTopSurfacePoint");
         }
 
         [Test]
@@ -883,6 +924,25 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Assert
             float desiredTiming = GetPropertyValue<float>(target, "DesiredTiming");
             Assert.That(desiredTiming, Is.EqualTo(0f).Within(0.0001f), "Negative timing should be clamped to 0.");
+        }
+
+        [Test]
+        public void StepTarget_ConstructedWithClearanceHeight_PreservesExplicitClearanceRequest()
+        {
+            // Arrange
+            Type stepTargetType = RequireType(StepTargetTypeName);
+            Vector3 landing = new Vector3(0.2f, 0.8f, 0.6f);
+
+            // Act
+            object target = CreateInstance(stepTargetType, landing, 0.35f, 0.1f, -0.2f, 0.75f, 0.28f);
+
+            // Assert
+            bool hasClearanceRequest = GetPropertyValue<bool>(target, "HasClearanceRequest");
+            float requestedClearanceHeight = GetPropertyValue<float>(target, "RequestedClearanceHeight");
+            Assert.That(hasClearanceRequest, Is.True,
+                "Positive requested clearance height should produce an explicit clearance request.");
+            Assert.That(requestedClearanceHeight, Is.EqualTo(0.28f).Within(0.0001f),
+                "RequestedClearanceHeight should preserve the planner's step-up clearance request.");
         }
 
         [Test]
@@ -1591,6 +1651,138 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "Lower support quality should produce a wider (more negative X for left leg) catch-step.");
         }
 
+        [Test]
+        public void StepPlanner_ForwardObstructionOnSwingLeg_RequestsExplicitClearance()
+        {
+            // Arrange — a swing leg approaching a detected step-up should carry an explicit clearance request.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                leftHasForwardObstruction: true,
+                leftEstimatedStepHeight: 0.28f,
+                leftForwardObstructionConfidence: 0.8f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool hasClearanceRequest = GetPropertyValue<bool>(result, "HasClearanceRequest");
+            float requestedClearanceHeight = GetPropertyValue<float>(result, "RequestedClearanceHeight");
+            Assert.That(hasClearanceRequest, Is.True,
+                "A valid forward obstruction on the swing leg should tag the step target with clearance intent.");
+            Assert.That(requestedClearanceHeight, Is.EqualTo(0.28f).Within(0.0001f),
+                "Planner should preserve the promoted step height as the requested clearance amount.");
+        }
+
+        [Test]
+        public void StepPlanner_ForwardObstructionWithTopSurfacePoint_PlacesLandingOntoRaisedSurface()
+        {
+            // Arrange — once the sensor promotes a reachable top-surface point, the planner should
+            //           place touchdown onto that raised surface instead of leaving the foot target at flat-ground height.
+            object planner = CreateStepPlannerInstance();
+            Vector3 topSurfacePoint = new Vector3(-0.18f, 0.28f, 0.58f);
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                leftHasForwardObstruction: true,
+                leftEstimatedStepHeight: 0.28f,
+                leftForwardObstructionConfidence: 0.8f,
+                leftForwardObstructionTopSurfacePoint: topSurfacePoint);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            Vector3 landingPosition = GetPropertyValue<Vector3>(result, "LandingPosition");
+            Assert.That(landingPosition.y, Is.EqualTo(topSurfacePoint.y).Within(0.0001f),
+                "Planner should preserve the promoted top-surface height in the landing target so touchdown aims at the raised step surface.");
+            Assert.That(landingPosition.z, Is.GreaterThan(topSurfacePoint.z + 0.04f),
+                "Planner should bias touchdown slightly past the detected lip so the swing targets a usable foothold on top of the step.");
+        }
+
+        [Test]
+        public void StepPlanner_OppositeFootForwardObstruction_PromotesApproachLevelClearanceRequest()
+        {
+            // Arrange — when the planted foot sees the step face first, the next swing should still inherit clearance intent.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                rightHasForwardObstruction: true,
+                rightEstimatedStepHeight: 0.24f,
+                rightForwardObstructionConfidence: 0.75f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool hasClearanceRequest = GetPropertyValue<bool>(result, "HasClearanceRequest");
+            float requestedClearanceHeight = GetPropertyValue<float>(result, "RequestedClearanceHeight");
+            Assert.That(hasClearanceRequest, Is.True,
+                "Planner should promote approach-level clearance when either foot detects a confident step-up ahead.");
+            Assert.That(requestedClearanceHeight, Is.EqualTo(0.24f).Within(0.0001f),
+                "Approach-level clearance should use the strongest promoted step-height sample.");
+        }
+
+        [Test]
+        public void StepPlanner_NoForwardObstruction_DoesNotRequestClearance()
+        {
+            // Arrange — flat-ground swings should keep the existing profile with no explicit clearance request.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool hasClearanceRequest = GetPropertyValue<bool>(result, "HasClearanceRequest");
+            float requestedClearanceHeight = GetPropertyValue<float>(result, "RequestedClearanceHeight");
+            Assert.That(hasClearanceRequest, Is.False,
+                "Step targets should not request extra clearance on flat-ground approaches.");
+            Assert.That(requestedClearanceHeight, Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [Test]
+        public void StepPlanner_LowConfidenceForwardObstruction_DoesNotRequestClearance()
+        {
+            // Arrange — weak/noisy obstruction signals should not inflate gait clearance.
+            object planner = CreateStepPlannerInstance();
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 2f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f,
+                leftHasForwardObstruction: true,
+                leftEstimatedStepHeight: 0.28f,
+                leftForwardObstructionConfidence: 0.2f);
+
+            // Act
+            object result = InvokeComputeSwingTarget(planner, args);
+
+            // Assert
+            bool hasClearanceRequest = GetPropertyValue<bool>(result, "HasClearanceRequest");
+            float requestedClearanceHeight = GetPropertyValue<float>(result, "RequestedClearanceHeight");
+            Assert.That(hasClearanceRequest, Is.False,
+                "Planner should suppress clearance requests when the obstruction sample is too uncertain.");
+            Assert.That(requestedClearanceHeight, Is.EqualTo(0f).Within(0.0001f));
+        }
+
         // ── StepPlanner test helpers ────────────────────────────────────────────
 
         private static object CreateStepPlannerInstance()
@@ -1612,7 +1804,15 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             float stepFrequency,
             float supportQuality,
             string transitionReason = "DefaultCadence",
-            float turnSeverity = 0f)
+            float turnSeverity = 0f,
+            bool leftHasForwardObstruction = false,
+            float leftEstimatedStepHeight = 0f,
+            float leftForwardObstructionConfidence = 0f,
+            Vector3? leftForwardObstructionTopSurfacePoint = null,
+            bool rightHasForwardObstruction = false,
+            float rightEstimatedStepHeight = 0f,
+            float rightForwardObstructionConfidence = 0f,
+            Vector3? rightForwardObstructionTopSurfacePoint = null)
         {
             Type legType = RequireType(LocomotionLegTypeName);
             Type legStateTypeType = RequireType(LegStateTypeTypeName);
@@ -1634,20 +1834,50 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 false);
 
             // Build left/right foot observations with default grounded state.
-            object leftFoot = CreateInstance(
-                footObsType,
-                Enum.Parse(legType, "Left"),
-                true,            // isGrounded
-                1f,              // contactConfidence
-                supportQuality,  // plantedConfidence
-                1f - supportQuality); // slipEstimate
-            object rightFoot = CreateInstance(
-                footObsType,
-                Enum.Parse(legType, "Right"),
-                true,
-                1f,
-                supportQuality,
-                1f - supportQuality);
+            object leftFoot = leftForwardObstructionTopSurfacePoint.HasValue
+                ? CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Left"),
+                    true,            // isGrounded
+                    1f,              // contactConfidence
+                    supportQuality,  // plantedConfidence
+                    1f - supportQuality,
+                    leftHasForwardObstruction,
+                    leftEstimatedStepHeight,
+                    leftForwardObstructionConfidence,
+                    leftForwardObstructionTopSurfacePoint.Value)
+                : CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Left"),
+                    true,            // isGrounded
+                    1f,              // contactConfidence
+                    supportQuality,  // plantedConfidence
+                    1f - supportQuality,
+                    leftHasForwardObstruction,
+                    leftEstimatedStepHeight,
+                    leftForwardObstructionConfidence);
+            object rightFoot = rightForwardObstructionTopSurfacePoint.HasValue
+                ? CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Right"),
+                    true,
+                    1f,
+                    supportQuality,
+                    1f - supportQuality,
+                    rightHasForwardObstruction,
+                    rightEstimatedStepHeight,
+                    rightForwardObstructionConfidence,
+                    rightForwardObstructionTopSurfacePoint.Value)
+                : CreateInstance(
+                    footObsType,
+                    Enum.Parse(legType, "Right"),
+                    true,
+                    1f,
+                    supportQuality,
+                    1f - supportQuality,
+                    rightHasForwardObstruction,
+                    rightEstimatedStepHeight,
+                    rightForwardObstructionConfidence);
             // Pass supportQuality directly into SupportObservation so the planner sees it.
             object support = CreateInstance(
                 supportObsType,

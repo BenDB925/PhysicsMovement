@@ -66,6 +66,10 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "GroundSensor should estimate the top-surface rise of the step-up ahead of the foot.");
             Assert.That(_sensor.ForwardObstructionConfidence, Is.GreaterThan(0.25f),
                 "A clean face-plus-top detection should produce a usable non-zero confidence.");
+            Assert.That(_sensor.ForwardObstructionTopSurfacePoint.y, Is.EqualTo(StepHeight).Within(0.08f),
+                "GroundSensor should preserve the sampled top-surface point so the planner can place touchdown onto the raised landing.");
+            Assert.That(_sensor.ForwardObstructionTopSurfacePoint.z, Is.GreaterThan(0.1f),
+                "The preserved top-surface point should lie ahead of the current support point.");
         }
 
         [Test]

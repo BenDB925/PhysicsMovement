@@ -122,6 +122,14 @@ namespace PhysicsDrivenMovement.Character
 
         public float RightForwardObstructionConfidence => RightFoot.ForwardObstructionConfidence;
 
+        public bool HasLeftForwardObstructionTopSurfacePoint => LeftFoot.HasForwardObstructionTopSurfacePoint;
+
+        public bool HasRightForwardObstructionTopSurfacePoint => RightFoot.HasForwardObstructionTopSurfacePoint;
+
+        public Vector3 LeftForwardObstructionTopSurfacePoint => LeftFoot.ForwardObstructionTopSurfacePoint;
+
+        public Vector3 RightForwardObstructionTopSurfacePoint => RightFoot.ForwardObstructionTopSurfacePoint;
+
         public float MaxForwardObstructionConfidence => Mathf.Max(
             LeftForwardObstructionConfidence,
             RightForwardObstructionConfidence);
