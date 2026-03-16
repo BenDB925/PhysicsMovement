@@ -40,7 +40,7 @@ Every task — bug fix, feature, refactor — MUST follow these phases **in orde
 3. Also write **regression tests** for any existing behaviour that could break.
 4. Follow the naming convention: `MethodName_Condition_ExpectedResult`.
 5. Tests live in `Assets/Tests/EditMode/` or `Assets/Tests/PlayMode/` mirroring the source folder structure.
-6. **Run tests from the terminal** to confirm they fail. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §2–3 for exact commands. Parse the NUnit XML results to verify `failed > 0`.
+6. **Run created tests from the terminal** using the -TestFilter command with the test script to confirm they fail. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §2–3 for exact commands. Parse the NUnit XML results to verify `failed > 0`.
 7. If Unity exits but `TestResults/*.xml` is missing, treat it as a transient infrastructure race (lock/licensing/startup), rerun up to 2–3 attempts, and only conclude failure after retries still produce no XML.
 
 ### Phase C+: Outcome Tests & Parameter Optimizers

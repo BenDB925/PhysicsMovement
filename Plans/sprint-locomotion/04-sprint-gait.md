@@ -5,8 +5,8 @@ Make the sprint gait visually distinct from the walk gait: longer strides, highe
 
 ## Current status
 - State: In progress
-- Current next step: Evaluate step 3 cadence at sprint speed and only add an explicit sprint cadence boost if the natural speed-based gait still looks too slow
-- Blockers: Remaining WP-4 items still depend on WP-1; steps 1 and 2 now use the live `SprintNormalized` blend in `LegAnimator`
+- Current next step: Promote WP-4 from focused command/executor coverage to the broader Arena_01 outcome checks (`T4-1` through `T4-4`) once the remaining sprint-locomotion dependencies are ready
+- Blockers: Step 4 itself is no longer blocked; the remaining WP-4 outcome-gate work still depends on the outstanding WP-1 sprint-locomotion integration slices
 
 ## Scope
 
@@ -48,12 +48,16 @@ Make the sprint gait visually distinct from the walk gait: longer strides, highe
 ## Decisions
 - 2026-03-16: Step 1 landed by blending `LegAnimator` upper-leg swing amplitude from `_stepAngle` to `_sprintStepAngle` via `SprintNormalized`. `StepPlanner` and step-target placement were left unchanged so this slice only changes visual stride amplitude.
 - 2026-03-16: Step 2 landed by blending `LegAnimator` upper-leg lift from `_upperLegLiftBoost` to `_sprintUpperLegLiftBoost` via `SprintNormalized`. The same effective lift boost now feeds both the explicit per-leg gait path and the low-confidence mirrored fallback so sprint keeps the higher-knee look even when confidence drops.
+- 2026-03-16: Step 3 landed by adding `_sprintCadenceBoost` to `LegAnimator` and blending the base cadence by `SprintNormalized` only during sprint. The live prefab cadence floor (`_stepFrequency = 1.25`, `_stepFrequencyScale = 0.1`) was still clamping sprint to walk speed, so the explicit 1.2x sprint multiplier was needed. `StepPlanner` now receives the same effective cadence so swing timing and planned landings stay aligned.
+- 2026-03-16: Step 4 landed by blending `LegAnimator` lower-leg knee bend from `_kneeAngle` to `_sprintKneeAngle` via `SprintNormalized`. The effective knee angle now feeds pass-through command generation, low-confidence fallback, the state-driven execution resolver, and the step-up knee-shaping helpers so sprint keeps the stronger rear kick across all runtime execution paths instead of mixing walk and sprint knee targets in the same frame.
 
 ## Artifacts
-- `Assets/Scripts/Character/LegAnimator.cs`: runtime sprint stride and knee-lift blends (`_sprintStepAngle`, `_sprintUpperLegLiftBoost`, effective blend helpers, fallback usage)
-- `Assets/Tests/PlayMode/Character/LegAnimatorSprintStrideTests.cs`: focused PlayMode coverage for walk, mid-blend, and full-sprint stride plus knee-lift command output
-- `TestResults/latest-summary.md`: focused PlayMode slice `LegAnimatorSprintStrideTests;LegAnimatorTests;GaitOutcomeTests.HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate` passed after the step 2 update on 2026-03-16
+- `Assets/Scripts/Character/LegAnimator.cs`: runtime sprint stride, knee-lift, knee-angle, and cadence blends (`_sprintStepAngle`, `_sprintUpperLegLiftBoost`, `_sprintKneeAngle`, `_sprintCadenceBoost`, effective blend helpers, fallback usage, planner/executor knee-shaping alignment)
+- `Assets/Tests/PlayMode/Character/LegAnimatorSprintStrideTests.cs`: focused PlayMode coverage for walk, mid-blend, and full-sprint stride, knee-lift, knee-angle, cadence command output, plus an explicit recovery-profile knee-resolution assertion through `SetCommandFrame`
+- `TestResults/latest-summary.md`: focused PlayMode slice `LegAnimatorSprintStrideTests;LegAnimatorTests;GaitOutcomeTests.HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate` passed after the step 4 update on 2026-03-16
 
 ## Progress notes
 - 2026-03-16: Implemented step 1. Sprint now widens the effective leg step angle without changing step-target planning, and the focused PlayMode regression slice stayed green after adding dedicated sprint-stride tests.
 - 2026-03-16: Implemented step 2. Sprint now raises the effective upper-leg lift boost through the same `SprintNormalized` input used by stride blending, and the focused PlayMode sprint-gait slice covers the walk, mid-blend, and full-sprint lift outputs.
+- 2026-03-16: Implemented step 3. Sprint now multiplies the authored cadence by `_sprintCadenceBoost` through the same `SprintNormalized` blend used by the other gait changes, and `StepPlanner` consumes that effective cadence so faster sprint swing timing does not outrun planned landings. The focused PlayMode sprint-gait slice and the full EditMode suite both passed after the update.
+- 2026-03-16: Implemented step 4. Sprint now blends the lower-leg knee bend from `_kneeAngle` to `_sprintKneeAngle`, and the effective value is shared by pass-through commands, fallback blending, state-driven execution, and step-up knee shaping so sprint keeps the stronger rear kick even during recovery or terrain-clearance execution. The focused PlayMode sprint-gait slice and the adjacent `LegAnimatorTests` / `GaitOutcomeTests` regression slice both passed after the update.

@@ -44,10 +44,22 @@ namespace PhysicsDrivenMovement.Character
                  "is nearly stationary (optional slow idle cycle). Default 0 = legs still at idle.")]
         private float _stepFrequency = 1f;
 
+        [SerializeField, Range(1f, 2f)]
+        [Tooltip("Extra cadence multiplier at full sprint. Blended from 1x by " +
+             "PlayerMovement.SprintNormalized so sprint steps faster without changing " +
+             "the authored walk cadence. Default 1.2x.")]
+        private float _sprintCadenceBoost = 1.2f;
+
         [SerializeField, Range(0f, 75f)]
         [Tooltip("Constant knee-bend angle (degrees) applied to lower leg joints during gait. " +
                  "Larger values = more aggressive, deliberate stride. Default 65°.")]
         private float _kneeAngle = 60f;
+
+           [SerializeField, Range(60f, 90f)]
+           [Tooltip("Constant knee-bend angle (degrees) at full sprint. Blended from " +
+               "_kneeAngle by PlayerMovement.SprintNormalized so sprint adds a stronger " +
+               "rear-kick without changing the walk gait. Default 70°.")]
+           private float _sprintKneeAngle = 70f;
 
         [SerializeField, Range(0f, 55f)]
         [Tooltip("Extra upward lift bias (degrees) added to the upper leg that is in the " +
@@ -343,7 +355,7 @@ namespace PhysicsDrivenMovement.Character
 
         internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
 
-        internal float KneeAngleDegrees => _kneeAngle;
+        internal float KneeAngleDegrees => GetEffectiveKneeAngle();
 
         /// <summary>
         /// True while the stuck-leg recovery pose is being actively applied.
@@ -576,6 +588,24 @@ namespace PhysicsDrivenMovement.Character
             return Mathf.Lerp(_upperLegLiftBoost, _sprintUpperLegLiftBoost, Mathf.Clamp01(sprintNormalized));
         }
 
+        private float GetEffectiveKneeAngle()
+        {
+            return GetEffectiveKneeAngle(GetCurrentSprintNormalized());
+        }
+
+        private float GetEffectiveKneeAngle(float sprintNormalized)
+        {
+            return Mathf.Lerp(_kneeAngle, _sprintKneeAngle, Mathf.Clamp01(sprintNormalized));
+        }
+
+        private float GetEffectiveCadenceCyclesPerSecond(float horizontalSpeed, float sprintNormalized)
+        {
+            float clampedSprintNormalized = Mathf.Clamp01(sprintNormalized);
+            float baseCyclesPerSecond = Mathf.Max(_stepFrequency, Mathf.Max(0f, horizontalSpeed) * _stepFrequencyScale);
+            float cadenceBoost = Mathf.Lerp(1f, _sprintCadenceBoost, clampedSprintNormalized);
+            return baseCyclesPerSecond * cadenceBoost;
+        }
+
         internal void BuildPassThroughCommands(
             DesiredInput desiredInput,
             LocomotionObservation observation,
@@ -747,7 +777,10 @@ namespace PhysicsDrivenMovement.Character
             {
                 float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 float effectiveUpperLegLiftBoost = GetEffectiveUpperLegLiftBoost(desiredInput.SprintNormalized);
-                float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
+                float effectiveKneeAngle = GetEffectiveKneeAngle(desiredInput.SprintNormalized);
+                float effectiveCyclesPerSec = GetEffectiveCadenceCyclesPerSecond(
+                    horizontalSpeedGate,
+                    desiredInput.SprintNormalized);
                 float phaseAdvance = effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
@@ -830,7 +863,7 @@ namespace PhysicsDrivenMovement.Character
                     _isGaitBiasedForward = true;
                 }
 
-                float kneeBendDeg = _kneeAngle * _smoothedInputMag;
+                float kneeBendDeg = effectiveKneeAngle * _smoothedInputMag;
 
                 StepTarget leftStepTarget = _stepPlanner.ComputeSwingTarget(
                     LocomotionLeg.Left,
@@ -841,7 +874,7 @@ namespace PhysicsDrivenMovement.Character
                     observation,
                     _hipsRigidbody.position,
                     gaitReferenceDirection,
-                    _stepFrequency);
+                    effectiveCyclesPerSec);
                 StepTarget rightStepTarget = _stepPlanner.ComputeSwingTarget(
                     LocomotionLeg.Right,
                     _rightLegStateMachine.CyclePhase,
@@ -851,7 +884,7 @@ namespace PhysicsDrivenMovement.Character
                     observation,
                     _hipsRigidbody.position,
                     gaitReferenceDirection,
-                    _stepFrequency);
+                    effectiveCyclesPerSec);
 
                 LegCommandOutput explicitLeftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
@@ -895,7 +928,7 @@ namespace PhysicsDrivenMovement.Character
                     gaitReferenceDirection,
                     bothFeetBehind,
                     effectiveStepAngle,
-                    _kneeAngle,
+                    effectiveKneeAngle,
                     effectiveUpperLegLiftBoost);
 
                 leftCommand = explicitLeftCommand;
@@ -1028,12 +1061,13 @@ namespace PhysicsDrivenMovement.Character
             }
 
             float effectiveStepAngle = GetEffectiveStepAngle(_commandDesiredInput.SprintNormalized);
+            float effectiveKneeAngle = GetEffectiveKneeAngle(_commandDesiredInput.SprintNormalized);
 
             LegExecutionProfileResolver.Resolve(
                 _leftLegCommand,
                 _useStateDrivenExecution,
                 effectiveStepAngle,
-                _kneeAngle,
+                effectiveKneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
                 _stepUpClearanceKneeBoost,
@@ -1043,7 +1077,7 @@ namespace PhysicsDrivenMovement.Character
                 _rightLegCommand,
                 _useStateDrivenExecution,
                 effectiveStepAngle,
-                _kneeAngle,
+                effectiveKneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
                 _stepUpClearanceKneeBoost,
@@ -1053,17 +1087,19 @@ namespace PhysicsDrivenMovement.Character
             Vector3 gaitForward = LegJointDriver.GetWorldGaitForward(_commandDesiredInput, _commandObservation);
             leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, effectiveStepAngle, leftSwingDeg);
             rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, effectiveStepAngle, rightSwingDeg);
-            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, effectiveStepAngle, ref leftSwingDeg, ref leftKneeBendDeg);
-            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, effectiveStepAngle, ref rightSwingDeg, ref rightKneeBendDeg);
+            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, effectiveStepAngle, effectiveKneeAngle, ref leftSwingDeg, ref leftKneeBendDeg);
+            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, effectiveStepAngle, effectiveKneeAngle, ref rightSwingDeg, ref rightKneeBendDeg);
             ApplyStepUpSupportLegExtension(
                 _leftLegCommand,
                 _footR,
                 _rightLegCommand.State,
+                effectiveKneeAngle,
                 ref rightKneeBendDeg);
             ApplyStepUpSupportLegExtension(
                 _rightLegCommand,
                 _footL,
                 _leftLegCommand.State,
+                effectiveKneeAngle,
                 ref leftKneeBendDeg);
 
             _jointDriver.ApplySwingTargets(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg, _useWorldSpaceSwing, _commandDesiredInput, _commandObservation);
@@ -1391,6 +1427,7 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput command,
             Transform footTransform,
             float stepAngleDegrees,
+            float baseKneeAngleDegrees,
             ref float swingAngleDegrees,
             ref float kneeAngleDegrees)
         {
@@ -1424,7 +1461,7 @@ namespace PhysicsDrivenMovement.Character
             }
 
             float landingSwingContribution = Mathf.Lerp(0f, stepAngleDegrees * 0.22f, landingHeightBlend) * command.BlendWeight;
-            float landingKneeContribution = Mathf.Lerp(0f, _kneeAngle * 0.48f, landingHeightBlend) * command.BlendWeight;
+            float landingKneeContribution = Mathf.Lerp(0f, baseKneeAngleDegrees * 0.48f, landingHeightBlend) * command.BlendWeight;
 
             swingAngleDegrees += landingSwingContribution;
             kneeAngleDegrees += landingKneeContribution;
@@ -1434,6 +1471,7 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput swingCommand,
             Transform supportFootTransform,
             LegStateType supportLegState,
+            float baseKneeAngleDegrees,
             ref float supportKneeBendDegrees)
         {
             if (!swingCommand.StepTarget.IsValid ||
@@ -1461,7 +1499,7 @@ namespace PhysicsDrivenMovement.Character
 
             float normalizedRise = Mathf.Clamp01(landingRiseAboveSupport / _stepUpClearanceReferenceHeight);
             float extensionStrength = Mathf.SmoothStep(0f, 1f, normalizedRise) * supportExtensionBlend;
-            float supportKneeCeiling = Mathf.Lerp(_kneeAngle * 0.18f, _kneeAngle * 0.04f, extensionStrength);
+            float supportKneeCeiling = Mathf.Lerp(baseKneeAngleDegrees * 0.18f, baseKneeAngleDegrees * 0.04f, extensionStrength);
             supportKneeBendDegrees = Mathf.Min(supportKneeBendDegrees, supportKneeCeiling);
         }
 
