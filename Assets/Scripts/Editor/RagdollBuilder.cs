@@ -338,6 +338,7 @@ namespace PhysicsDrivenMovement.Editor
                 so.FindProperty("_kDYaw").floatValue                     = 40f;
                 so.FindProperty("_comStabilizationStrength").floatValue  = 200f;
                 so.FindProperty("_comStabilizationDamping").floatValue   = 40f;
+                so.FindProperty("_standingHipsHeight").floatValue        = 0.5f;
                 so.FindProperty("_heightMaintenanceStrength").floatValue  = 1500f;
                 so.FindProperty("_heightMaintenanceDamping").floatValue   = 160f;
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -371,7 +372,10 @@ namespace PhysicsDrivenMovement.Editor
             PlayerMovement pm = rootGO.AddComponent<PlayerMovement>();
             {
                 using var so = new SerializedObject(pm);
-                so.FindProperty("_moveForce").floatValue = 150f;
+                so.FindProperty("_moveForce").floatValue = 300f;
+                so.FindProperty("_maxSpeed").floatValue = 5f;
+                so.FindProperty("_sprintSpeedMultiplier").floatValue = 1.8f;
+                so.FindProperty("_sprintBlendDuration").floatValue = 0.25f;
                 so.FindProperty("_jumpForce").floatValue = 100f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }

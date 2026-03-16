@@ -1458,8 +1458,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d8a48dadac0ad774cbf1658bd2cb2db0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.PlayerMovement
-  _moveForce: 150
+  _moveForce: 300
   _maxSpeed: 5
+  _sprintSpeedMultiplier: 1.8
+  _sprintBlendDuration: 0.25
   _jumpForce: 100
   _maxFacingTurnRateDegPerSecond: 540
   _leanReductionStartAngle: 10
