@@ -70,6 +70,10 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum lean angle (degrees) the director requests during turns. Scales with turn severity so the COM target shifts toward the turn.")]
         private float _maxTurnLeanDegrees = 5f;
 
+        [SerializeField, Range(0f, 15f)]
+        [Tooltip("Maximum extra forward lean angle (degrees) requested at full sprint. Scales with SprintNormalized so sprint posture ramps through the same blend window as sprint speed.")]
+        private float _maxSprintLeanDegrees = 8f;
+
         [Header("Recovery Transition Hysteresis")]
         [SerializeField, Range(1, 10)]
         [Tooltip("Minimum consecutive frames a recovery situation must persist before entering recovery. NearFall and Stumble use half this value.")]
@@ -393,9 +397,17 @@ namespace PhysicsDrivenMovement.Character
             float baseUprightStrengthScale = 1f + supportRisk * _supportRiskUprightBoost;
             float baseStabilizationStrengthScale = 1f + supportRisk * _supportRiskStabilizationBoost;
             float heightMaintenanceScale = ComputeHeightMaintenanceScale();
-            float baseLeanDegrees = _currentDesiredInput.HasMoveIntent
+
+            // STEP 3a: Keep the director as the single owner of locomotion posture bias.
+            // Turn severity contributes the existing recovery/support lean, and sprint
+            // blend adds a forward lean budget that ramps over the same sprint window.
+            float turnLeanDegrees = _currentDesiredInput.HasMoveIntent
                 ? _currentObservation.TurnSeverity * _maxTurnLeanDegrees
                 : 0f;
+            float sprintLeanDegrees = _currentDesiredInput.HasMoveIntent
+                ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees
+                : 0f;
+            float baseLeanDegrees = turnLeanDegrees + sprintLeanDegrees;
 
             // Apply per-situation response profile blended by the current recovery envelope.
             RecoveryResponseProfile profile = RecoveryResponseProfile.For(_currentRecoveryState.Situation);

@@ -572,7 +572,8 @@ namespace PhysicsDrivenMovement.Character
             // DESIGN: Override precedence chain (C5.4)
             //  1. LocomotionDirector publishes a BodySupportCommand each FixedUpdate (exec order 250).
             //  2. BalanceController consumes the command at exec order 0 (one-frame delay).
-            //  3. Command fields modulate PD gains, height maintenance, COM lean, and yaw intent.
+            //  3. Command fields modulate PD gains, height maintenance, commanded lean,
+            //     COM lean, and yaw intent.
             //  4. Local angle-based IsFallen and CharacterState provide safety gates:
             //     - IsFallen: fast angle-based hysteresis (responds within one frame).
             //     - CharacterState: authoritative FSM with transition timing and get-up windows.
@@ -962,8 +963,12 @@ namespace PhysicsDrivenMovement.Character
             Quaternion currentRot   = _rb.rotation;
             Vector3    currentUp    = currentRot * Vector3.up;
 
-            // Apply pelvis expression tilt + transient accel lean to the upright target direction.
-            float totalPelvisTilt = _smoothedPelvisTiltDeg + transientLeanDeg;
+            // STEP 4a: Layer the director-owned lean command on top of the local
+            // expressive pelvis tilt so sprint/turn posture and local expression stack
+            // additively instead of overriding one another.
+            float totalPelvisTilt = _smoothedPelvisTiltDeg
+                                    + transientLeanDeg
+                                    + _currentBodySupportCommand.DesiredLeanDegrees;
             Vector3 uprightTarget = Vector3.up;
             if (Mathf.Abs(totalPelvisTilt) > 0.01f)
             {

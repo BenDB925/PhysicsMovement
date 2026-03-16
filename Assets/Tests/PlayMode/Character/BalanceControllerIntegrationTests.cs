@@ -1,11 +1,14 @@
 #pragma warning disable CS0618 // SetFacingDirection is obsolete but still tested for legacy coverage
+using System;
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using PhysicsDrivenMovement.Core;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
@@ -29,6 +32,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private BalanceController _balance;
         private PlayerMovement _movement;
         private CharacterState _characterState;
+        private LocomotionDirector _director;
         private LegAnimator _legAnimator;
         private ArmAnimator _armAnimator;
         private RagdollSetup _ragdollSetup;
@@ -100,6 +104,46 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(_balance.IsFallen, Is.False,
                 "A settled upright prefab should not be in fallen state.");
+        }
+
+        [UnityTest]
+        public IEnumerator DesiredLeanDegreesCommand_WhenApplied_TiltsForwardWithoutEnteringFallen()
+        {
+            yield return PrepareStandingCharacter(GameSettings.LayerEnvironment);
+
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for command-path lean coverage.");
+
+            float baselineTilt = 0f;
+            const int sampleFrames = 20;
+            for (int frame = 0; frame < sampleFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                baselineTilt += GetForwardTiltAngle(Vector3.forward);
+            }
+
+            baselineTilt /= sampleFrames;
+
+            _director.enabled = false;
+            SetBodySupportCommand(_balance, CreateBodySupportCommand(Vector3.forward, 8f));
+
+            yield return WaitPhysicsFrames(60);
+
+            float commandedTilt = 0f;
+            for (int frame = 0; frame < sampleFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                commandedTilt += GetForwardTiltAngle(Vector3.forward);
+            }
+
+            commandedTilt /= sampleFrames;
+
+            Assert.That(commandedTilt, Is.GreaterThan(baselineTilt + 1.5f),
+                $"A commanded forward lean should tilt the hips measurably more than the neutral standing posture. Baseline={baselineTilt:F2}°, commanded={commandedTilt:F2}°.");
+            Assert.That(commandedTilt, Is.GreaterThan(2f),
+                $"A commanded 8° support lean should create a clearly visible forward tilt in the runtime rig. Observed={commandedTilt:F2}°.");
+            Assert.That(_balance.IsFallen, Is.False,
+                "The additional commanded lean should remain well below the fallen threshold on flat ground.");
         }
 
         [UnityTest]
@@ -366,6 +410,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _balance = _instance.GetComponent<BalanceController>();
             _movement = _instance.GetComponent<PlayerMovement>();
             _characterState = _instance.GetComponent<CharacterState>();
+            _director = _instance.GetComponent<LocomotionDirector>();
             _legAnimator = _instance.GetComponent<LegAnimator>();
             _armAnimator = _instance.GetComponent<ArmAnimator>();
             _ragdollSetup = _instance.GetComponent<RagdollSetup>();
@@ -375,6 +420,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_balance, Is.Not.Null, "PlayerRagdoll prefab is missing BalanceController.");
             Assert.That(_movement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
             Assert.That(_characterState, Is.Not.Null, "PlayerRagdoll prefab is missing CharacterState.");
+            Assert.That(_director, Is.Not.Null, "PlayerRagdoll prefab is missing LocomotionDirector.");
             Assert.That(_legAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing LegAnimator.");
             Assert.That(_armAnimator, Is.Not.Null, "PlayerRagdoll prefab is missing ArmAnimator.");
             Assert.That(_ragdollSetup, Is.Not.Null, "PlayerRagdoll prefab is missing RagdollSetup.");
@@ -384,6 +430,87 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private float GetHipsTiltAngle()
         {
             return Vector3.Angle(_hipsRb.transform.up, Vector3.up);
+        }
+
+        private float GetForwardTiltAngle(Vector3 travelDirection)
+        {
+            Vector3 travelXZ = Vector3.ProjectOnPlane(travelDirection, Vector3.up);
+            if (travelXZ.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            Vector3 planeNormal = Vector3.Cross(travelXZ.normalized, Vector3.up);
+            Vector3 projectedWorldUp = Vector3.ProjectOnPlane(Vector3.up, planeNormal);
+            Vector3 projectedHipsUp = Vector3.ProjectOnPlane(_hipsRb.transform.up, planeNormal);
+            if (projectedWorldUp.sqrMagnitude < 0.0001f || projectedHipsUp.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            return Vector3.Angle(projectedWorldUp.normalized, projectedHipsUp.normalized);
+        }
+
+        private static object CreateBodySupportCommand(Vector3 facingDirection, float desiredLeanDegrees)
+        {
+            Assembly characterAssembly = typeof(BalanceController).Assembly;
+            Type commandType = characterAssembly.GetType("PhysicsDrivenMovement.Character.BodySupportCommand");
+            Type recoverySituationType = characterAssembly.GetType("PhysicsDrivenMovement.Character.RecoverySituation");
+
+            Assert.That(commandType, Is.Not.Null,
+                "BalanceController integration tests expect the BodySupportCommand contract type to exist.");
+            Assert.That(recoverySituationType, Is.Not.Null,
+                "BalanceController integration tests expect the RecoverySituation enum to exist.");
+
+            ConstructorInfo constructor = commandType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[]
+                {
+                    typeof(Vector3),
+                    typeof(Vector3),
+                    typeof(Vector3),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    typeof(float),
+                    recoverySituationType,
+                },
+                modifiers: null);
+
+            Assert.That(constructor, Is.Not.Null,
+                "BalanceController integration tests expect BodySupportCommand to keep its full command constructor.");
+
+            object recoveryNone = System.Enum.ToObject(recoverySituationType, 0);
+            return constructor.Invoke(new object[]
+            {
+                facingDirection,
+                Vector3.up,
+                facingDirection,
+                desiredLeanDegrees,
+                1f,
+                1f,
+                1f,
+                0f,
+                0f,
+                1f,
+                recoveryNone,
+            });
+        }
+
+        private static void SetBodySupportCommand(BalanceController balanceController, object bodySupportCommand)
+        {
+            MethodInfo setCommandMethod = typeof(BalanceController).GetMethod(
+                "SetBodySupportCommand",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(setCommandMethod, Is.Not.Null,
+                "BalanceController integration tests expect the internal support-command seam to exist.");
+
+            setCommandMethod.Invoke(balanceController, new[] { bodySupportCommand });
         }
 
         private static T FindChildComponent<T>(Transform root, string childName) where T : Component

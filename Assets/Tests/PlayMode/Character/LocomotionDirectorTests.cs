@@ -82,6 +82,52 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenSprintIsActive_AddsForwardLeanToSupportCommand()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for sprint-lean command coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object walkDesiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object walkSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float walkSprintNormalized = GetPropertyValue<float>(walkDesiredInput, "SprintNormalized");
+            float walkLeanDegrees = GetPropertyValue<float>(walkSupportCommand, "DesiredLeanDegrees");
+
+            _rig.PlayerMovement.SetSprintInputForTest(true);
+
+            // Act
+            for (int frame = 0; frame < 30; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object sprintDesiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object sprintSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float sprintNormalized = GetPropertyValue<float>(sprintDesiredInput, "SprintNormalized");
+            float sprintLeanDegrees = GetPropertyValue<float>(sprintSupportCommand, "DesiredLeanDegrees");
+
+            // Assert
+            Assert.That(walkSprintNormalized, Is.EqualTo(0f).Within(0.05f),
+                "Walking should keep SprintNormalized near zero before the sprint portion begins.");
+            Assert.That(sprintNormalized, Is.EqualTo(1f).Within(0.05f),
+                "SprintNormalized should reach full sprint after roughly one blend window.");
+            Assert.That(sprintLeanDegrees, Is.GreaterThan(walkLeanDegrees + 1f),
+                "Sprint should request more forward lean than walking once the sprint blend has settled.");
+            Assert.That(sprintLeanDegrees, Is.GreaterThan(1.5f),
+                "Sprint should add a visible amount of forward lean to the support command rather than staying near the walk posture.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenSupportCenterFallsBehindHips_MarksObservationAsComOutsideSupport()
         {
             // Arrange

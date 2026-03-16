@@ -4,9 +4,9 @@
 Tilt the character's upright target forward during sprint so the body visually leans into the run — a key visual cue that distinguishes sprinting from walking.
 
 ## Current status
-- State: Not started
-- Current next step: Add sprint-lean parameters to `BalanceController`
-- Blockers: WP-1 must land first (needs `SprintNormalized`)
+- State: In progress
+- Current next step: Implement the remaining WP-2 outcome tests and the step-2/step-3 follow-up checks.
+- Blockers: None for step 1. `SprintNormalized` is already available and the lean path now runs through `LocomotionDirector` -> `BodySupportCommand` -> `BalanceController`.
 
 ## Scope
 
@@ -42,3 +42,5 @@ Tilt the character's upright target forward during sprint so the body visually l
 ## Artifacts
 
 ## Progress notes
+- 2026-03-16: Step 1 implemented through the existing body-support command path instead of a direct `BalanceController` read. `LocomotionDirector` now adds sprint-normalized lean degrees, and `BalanceController` applies commanded lean to the upright target in addition to the existing COM lean shift.
+- 2026-03-16: Added focused coverage for the new sprint-lean tuning field, sprint-to-support-command propagation, and runtime commanded-lean posture on the real prefab. Focused verification passed: `LocomotionDirectorEditModeTests` (8/8) and `LocomotionDirectorTests` + `BalanceControllerIntegrationTests` (26/26).

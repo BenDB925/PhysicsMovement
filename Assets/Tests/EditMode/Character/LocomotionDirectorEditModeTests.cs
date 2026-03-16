@@ -163,6 +163,30 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void PlayerRagdollPrefab_LocomotionDirector_UsesSerializedSprintLeanSetting()
+        {
+            // Arrange
+            GameObject prefabRoot = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
+            LocomotionDirector director = prefabRoot.GetComponent<LocomotionDirector>();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+
+            FieldInfo sprintLeanField = typeof(LocomotionDirector).GetField("_maxSprintLeanDegrees", flags);
+
+            // Act
+            Assert.That(prefabRoot, Is.Not.Null, "PlayerRagdoll prefab must exist at the expected path.");
+            Assert.That(director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for sprint-lean command tuning.");
+            Assert.That(sprintLeanField, Is.Not.Null,
+                "LocomotionDirector should serialize a sprint-lean setting so sprint posture remains tunable on the prefab.");
+
+            float sprintLeanDegrees = (float)sprintLeanField.GetValue(director);
+
+            // Assert
+            Assert.That(sprintLeanDegrees, Is.GreaterThan(0f).And.LessThanOrEqualTo(15f),
+                "Sprint lean should default to a positive, bounded angle so sprint posture is visible without exceeding the intended tuning range.");
+        }
+
+        [Test]
         public void PlayerRagdollPrefab_BalanceController_ExposesStandingHipsHeightForDirector()
         {
             // Arrange
