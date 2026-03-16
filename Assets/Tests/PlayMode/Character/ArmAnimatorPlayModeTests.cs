@@ -206,40 +206,38 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _movement.SetMoveInputForTest(Vector2.zero);
             _characterState.SetStateForTest(CharacterStateType.Standing);
 
-            // Wait up to IdleDecayFrames for arms to return to identity.
+            // Wait up to IdleDecayFrames for arms to stabilise at rest pose.
+            // The rest pose includes abduction (not identity), so we check that
+            // the target stops changing rather than comparing against identity.
             bool recovered = false;
             const float IdleThreshold = 2f; // degrees
+            Quaternion prevLeft  = _upperArmLJoint != null ? _upperArmLJoint.targetRotation : Quaternion.identity;
+            Quaternion prevRight = _upperArmRJoint != null ? _upperArmRJoint.targetRotation : Quaternion.identity;
 
             for (int frame = 0; frame < IdleDecayFrames; frame++)
             {
                 yield return new WaitForFixedUpdate();
 
-                float leftAngle  = _upperArmLJoint != null
-                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
-                    : 0f;
-                float rightAngle = _upperArmRJoint != null
-                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
-                    : 0f;
+                Quaternion curLeft  = _upperArmLJoint != null ? _upperArmLJoint.targetRotation : Quaternion.identity;
+                Quaternion curRight = _upperArmRJoint != null ? _upperArmRJoint.targetRotation : Quaternion.identity;
 
-                if (leftAngle <= IdleThreshold && rightAngle <= IdleThreshold)
+                float leftDelta  = Quaternion.Angle(curLeft, prevLeft);
+                float rightDelta = Quaternion.Angle(curRight, prevRight);
+
+                prevLeft  = curLeft;
+                prevRight = curRight;
+
+                if (leftDelta <= IdleThreshold && rightDelta <= IdleThreshold)
                 {
                     recovered = true;
                     break;
                 }
             }
 
-            float finalLeftAngle  = _upperArmLJoint != null
-                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
-                : 0f;
-            float finalRightAngle = _upperArmRJoint != null
-                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
-                : 0f;
-
             Assert.That(recovered, Is.True,
-                $"Arms must return to near-identity (≤ {IdleThreshold}°) within {IdleDecayFrames} frames " +
-                $"({IdleDecayFrames * Time.fixedDeltaTime:F1} s) after input stops. " +
-                $"Final angles: left={finalLeftAngle:F2}°, right={finalRightAngle:F2}°. " +
-                "Check ArmAnimator idle branch (SmoothedInputMag < 0.01 → SetAllArmTargetsToIdentity).");
+                $"Arms must settle to a stable rest pose (frame-to-frame change ≤ {IdleThreshold}°) within " +
+                $"{IdleDecayFrames} frames ({IdleDecayFrames * Time.fixedDeltaTime:F1} s) after input stops. " +
+                "Check ArmAnimator idle branch (SmoothedInputMag < 0.01 → SetAllArmTargetsToRest).");
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

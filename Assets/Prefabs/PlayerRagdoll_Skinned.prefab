@@ -28,7 +28,7 @@ Transform:
   m_GameObject: {fileID: 545393512186983329}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.21, y: 0.24, z: 0}
+  m_LocalPosition: {x: 0.3, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -783,7 +783,7 @@ Transform:
   m_GameObject: {fileID: 1801282067977710084}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.35, z: 0}
+  m_LocalPosition: {x: 0, y: 0.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -921,7 +921,7 @@ MonoBehaviour:
   _accelStartLeanDeg: 5
   _accelStartLeanDecay: 0.3
   _enableHeightMaintenance: 1
-  _standingHipsHeight: 0.35
+  _standingHipsHeight: 0.5
   _heightMaintenanceStrength: 1500
   _heightMaintenanceDamping: 160
 --- !u!114 &6001574607505163675
@@ -941,7 +941,7 @@ MonoBehaviour:
   _stepFrequency: 1.25
   _kneeAngle: 65
   _upperLegLiftBoost: 45
-  _stepUpClearanceReferenceHeight: 0.25
+  _stepUpClearanceReferenceHeight: 0.1
   _stepUpClearanceSwingBoost: 16
   _stepUpClearanceKneeBoost: 42
   _idleBlendSpeed: 5
@@ -976,6 +976,7 @@ MonoBehaviour:
   _armSwingAngle: 20
   _elbowBendAngle: 15
   _armSwingScale: 1
+  _restAbductionAngle: 12
   _armSwingAxis: {x: 0, y: 0, z: 1}
   _elbowAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &6927404009491214844
@@ -1118,8 +1119,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e6fc37acc55c3ad43b60e2b96271a4db, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.RagdollMeshFollower
-  _verticalOffset: -0.03
   _modelRoot: {fileID: 905753918366034626}
+  _verticalOffset: 0
   _debugMapping: 0
 --- !u!1 &1889336342083505185
 GameObject:
@@ -1543,7 +1544,7 @@ Transform:
   m_GameObject: {fileID: 5383982986113063260}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.21, y: 0.24, z: 0}
+  m_LocalPosition: {x: -0.3, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3093,10 +3094,6 @@ PrefabInstance:
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 6dc57a4f3b75d634bb4f5d27c8509181, type: 2}
-    - target: {fileID: -1019173052275740126, guid: 8b572fb53423d3342926489c3f6bb220, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 796407376638139366, guid: 8b572fb53423d3342926489c3f6bb220, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
@@ -3117,10 +3114,6 @@ PrefabInstance:
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 6dc57a4f3b75d634bb4f5d27c8509181, type: 2}
-    - target: {fileID: 9192968568201301405, guid: 8b572fb53423d3342926489c3f6bb220, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

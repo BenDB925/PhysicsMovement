@@ -43,6 +43,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private Quaternion[] _rotationOffsets;
 
+        /// <summary>Indices into the mapped arrays for bones whose world position
+        /// should be copied from the ragdoll each frame (upper arm roots).
+        /// This corrects the shoulder origin when the model skeleton is narrower
+        /// than the ragdoll.</summary>
+        private int[] _positionSnapIndices;
+
         private int _mappedCount;
 
         // ─── Bone Mapping Table ─────────────────────────────────────────────
@@ -117,6 +123,44 @@ namespace PhysicsDrivenMovement.Character
             _modelBones      = modelList.ToArray();
             _mappedCount     = _ragdollSegments.Length;
 
+            // STEP 3.5: Correct arm model bones from T-pose to ragdoll rest pose.
+            // The ragdoll arms hang at the sides while the model starts in T-pose.
+            // For each arm bone that has a child, compute the bone direction
+            // (parent→child position vector) in both skeletons and rotate the model
+            // bone so its direction matches the ragdoll's. Processing UpperArm
+            // before LowerArm lets parent corrections cascade through the hierarchy
+            // to children before those children are corrected in turn.
+            var segNameToIdx = new Dictionary<string, int>(_mappedCount);
+            for (int i = 0; i < _mappedCount; i++)
+                segNameToIdx[_ragdollSegments[i].gameObject.name] = i;
+
+            // Parent→child pairs, ordered root-to-leaf within each arm.
+            (string parent, string child)[] armBoneChain = new[]
+            {
+                ("UpperArm_L", "LowerArm_L"),
+                ("UpperArm_R", "LowerArm_R"),
+                ("LowerArm_L", "Hand_L"),
+                ("LowerArm_R", "Hand_R"),
+            };
+
+            foreach ((string parentName, string childName) in armBoneChain)
+            {
+                if (!segNameToIdx.TryGetValue(parentName, out int pi) ||
+                    !segNameToIdx.TryGetValue(childName, out int ci))
+                    continue;
+
+                Vector3 ragdollDir = (_ragdollSegments[ci].position
+                                      - _ragdollSegments[pi].position).normalized;
+                Vector3 modelDir   = (_modelBones[ci].position
+                                      - _modelBones[pi].position).normalized;
+
+                if (modelDir.sqrMagnitude < 0.001f || ragdollDir.sqrMagnitude < 0.001f)
+                    continue;
+
+                Quaternion correction = Quaternion.FromToRotation(modelDir, ragdollDir);
+                _modelBones[pi].rotation = correction * _modelBones[pi].rotation;
+            }
+
             // STEP 4: Capture rest-pose rotation offsets.
             // offset = Inverse(ragdollRest) * modelRest
             // At runtime: modelBone.rotation = ragdollSegment.rotation * offset
@@ -129,17 +173,28 @@ namespace PhysicsDrivenMovement.Character
                                       * _modelBones[i].rotation;
             }
 
+            // STEP 5: Identify upper arm indices for position snapping.
+            // The model's shoulder positions are narrower than the ragdoll's, so we
+            // copy world position for these bones each frame to keep them aligned.
+            var snapIndices = new List<int>(2);
+            for (int i = 0; i < _mappedCount; i++)
+            {
+                string segName = _ragdollSegments[i].gameObject.name;
+                if (segName == "UpperArm_L" || segName == "UpperArm_R")
+                    snapIndices.Add(i);
+            }
+            _positionSnapIndices = snapIndices.ToArray();
+
             if (_debugMapping)
             {
-                Debug.Log($"[RagdollMeshFollower] '{name}': mapped {_mappedCount}/{BoneMap.Length} bones.", this);
+                Debug.Log($"[RagdollMeshFollower] '{name}': mapped {_mappedCount}/{BoneMap.Length} bones, " +
+                          $"{_positionSnapIndices.Length} position-snapped.", this);
             }
         }
 
         private void LateUpdate()
         {
-            // Pass 1: Set rotations only — don't touch individual bone positions.
-            // Setting world position on bones inside a scaled hierarchy (FBX 0.01
-            // import scale) corrupts the skeleton chain for child bones.
+            // Pass 1: Set rotations for all mapped bones.
             for (int i = 0; i < _mappedCount; i++)
             {
                 _modelBones[i].rotation = _ragdollSegments[i].rotation * _rotationOffsets[i];
@@ -152,6 +207,16 @@ namespace PhysicsDrivenMovement.Character
             {
                 Vector3 hipsError = _ragdollSegments[0].position - _modelBones[0].position;
                 _modelRoot.position += hipsError + new Vector3(0f, _verticalOffset, 0f);
+            }
+
+            // Pass 3: Snap upper arm bone positions to the ragdoll shoulder positions.
+            // The model skeleton's shoulders are narrower than the ragdoll, so without
+            // this the mesh arms originate too close to (or inside) the torso.
+            // Child bones (lower arm, hand) follow naturally through the hierarchy.
+            for (int s = 0; s < _positionSnapIndices.Length; s++)
+            {
+                int idx = _positionSnapIndices[s];
+                _modelBones[idx].position = _ragdollSegments[idx].position;
             }
         }
 

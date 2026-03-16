@@ -13,9 +13,10 @@ namespace PhysicsDrivenMovement.Character
     /// resumes, matching the leg blend behaviour exactly without duplicating the ramping logic.
     ///
     /// Axis convention:
-    /// Arm joints are built by the same <c>RagdollBuilder</c> as leg joints. The joint's
-    /// primary axis (joint.axis = Vector3.right) maps to the Z component of targetRotation
-    /// space, so the correct swing axis is Vector3.forward (Z). This is exposed as
+    /// Arm joints use joint.axis = Vector3.forward and secondaryAxis = Vector3.up
+    /// (see RagdollBuilder). The tertiary axis cross(forward, up) = right maps to
+    /// the Z component of targetRotation space, so Quaternion.AngleAxis(angle,
+    /// Vector3.forward) produces sagittal arm swing. This is exposed as
     /// <see cref="_armSwingAxis"/> for Inspector tuning in case the joint configuration changes.
     /// The elbow bend axis follows the same convention and is exposed as <see cref="_elbowAxis"/>.
     ///
@@ -50,6 +51,13 @@ namespace PhysicsDrivenMovement.Character
                  "0 = arms completely disabled (identity). " +
                  "1 = full swing (default). Use for blending or disabling arms at runtime.")]
         private float _armSwingScale = 1f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Rest abduction angle (degrees) that pushes each arm outward from the body. " +
+                 "Applied at idle and during swing so arms never clip through the torso. " +
+                 "UpperArm joints use axis=forward, so rotation around Vector3.right " +
+                 "in targetRotation space produces frontal-plane abduction.")]
+        private float _restAbductionAngle = 12f;
 
         // DESIGN: _armSwingAxis and _elbowAxis follow the same convention as LegAnimator's
         // _swingAxis/_kneeAxis. With RagdollBuilder defaults (joint.axis = Vector3.right,
@@ -93,6 +101,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private LegAnimator _legAnimator;
 
+        /// <summary>Rest abduction rotation cached in Awake for the left upper arm (negative angle).</summary>
+        private Quaternion _abductionL;
+
+        /// <summary>Rest abduction rotation cached in Awake for the right upper arm (positive angle).</summary>
+        private Quaternion _abductionR;
+
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
@@ -103,6 +117,14 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[ArmAnimator] No LegAnimator found on this GameObject. " +
                                  "Arm swing will remain at identity.", this);
             }
+
+            // STEP 1b: Cache abduction quaternions.
+            // In targetRotation space, Vector3.right (X) maps to rotation around the
+            // joint's primary axis (forward in world). Positive rotation around +Z takes
+            // the -Y arm direction toward +X — outward for the right arm, inward for the
+            // left. So left gets a negative angle, right gets positive.
+            _abductionL = Quaternion.AngleAxis( _restAbductionAngle, Vector3.right);
+            _abductionR = Quaternion.AngleAxis(-_restAbductionAngle, Vector3.right);
 
             // STEP 2: Locate the four arm ConfigurableJoints by searching children by name.
             //         Pattern mirrors LegAnimator's Awake exactly — hierarchy-agnostic name lookup.
@@ -153,18 +175,18 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1: Gate on missing LegAnimator — reset to identity and bail out.
             if (_legAnimator == null)
             {
-                SetAllArmTargetsToIdentity();
+                SetAllArmTargetsToRest();
                 return;
             }
 
             float smoothedInputMag = _legAnimator.SmoothedInputMag;
 
             // STEP 2: When SmoothedInputMag is near zero (character idle or decelerating to stop),
-            //         set all arm targets directly to identity and return.
-            //         This keeps arms relaxed at rest and avoids residual micro-sway.
+            //         set arm targets to rest abduction pose and return.
+            //         This keeps arms hanging beside the body without clipping the torso.
             if (smoothedInputMag < 0.01f)
             {
-                SetAllArmTargetsToIdentity();
+                SetAllArmTargetsToRest();
                 return;
             }
 
@@ -210,15 +232,18 @@ namespace PhysicsDrivenMovement.Character
         /// <param name="effectiveScale">Combined amplitude scale [0,1] (smoothedInputMag × _armSwingScale).</param>
         private void ApplyArmSwing(float leftSwingDeg, float rightSwingDeg, float effectiveScale)
         {
-            // Upper arms: sinusoidal counter-swing
+            // Upper arms: rest abduction composed with sinusoidal counter-swing.
+            // Abduction keeps arms clear of the torso; swing adds the gait motion on top.
             if (_upperArmL != null)
             {
-                _upperArmL.targetRotation = Quaternion.AngleAxis(leftSwingDeg, _armSwingAxis);
+                _upperArmL.targetRotation = _abductionL
+                    * Quaternion.AngleAxis(leftSwingDeg, _armSwingAxis);
             }
 
             if (_upperArmR != null)
             {
-                _upperArmR.targetRotation = Quaternion.AngleAxis(rightSwingDeg, _armSwingAxis);
+                _upperArmR.targetRotation = _abductionR
+                    * Quaternion.AngleAxis(rightSwingDeg, _armSwingAxis);
             }
 
             // Lower arms: constant elbow bend, scaled by effective amplitude so elbows also
@@ -237,15 +262,14 @@ namespace PhysicsDrivenMovement.Character
         }
 
         /// <summary>
-        /// Sets all four arm joint <c>targetRotation</c> values immediately to
-        /// <see cref="Quaternion.identity"/>, removing any active arm swing pose and
-        /// letting the joint's natural drive return the limb to its resting orientation.
+        /// Sets upper arm targets to the rest abduction pose (arms hanging beside the
+        /// body with a slight outward angle) and lower arms to identity.
         /// Called during idle (SmoothedInputMag ≈ 0) and when LegAnimator is missing.
         /// </summary>
-        private void SetAllArmTargetsToIdentity()
+        private void SetAllArmTargetsToRest()
         {
-            if (_upperArmL != null) { _upperArmL.targetRotation = Quaternion.identity; }
-            if (_upperArmR != null) { _upperArmR.targetRotation = Quaternion.identity; }
+            if (_upperArmL != null) { _upperArmL.targetRotation = _abductionL; }
+            if (_upperArmR != null) { _upperArmR.targetRotation = _abductionR; }
             if (_lowerArmL != null) { _lowerArmL.targetRotation = Quaternion.identity; }
             if (_lowerArmR != null) { _lowerArmR.targetRotation = Quaternion.identity; }
         }

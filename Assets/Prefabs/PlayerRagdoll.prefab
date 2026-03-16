@@ -949,7 +949,7 @@ Transform:
   m_GameObject: {fileID: 3054373066927700912}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.21, y: 0.24, z: 0}
+  m_LocalPosition: {x: 0.3, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1429,6 +1429,7 @@ MonoBehaviour:
   _armSwingAngle: 20
   _elbowBendAngle: 15
   _armSwingScale: 1
+  _restAbductionAngle: 12
   _armSwingAxis: {x: 0, y: 0, z: 1}
   _elbowAxis: {x: 0, y: 0, z: 1}
 --- !u!114 &1576826578835935232
@@ -2508,7 +2509,7 @@ Transform:
   m_GameObject: {fileID: 7062038854640815217}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.21, y: 0.24, z: 0}
+  m_LocalPosition: {x: -0.3, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

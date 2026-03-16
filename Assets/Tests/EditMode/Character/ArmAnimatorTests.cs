@@ -127,9 +127,9 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         // ── Test 2: Identity at zero SmoothedInputMag ────────────────────────
 
         [Test]
-        [Description("When LegAnimator.SmoothedInputMag is 0, all arm joint targetRotations " +
-                     "should be set to Quaternion.identity.")]
-        public void FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreIdentity()
+        [Description("When LegAnimator.SmoothedInputMag is 0, upper arm joints should be at rest " +
+                     "abduction pose and lower arm joints at identity.")]
+        public void FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreAtRest()
         {
             // Arrange: inject arm joints via Awake, ensure LegAnimator.SmoothedInputMag=0
             // SmoothedInputMag starts at 0 by default (private field _smoothedInputMag is 0).
@@ -142,12 +142,20 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             _lowerArmLJoint.targetRotation = nonIdentity;
             _lowerArmRJoint.targetRotation = nonIdentity;
 
-            // Act: invoke FixedUpdate (SmoothedInputMag is 0, so arms should go to identity)
+            // Act: invoke FixedUpdate (SmoothedInputMag is 0, so arms should go to rest pose)
             InvokeFixedUpdate(_armAnimator);
 
-            // Assert
-            AssertQuaternionIsIdentity(_upperArmLJoint.targetRotation, "UpperArm_L");
-            AssertQuaternionIsIdentity(_upperArmRJoint.targetRotation, "UpperArm_R");
+            // Assert: upper arms at rest abduction, lower arms at identity.
+            // Rest abduction is 12° by default — upper arms should NOT be identity.
+            float upperLAngle = Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity);
+            float upperRAngle = Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity);
+            Assert.That(upperLAngle, Is.GreaterThan(1f),
+                $"UpperArm_L should be at abduction rest (not identity). Angle from identity = {upperLAngle:F2}°.");
+            Assert.That(upperRAngle, Is.GreaterThan(1f),
+                $"UpperArm_R should be at abduction rest (not identity). Angle from identity = {upperRAngle:F2}°.");
+            // Upper arms should be symmetric (same angle from identity).
+            Assert.That(Mathf.Abs(upperLAngle - upperRAngle), Is.LessThan(1f),
+                $"Upper arm abduction should be symmetric. L={upperLAngle:F2}° R={upperRAngle:F2}°.");
             AssertQuaternionIsIdentity(_lowerArmLJoint.targetRotation, "LowerArm_L");
             AssertQuaternionIsIdentity(_lowerArmRJoint.targetRotation, "LowerArm_R");
         }
