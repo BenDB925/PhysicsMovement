@@ -173,6 +173,11 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>All Rigidbodies contained in this ragdoll, including the root.</summary>
         private Rigidbody[] _allBodies;
 
+        private JointSpringProfileState[] _jointSpringProfiles;
+        private float _springBlendDuration;
+        private float _springBlendElapsed;
+        private bool _isSpringBlendActive;
+
         // ─── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -202,6 +207,11 @@ namespace PhysicsDrivenMovement.Character
             //         snapping on ground contact.
             ApplyLegJointDrives();
 
+            // STEP 3h: Cache the post-setup SLERP drives as the baseline spring profile so
+            //          surrender and stand-up flows can blend relative multipliers from a
+            //          stable runtime reference rather than prefab-authored defaults.
+            CacheBaselineSpringProfiles();
+
             // STEP 4: Move lower leg GameObjects to the LowerLegParts layer (13) and disable
             //         that layer's collision with ground layers. This prevents the lower leg
             //         capsule colliders from catching on floor geometry during gait.
@@ -218,7 +228,179 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void FixedUpdate()
+        {
+            if (!_isSpringBlendActive || _jointSpringProfiles == null || _jointSpringProfiles.Length == 0)
+            {
+                return;
+            }
+
+            _springBlendElapsed = Mathf.Min(_springBlendElapsed + Time.fixedDeltaTime, _springBlendDuration);
+            float blendT = _springBlendDuration <= Mathf.Epsilon
+                ? 1f
+                : Mathf.Clamp01(_springBlendElapsed / _springBlendDuration);
+
+            ApplySpringBlend(blendT);
+
+            if (blendT >= 1f)
+            {
+                _isSpringBlendActive = false;
+            }
+        }
+
+        // ─── Public Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Blends all ConfigurableJoint SLERP drive spring and damper values toward the
+        /// requested arm, leg, and torso multipliers relative to the Awake baseline.
+        /// </summary>
+        public void SetSpringProfile(float armMultiplier, float legMultiplier, float torsoMultiplier, float blendDuration)
+        {
+            if (_jointSpringProfiles == null || _jointSpringProfiles.Length == 0)
+            {
+                return;
+            }
+
+            float clampedBlendDuration = Mathf.Max(0f, blendDuration);
+            float clampedArmMultiplier = Mathf.Max(0f, armMultiplier);
+            float clampedLegMultiplier = Mathf.Max(0f, legMultiplier);
+            float clampedTorsoMultiplier = Mathf.Max(0f, torsoMultiplier);
+
+            for (int i = 0; i < _jointSpringProfiles.Length; i++)
+            {
+                JointSpringProfileState profile = _jointSpringProfiles[i];
+
+                if (profile.Joint == null)
+                {
+                    continue;
+                }
+
+                profile.BlendStartDrive = profile.Joint.slerpDrive;
+                profile.BlendTargetDrive = ScaleDrive(
+                    profile.BaselineDrive,
+                    GetMultiplierForGroup(
+                        profile.Group,
+                        clampedArmMultiplier,
+                        clampedLegMultiplier,
+                        clampedTorsoMultiplier));
+
+                _jointSpringProfiles[i] = profile;
+            }
+
+            _springBlendElapsed = 0f;
+            _springBlendDuration = clampedBlendDuration;
+
+            if (clampedBlendDuration <= Mathf.Epsilon)
+            {
+                ApplySpringBlend(1f);
+                _isSpringBlendActive = false;
+                return;
+            }
+
+            _isSpringBlendActive = true;
+        }
+
+        /// <summary>
+        /// Restores all ConfigurableJoint SLERP drive spring and damper values to the Awake baseline.
+        /// </summary>
+        public void ResetSpringProfile(float blendDuration)
+        {
+            SetSpringProfile(1f, 1f, 1f, blendDuration);
+        }
+
         // ─── Private Methods ──────────────────────────────────────────────────
+
+        private void CacheBaselineSpringProfiles()
+        {
+            ConfigurableJoint[] allJoints = GetComponentsInChildren<ConfigurableJoint>(includeInactive: true);
+            _jointSpringProfiles = new JointSpringProfileState[allJoints.Length];
+
+            for (int i = 0; i < allJoints.Length; i++)
+            {
+                ConfigurableJoint joint = allJoints[i];
+                JointDrive baselineDrive = joint.slerpDrive;
+
+                _jointSpringProfiles[i] = new JointSpringProfileState(
+                    joint,
+                    baselineDrive,
+                    baselineDrive,
+                    baselineDrive,
+                    ClassifySpringProfileGroup(joint.gameObject.name));
+            }
+        }
+
+        private void ApplySpringBlend(float blendT)
+        {
+            for (int i = 0; i < _jointSpringProfiles.Length; i++)
+            {
+                JointSpringProfileState profile = _jointSpringProfiles[i];
+
+                if (profile.Joint == null)
+                {
+                    continue;
+                }
+
+                profile.Joint.slerpDrive = LerpDrive(profile.BlendStartDrive, profile.BlendTargetDrive, blendT);
+            }
+        }
+
+        private static JointDrive ScaleDrive(JointDrive baselineDrive, float multiplier)
+        {
+            float clampedMultiplier = Mathf.Max(0f, multiplier);
+
+            return new JointDrive
+            {
+                positionSpring = baselineDrive.positionSpring * clampedMultiplier,
+                positionDamper = baselineDrive.positionDamper * clampedMultiplier,
+                maximumForce = baselineDrive.maximumForce,
+            };
+        }
+
+        private static JointDrive LerpDrive(JointDrive startDrive, JointDrive targetDrive, float blendT)
+        {
+            float clampedBlendT = Mathf.Clamp01(blendT);
+
+            return new JointDrive
+            {
+                positionSpring = Mathf.Lerp(startDrive.positionSpring, targetDrive.positionSpring, clampedBlendT),
+                positionDamper = Mathf.Lerp(startDrive.positionDamper, targetDrive.positionDamper, clampedBlendT),
+                maximumForce = Mathf.Lerp(startDrive.maximumForce, targetDrive.maximumForce, clampedBlendT),
+            };
+        }
+
+        private static float GetMultiplierForGroup(
+            SpringProfileGroup group,
+            float armMultiplier,
+            float legMultiplier,
+            float torsoMultiplier)
+        {
+            switch (group)
+            {
+                case SpringProfileGroup.Arm:
+                    return armMultiplier;
+
+                case SpringProfileGroup.Leg:
+                    return legMultiplier;
+
+                default:
+                    return torsoMultiplier;
+            }
+        }
+
+        private static SpringProfileGroup ClassifySpringProfileGroup(string jointName)
+        {
+            if (jointName.Contains("Arm") || jointName.Contains("Hand"))
+            {
+                return SpringProfileGroup.Arm;
+            }
+
+            if (jointName.Contains("Leg") || jointName.Contains("Foot"))
+            {
+                return SpringProfileGroup.Leg;
+            }
+
+            return SpringProfileGroup.Torso;
+        }
 
         /// <summary>
         /// Searches the hierarchy for the four leg ConfigurableJoints by GameObject name
@@ -446,6 +628,36 @@ namespace PhysicsDrivenMovement.Character
                           $"Default(0) and Environment({GameSettings.LayerEnvironment}) collisions. " +
                           $"({foundCount} lower leg segments reassigned).");
             }
+        }
+
+        private enum SpringProfileGroup
+        {
+            Torso,
+            Arm,
+            Leg,
+        }
+
+        private struct JointSpringProfileState
+        {
+            public JointSpringProfileState(
+                ConfigurableJoint joint,
+                JointDrive baselineDrive,
+                JointDrive blendStartDrive,
+                JointDrive blendTargetDrive,
+                SpringProfileGroup group)
+            {
+                Joint = joint;
+                BaselineDrive = baselineDrive;
+                BlendStartDrive = blendStartDrive;
+                BlendTargetDrive = blendTargetDrive;
+                Group = group;
+            }
+
+            public ConfigurableJoint Joint;
+            public JointDrive BaselineDrive;
+            public JointDrive BlendStartDrive;
+            public JointDrive BlendTargetDrive;
+            public SpringProfileGroup Group;
         }
     }
 }
