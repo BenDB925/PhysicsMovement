@@ -4,9 +4,9 @@
 Make the sprint gait visually distinct from the walk gait: longer strides, higher knee lift, slightly faster cadence. The character should look like it is running, not just walking faster.
 
 ## Current status
-- State: Not started
-- Current next step: Add sprint-scaled gait parameters to `LegAnimator`
-- Blockers: WP-1 must land first (needs `SprintNormalized`)
+- State: In progress
+- Current next step: Implement step 2 knee-lift scaling on top of the new sprint stride blend
+- Blockers: Remaining WP-4 items still depend on WP-1; step 1 now uses the live `SprintNormalized` blend in `LegAnimator`
 
 ## Scope
 
@@ -46,7 +46,12 @@ Make the sprint gait visually distinct from the walk gait: longer strides, highe
 - **Assert**: Left and right upper-leg phase difference stays within 0.3–0.7 of a full cycle (anti-phase). Proves legs don't synchronize at higher speed.
 
 ## Decisions
+- 2026-03-16: Step 1 landed by blending `LegAnimator` upper-leg swing amplitude from `_stepAngle` to `_sprintStepAngle` via `SprintNormalized`. `StepPlanner` and step-target placement were left unchanged so this slice only changes visual stride amplitude.
 
 ## Artifacts
+- `Assets/Scripts/Character/LegAnimator.cs`: runtime stride blend (`_sprintStepAngle`, effective step-angle helpers, executor usage)
+- `Assets/Tests/PlayMode/Character/LegAnimatorSprintStrideTests.cs`: focused PlayMode coverage for walk, mid-blend, and full-sprint stride command output
+- `TestResults/latest-summary.md`: focused PlayMode slice `LegAnimatorSprintStrideTests;LegAnimatorTests;GaitOutcomeTests.HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate` passed with 65 passing / 6 ignored / 0 failed on 2026-03-16
 
 ## Progress notes
+- 2026-03-16: Implemented step 1. Sprint now widens the effective leg step angle without changing step-target planning, and the focused PlayMode regression slice stayed green after adding dedicated sprint-stride tests.

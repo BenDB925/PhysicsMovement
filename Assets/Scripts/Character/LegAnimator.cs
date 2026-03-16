@@ -27,6 +27,12 @@ namespace PhysicsDrivenMovement.Character
                  "Controls the visible stride amplitude. Typical range: 15–35°.")]
         private float _stepAngle = 60f;
 
+        [SerializeField, Range(60f, 90f)]
+        [Tooltip("Peak forward/backward swing angle (degrees) at full sprint. " +
+             "Blended from _stepAngle by PlayerMovement.SprintNormalized so sprint widens " +
+             "the visible stride without changing step-target planning. Default 75°.")]
+        private float _sprintStepAngle = 75f;
+
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
                  "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
@@ -327,7 +333,7 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public float SmoothedInputMag => _smoothedInputMag;
 
-        internal float StepAngleDegrees => _stepAngle;
+        internal float StepAngleDegrees => GetEffectiveStepAngle();
 
         internal float KneeAngleDegrees => _kneeAngle;
 
@@ -340,7 +346,7 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>
         /// True when the stranded-foot forward bias is active this frame: both feet are
         /// behind the hips while the player has active movement input. The gait swing
-        /// targets are biased forward by <see cref="_stepAngle"/> × <see cref="_smoothedInputMag"/>
+        /// targets are biased forward by the current effective step angle × <see cref="_smoothedInputMag"/>
         /// so the backward phase bottoms out at neutral (0°) instead of driving the
         /// already-stranded legs further behind.
         /// Exposed for test verification; read-only at runtime.
@@ -528,6 +534,30 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private float GetCurrentSprintNormalized()
+        {
+            // STEP 1: Prefer the live command-frame input while commands are active so the
+            //         exposed stride seam reports the same sprint blend the executor uses.
+            if (_hasCommandFrame)
+            {
+                return Mathf.Clamp01(_commandDesiredInput.SprintNormalized);
+            }
+
+            // STEP 2: Fall back to PlayerMovement when the director has not published a
+            //         command frame yet so inspector/debug readers still see the sprint blend.
+            return _playerMovement != null ? Mathf.Clamp01(_playerMovement.SprintNormalized) : 0f;
+        }
+
+        private float GetEffectiveStepAngle()
+        {
+            return GetEffectiveStepAngle(GetCurrentSprintNormalized());
+        }
+
+        private float GetEffectiveStepAngle(float sprintNormalized)
+        {
+            return Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
+        }
+
         internal void BuildPassThroughCommands(
             DesiredInput desiredInput,
             LocomotionObservation observation,
@@ -697,6 +727,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (isMoving)
             {
+                float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
                 float phaseAdvance = effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
@@ -763,18 +794,18 @@ namespace PhysicsDrivenMovement.Character
                     _leftLegStateMachine.CyclePhase,
                     _smoothedInputMag,
                     leftStateFrame.State,
-                    _stepAngle,
+                    effectiveStepAngle,
                     _upperLegLiftBoost);
                 float rightSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
                     _rightLegStateMachine.CyclePhase,
                     _smoothedInputMag,
                     rightStateFrame.State,
-                    _stepAngle,
+                    effectiveStepAngle,
                     _upperLegLiftBoost);
 
                 if (bothFeetBehind)
                 {
-                    float strandedBias = _stepAngle * _smoothedInputMag;
+                    float strandedBias = effectiveStepAngle * _smoothedInputMag;
                     leftSwingDeg += strandedBias;
                     rightSwingDeg += strandedBias;
                     _isGaitBiasedForward = true;
@@ -844,7 +875,7 @@ namespace PhysicsDrivenMovement.Character
                     ref explicitRightCommand,
                     gaitReferenceDirection,
                     bothFeetBehind,
-                    _stepAngle,
+                    effectiveStepAngle,
                     _kneeAngle,
                     _upperLegLiftBoost);
 
@@ -977,10 +1008,12 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            float effectiveStepAngle = GetEffectiveStepAngle(_commandDesiredInput.SprintNormalized);
+
             LegExecutionProfileResolver.Resolve(
                 _leftLegCommand,
                 _useStateDrivenExecution,
-                _stepAngle,
+                effectiveStepAngle,
                 _kneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
@@ -990,7 +1023,7 @@ namespace PhysicsDrivenMovement.Character
             LegExecutionProfileResolver.Resolve(
                 _rightLegCommand,
                 _useStateDrivenExecution,
-                _stepAngle,
+                effectiveStepAngle,
                 _kneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
@@ -999,10 +1032,10 @@ namespace PhysicsDrivenMovement.Character
                 out float rightKneeBendDeg);
 
             Vector3 gaitForward = LegJointDriver.GetWorldGaitForward(_commandDesiredInput, _commandObservation);
-            leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, leftSwingDeg);
-            rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, rightSwingDeg);
-            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, ref leftSwingDeg, ref leftKneeBendDeg);
-            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, ref rightSwingDeg, ref rightKneeBendDeg);
+            leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, effectiveStepAngle, leftSwingDeg);
+            rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, effectiveStepAngle, rightSwingDeg);
+            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, effectiveStepAngle, ref leftSwingDeg, ref leftKneeBendDeg);
+            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, effectiveStepAngle, ref rightSwingDeg, ref rightKneeBendDeg);
             ApplyStepUpSupportLegExtension(
                 _leftLegCommand,
                 _footR,
@@ -1309,6 +1342,7 @@ namespace PhysicsDrivenMovement.Character
             LegCommandOutput command,
             Transform footTransform,
             Vector3 gaitReferenceDirection,
+            float stepAngleDegrees,
             float swingAngleDegrees)
         {
             if (!command.StepTarget.IsValid ||
@@ -1330,13 +1364,14 @@ namespace PhysicsDrivenMovement.Character
             float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
             float reachBlend = Mathf.SmoothStep(0.2f, 1f, swingProgress);
             float normalizedReach = Mathf.Clamp01(reachDeficit / 0.22f) * reachBlend;
-            float reachFloor = Mathf.Lerp(_stepAngle * 0.62f, _stepAngle * 1.08f, normalizedReach) * command.BlendWeight;
+            float reachFloor = Mathf.Lerp(stepAngleDegrees * 0.62f, stepAngleDegrees * 1.08f, normalizedReach) * command.BlendWeight;
             return Mathf.Max(swingAngleDegrees, reachFloor);
         }
 
         private void ApplyStepTargetLandingHeightFloor(
             LegCommandOutput command,
             Transform footTransform,
+            float stepAngleDegrees,
             ref float swingAngleDegrees,
             ref float kneeAngleDegrees)
         {
@@ -1369,7 +1404,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float landingSwingContribution = Mathf.Lerp(0f, _stepAngle * 0.22f, landingHeightBlend) * command.BlendWeight;
+            float landingSwingContribution = Mathf.Lerp(0f, stepAngleDegrees * 0.22f, landingHeightBlend) * command.BlendWeight;
             float landingKneeContribution = Mathf.Lerp(0f, _kneeAngle * 0.48f, landingHeightBlend) * command.BlendWeight;
 
             swingAngleDegrees += landingSwingContribution;
