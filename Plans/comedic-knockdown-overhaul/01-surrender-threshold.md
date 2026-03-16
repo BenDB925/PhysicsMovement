@@ -4,8 +4,8 @@
 Detect when the character is in an unrecoverable tilt and stop fighting it. Instead of boosting upright torque forever, release into a natural ragdoll fall after a short grace window. The character should look like he *tried* to stay up and then gave in.
 
 ## Current status
-- State: Not started
-- Current next step: Implement surrender trigger in BalanceController
+- State: In progress
+- Current next step: Implement CharacterState surrender handoff and shared knockdown severity utility
 - Blockers: None
 
 ## Current behavior
@@ -64,3 +64,5 @@ When surrender fires:
 
 ## Progress notes
 - 2026-03-16: Chapter spec written
+- 2026-03-16: Verified the `RagdollSetup` spring-profile API was already present and passing EditMode validation.
+- 2026-03-16: Implemented `BalanceController` surrender detection, severity capture, and limp-profile triggering. EditMode passed, `HardSnapRecoveryTests` + `BalanceControllerTests` passed, and the targeted `LocomotionDirectorTests` slice still shows persistent C3.2/C3.5 gait-phase reds unrelated to the surrender changes.

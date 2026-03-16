@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 1 — RagdollSetup spring profile API
+- Current next step: Step 3 — CharacterState — Accept Surrender + KnockdownSeverity Utility
 - Active blockers: None
 
 ## Quick Resume
@@ -47,7 +47,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Touch any other file. Don't change existing joint drive values or collision setup. |
 | **Design ref** | Ch1 §"Joint spring profile management", Ch4 §"Joint spring profile management" |
 | **Done when** | EditMode compile passes. Calling `SetSpringProfile(0.25f, 0.25f, 0.25f, 0f)` immediately sets all drives to 25% of baseline. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 #### Step 2: BalanceController — Surrender Detection & TriggerSurrender
 | | |
@@ -60,7 +60,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Change existing IsFallen thresholds (65°/55°). Don't touch LocomotionDirector yet. Don't modify CharacterState transitions. |
 | **Design ref** | Ch1 §"Surrender trigger conditions", §"Surrender response" |
 | **Done when** | EditMode compile passes. `TriggerSurrender(0.7f)` zeroes all torque scales and sets IsSurrendered = true. Calling `ClearSurrender()` restores them. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 #### Step 3: CharacterState — Accept Surrender + KnockdownSeverity Utility
 | | |
@@ -261,3 +261,5 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 ## Progress notes
 - 2026-03-16: Plan created from discussion. User wants sure-footed default, natural ragdoll falls, ~2–2.5 s floor dwell, staged stand-up, external force knockdowns, severity scaling.
 - 2026-03-16: Restructured into 15 atomic agent-sized steps with explicit file scopes, LOC budgets, and done-checks.
+- 2026-03-16: Verified Step 1 was already implemented in `RagdollSetup` on `master` and marked it complete after a fresh EditMode pass.
+- 2026-03-16: Completed Step 2 in `BalanceController` with surrender thresholds, severity capture, `TriggerSurrender`/`ClearSurrender`, and local balance-scale gating. EditMode passed. `HardSnapRecoveryTests` + `BalanceControllerTests` passed in PlayMode. `LocomotionDirectorTests.FixedUpdate_WhenOneFootLosesContact_BreaksStrictHalfCyclePhaseMirror` and `...ConfidenceDrops_ConvergesTowardMirroredFallbackWithoutOneFrameSnap` remain red in the Chapter 1 slice and appear unrelated to the surrender seam.

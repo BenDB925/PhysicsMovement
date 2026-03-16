@@ -111,6 +111,22 @@ namespace PhysicsDrivenMovement.Character
              "Use a lower value than enter threshold to provide hysteresis.")]
         private float _fallenExitAngleThreshold = 55f;
 
+         [Header("Surrender Threshold")]
+         [SerializeField, Range(0f, 90f)]
+         [Tooltip("World-up deviation in degrees that must persist for two FixedUpdate frames " +
+               "before surrender fires and balance stops fighting the fall.")]
+         private float _surrenderAngleThreshold = 80f;
+
+         [SerializeField, Range(0f, 90f)]
+         [Tooltip("Lower angle threshold used with tilt-direction angular velocity to detect " +
+               "momentum-driven blow-through before the extreme-angle gate is reached.")]
+         private float _surrenderAnglePlusMomentumThreshold = 65f;
+
+         [SerializeField, Range(0f, 20f)]
+         [Tooltip("Minimum tilt-direction angular velocity (rad/s) that combines with the " +
+               "angle-plus-momentum threshold to trigger surrender.")]
+         private float _surrenderAngularVelocityThreshold = 3f;
+
         [Header("Startup Stand Assist")]
         [SerializeField]
         [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
@@ -276,6 +292,7 @@ namespace PhysicsDrivenMovement.Character
 
         private Rigidbody _rb;
         private CharacterState _characterState;
+        private RagdollSetup _ragdollSetup;
 
         /// <summary>Left-foot GroundSensor, located in Awake via component search.</summary>
         private GroundSensor _footL;
@@ -345,6 +362,9 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private bool _hasLegAnimator;
 
+        private int _surrenderExtremeAngleFrameCount;
+        private bool _suppressPelvisExpression;
+
         // ─── Public Properties ────────────────────────────────────────────────
 
         /// <summary>
@@ -366,6 +386,31 @@ namespace PhysicsDrivenMovement.Character
         /// Updated every FixedUpdate. 0 = perfectly upright, 90 = horizontal.
         /// </summary>
         public float UprightAngle { get; private set; }
+
+        /// <summary>
+        /// True once surrender has disabled the character's balance support systems.
+        /// </summary>
+        public bool IsSurrendered { get; private set; }
+
+        /// <summary>
+        /// Cached surrender severity in the 0–1 range for downstream knockdown systems.
+        /// </summary>
+        public float SurrenderSeverity { get; private set; }
+
+        /// <summary>
+        /// Local multiplier layered on top of <see cref="BodySupportCommand.UprightStrengthScale"/>.
+        /// </summary>
+        public float UprightStrengthScale { get; private set; } = 1f;
+
+        /// <summary>
+        /// Local multiplier layered on top of <see cref="BodySupportCommand.HeightMaintenanceScale"/>.
+        /// </summary>
+        public float HeightMaintenanceScale { get; private set; } = 1f;
+
+        /// <summary>
+        /// Local multiplier layered on top of <see cref="BodySupportCommand.StabilizationStrengthScale"/>.
+        /// </summary>
+        public float StabilizationScale { get; private set; } = 1f;
 
         /// <summary>
         /// True while the snap recovery window is active after a sharp direction change.
@@ -434,6 +479,51 @@ namespace PhysicsDrivenMovement.Character
             UpdateTargetFacingRotation(_currentBodySupportCommand.FacingDirection);
         }
 
+        public void TriggerSurrender(float severity)
+        {
+            float clampedSeverity = Mathf.Clamp01(severity);
+            SurrenderSeverity = Mathf.Max(SurrenderSeverity, clampedSeverity);
+
+            if (IsSurrendered)
+            {
+                return;
+            }
+
+            IsSurrendered = true;
+            UprightStrengthScale = 0f;
+            HeightMaintenanceScale = 0f;
+            StabilizationScale = 0f;
+            _suppressPelvisExpression = true;
+            _surrenderExtremeAngleFrameCount = 0;
+
+            _smoothedPelvisTiltDeg = 0f;
+            _smoothedPelvisSwayOffset = Vector3.zero;
+            _transientLeanDeg = 0f;
+            _transientLeanTimer = 0f;
+            _transientLeanDecay = 0f;
+
+            if (_ragdollSetup != null)
+            {
+                _ragdollSetup.SetSpringProfile(0.25f, 0.25f, 0.25f, 0.15f);
+            }
+        }
+
+        public void ClearSurrender()
+        {
+            IsSurrendered = false;
+            SurrenderSeverity = 0f;
+            UprightStrengthScale = 1f;
+            HeightMaintenanceScale = 1f;
+            StabilizationScale = 1f;
+            _suppressPelvisExpression = false;
+            _surrenderExtremeAngleFrameCount = 0;
+
+            if (_ragdollSetup != null)
+            {
+                _ragdollSetup.ResetSpringProfile(0f);
+            }
+        }
+
         private void UpdateTargetFacingRotation(Vector3 dir)
         {
             Vector3 flatDir = new Vector3(dir.x, 0f, dir.z);
@@ -451,6 +541,7 @@ namespace PhysicsDrivenMovement.Character
         {
             // STEP 1: Cache the Rigidbody on this GameObject (guaranteed by RequireComponent).
             _rb = GetComponent<Rigidbody>();
+            TryGetComponent(out _ragdollSetup);
 
             Vector3 currentForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (currentForward.sqrMagnitude < 0.001f)
@@ -555,6 +646,13 @@ namespace PhysicsDrivenMovement.Character
                 _fallenExitAngleThreshold = _fallenEnterAngleThreshold;
             }
 
+            _surrenderAngleThreshold = Mathf.Clamp(_surrenderAngleThreshold, 0f, 90f);
+            _surrenderAnglePlusMomentumThreshold = Mathf.Clamp(
+                _surrenderAnglePlusMomentumThreshold,
+                0f,
+                _surrenderAngleThreshold);
+            _surrenderAngularVelocityThreshold = Mathf.Max(0f, _surrenderAngularVelocityThreshold);
+
             _startupStandAssistDuration = Mathf.Max(0f, _startupStandAssistDuration);
             _startupAssistHeightRange = Mathf.Max(0.05f, _startupAssistHeightRange);
             _startupAssistMaxRiseSpeed = Mathf.Max(0.05f, _startupAssistMaxRiseSpeed);
@@ -613,7 +711,9 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 2: Measure how far the Hips' up-axis deviates from world-up.
             //         Vector3.Angle always returns 0–180°, so this is safe for all poses.
-            float uprightAngle = Vector3.Angle(_rb.transform.up, Vector3.up);
+            Quaternion currentRot = _rb.rotation;
+            Vector3 currentUp = currentRot * Vector3.up;
+            float uprightAngle = Vector3.Angle(currentUp, Vector3.up);
             UprightAngle = uprightAngle;
 
             // STEP 3: Update fallen state with hysteresis (unless overridden by test seam).
@@ -651,7 +751,7 @@ namespace PhysicsDrivenMovement.Character
             bool startupAssistActive = false;
             float startupAssistScale = 0f;
             bool persistentRecoveryActive = false;
-            float commandHeightScale = _currentBodySupportCommand.HeightMaintenanceScale;
+            float commandHeightScale = _currentBodySupportCommand.HeightMaintenanceScale * HeightMaintenanceScale;
 
             if (_enableStartupStandAssist &&
                 commandHeightScale > 0f &&
@@ -761,7 +861,7 @@ namespace PhysicsDrivenMovement.Character
                 // Scaled by SmoothedInputMag so it disappears at idle.
                 {
                     Vector3 swayTarget = Vector3.zero;
-                    if (_pelvisSwayMaxOffset > 0f && _legAnimator != null && !IsFallen)
+                    if (_pelvisSwayMaxOffset > 0f && _legAnimator != null && !IsFallen && !_suppressPelvisExpression)
                     {
                         bool leftDown = _footL.IsGrounded;
                         bool rightDown = _footR.IsGrounded;
@@ -797,7 +897,7 @@ namespace PhysicsDrivenMovement.Character
                 // that is the natural running equilibrium. Damping reduction allows
                 // faster re-acceleration in the new direction.
                 float recoveryBlend = _currentBodySupportCommand.RecoveryBlend;
-                float stabilizationScale = _currentBodySupportCommand.StabilizationStrengthScale;
+                float stabilizationScale = _currentBodySupportCommand.StabilizationStrengthScale * StabilizationScale;
                 float comSpringMul = Mathf.Lerp(1f, _snapRecoveryComSpringScale, recoveryBlend) * stabilizationScale;
                 float comDampMul = Mathf.Lerp(1f, _snapRecoveryComDampScale, recoveryBlend) * stabilizationScale;
 
@@ -834,7 +934,7 @@ namespace PhysicsDrivenMovement.Character
                 float hipsHeightError = (_standingHipsHeight + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
-                    float heightScale = _currentBodySupportCommand.HeightMaintenanceScale;
+                    float heightScale = commandHeightScale;
                     float heightForce = hipsHeightError * (_heightMaintenanceStrength * heightScale)
                                         - _rb.linearVelocity.y * (_heightMaintenanceDamping * heightScale);
                     heightForce = Mathf.Max(0f, heightForce);
@@ -917,7 +1017,7 @@ namespace PhysicsDrivenMovement.Character
             // (speed dropping → backward tilt). This speed-delta approach is much
             // smoother than raw frame-by-frame velocity differentiation in a ragdoll.
             float pelvisTiltTarget = 0f;
-            if (_pelvisTiltMaxDeg > 0f && _legAnimator != null && !IsFallen && effectivelyGrounded)
+            if (_pelvisTiltMaxDeg > 0f && _legAnimator != null && !IsFallen && effectivelyGrounded && !_suppressPelvisExpression)
             {
                 Vector3 hipsHorizontalVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
                 Vector3 facingXZ = Vector3.ProjectOnPlane(
@@ -960,9 +1060,6 @@ namespace PhysicsDrivenMovement.Character
             // up via the same correction forces). The GettingUp state (Phase 3C3) may
             // disable balance entirely during a controlled get-up animation, but that is
             // a separate concern.
-            Quaternion currentRot   = _rb.rotation;
-            Vector3    currentUp    = currentRot * Vector3.up;
-
             // STEP 4a: Layer the director-owned lean command on top of the local
             // expressive pelvis tilt so sprint/turn posture and local expression stack
             // additively instead of overriding one another.
@@ -989,8 +1086,9 @@ namespace PhysicsDrivenMovement.Character
             // coupling the derivative term with the separate yaw damping below.
             Vector3 angVel = _rb.angularVelocity;
             Vector3 pitchRollAngVel = new Vector3(angVel.x, 0f, angVel.z);
+            float effectiveUprightScale = _currentBodySupportCommand.UprightStrengthScale * UprightStrengthScale;
 
-            if (uprightAxis.sqrMagnitude > 0.001f)
+            if (uprightAxis.sqrMagnitude > 0.001f && effectiveUprightScale > 0f)
             {
                 // STEP 4a: Reduce kD during snap recovery to bring the over-damped
                 // prefab tuning closer to critical damping.  This lets the character
@@ -1009,13 +1107,34 @@ namespace PhysicsDrivenMovement.Character
 
                 float uprightRad = uprightAngleDeg * Mathf.Deg2Rad;
                 Vector3 uprightTorque =
-                    (_kP * _currentBodySupportCommand.UprightStrengthScale) * uprightRad * uprightAxis
+                    (_kP * effectiveUprightScale) * uprightRad * uprightAxis
                     - effectiveKd * pitchRollAngVel;
 
                 float uprightMultiplier = _hasBeenGrounded
                     ? (effectivelyGrounded ? 1f : _airborneMultiplier)
                     : 1f;
                 _rb.AddTorque(uprightTorque * uprightMultiplier, ForceMode.Force);
+            }
+
+            if (!IsSurrendered)
+            {
+                if (uprightAngle > _surrenderAngleThreshold)
+                {
+                    _surrenderExtremeAngleFrameCount++;
+                }
+                else
+                {
+                    _surrenderExtremeAngleFrameCount = 0;
+                }
+
+                float tiltDirectionalAngularVelocity = GetTiltDirectionalAngularVelocity(currentUp, pitchRollAngVel);
+                bool extremeAngleSurrender = _surrenderExtremeAngleFrameCount >= 2;
+                bool momentumSurrender = uprightAngle > _surrenderAnglePlusMomentumThreshold &&
+                                         tiltDirectionalAngularVelocity > _surrenderAngularVelocityThreshold;
+                if (extremeAngleSurrender || momentumSurrender)
+                {
+                    TriggerSurrender(ComputeSurrenderSeverity(uprightAngle, tiltDirectionalAngularVelocity, hipsHeight));
+                }
             }
 
             // ─── STEP 5: Compute yaw torque ────────────────────────────────────
@@ -1149,6 +1268,26 @@ namespace PhysicsDrivenMovement.Character
                     footRb.AddForce(forwardDir * carryForce, ForceMode.Force);
                 }
             }
+        }
+
+        private float ComputeSurrenderSeverity(float uprightAngle, float angularVelocity, float hipsHeight)
+        {
+            float standingHeight = Mathf.Max(0.0001f, _standingHipsHeight);
+            float angleSeverity = Mathf.Clamp01((uprightAngle - 65f) / 50f) * 0.5f;
+            float angularVelocitySeverity = Mathf.Clamp01(angularVelocity / 6f) * 0.3f;
+            float heightSeverity = Mathf.Clamp01(1f - (hipsHeight / standingHeight)) * 0.2f;
+            return Mathf.Clamp01(angleSeverity + angularVelocitySeverity + heightSeverity);
+        }
+
+        private static float GetTiltDirectionalAngularVelocity(Vector3 currentUp, Vector3 pitchRollAngVel)
+        {
+            Vector3 correctionAxis = Vector3.Cross(currentUp, Vector3.up);
+            if (correctionAxis.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Max(0f, -Vector3.Dot(pitchRollAngVel, correctionAxis.normalized));
         }
 
         private void LogRecoveryTelemetry(
