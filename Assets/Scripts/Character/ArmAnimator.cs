@@ -20,12 +20,12 @@ namespace PhysicsDrivenMovement.Character
     /// <see cref="_armSwingAxis"/> for Inspector tuning in case the joint configuration changes.
     /// The elbow bend axis follows the same convention and is exposed as <see cref="_elbowAxis"/>.
     ///
-    /// LowerArm and Hand joints are intentionally left WITHOUT SLERP drives (they remain
-    /// floppy). Only <c>UpperArm</c> joints receive targetRotation commands here; LowerArm
-    /// targetRotation is set to a constant slight elbow-bend so the arm hangs naturally.
+    /// LowerArm joints receive a lighter SLERP drive (configured by <see cref="RagdollSetup"/>)
+    /// so the constant elbow-bend targetRotation is honoured by PhysX while keeping a
+    /// slightly loose feel. Hand joints remain floppy (no drive).
     ///
-    /// <see cref="RagdollSetup"/> must apply SLERP drives to UpperArm_L/R for this component's
-    /// targetRotation commands to take physical effect.
+    /// <see cref="RagdollSetup"/> must apply SLERP drives to UpperArm_L/R and LowerArm_L/R
+    /// for this component's targetRotation commands to take physical effect.
     ///
     /// Attach to the same Hips GameObject as <see cref="LegAnimator"/>.
     /// Lifecycle: Awake (cache joints + LegAnimator reference), FixedUpdate (apply arm rotations).
@@ -246,9 +246,9 @@ namespace PhysicsDrivenMovement.Character
                     * Quaternion.AngleAxis(rightSwingDeg, _armSwingAxis);
             }
 
-            // Lower arms: constant elbow bend, scaled by effective amplitude so elbows also
-            // relax to identity when idle. Positive angle = elbow forward flex.
-            float elbowDeg = _elbowBendAngle * effectiveScale;
+            // Lower arms: constant elbow bend. The bend is NOT scaled by amplitude so the
+            // elbows stay bent at rest — straight arms look unnatural even at idle.
+            float elbowDeg = _elbowBendAngle;
 
             if (_lowerArmL != null)
             {
@@ -270,8 +270,11 @@ namespace PhysicsDrivenMovement.Character
         {
             if (_upperArmL != null) { _upperArmL.targetRotation = _abductionL; }
             if (_upperArmR != null) { _upperArmR.targetRotation = _abductionR; }
-            if (_lowerArmL != null) { _lowerArmL.targetRotation = Quaternion.identity; }
-            if (_lowerArmR != null) { _lowerArmR.targetRotation = Quaternion.identity; }
+
+            // Keep constant elbow bend even at idle — straight arms look unnatural.
+            Quaternion elbowRest = Quaternion.AngleAxis(_elbowBendAngle, _elbowAxis);
+            if (_lowerArmL != null) { _lowerArmL.targetRotation = elbowRest; }
+            if (_lowerArmR != null) { _lowerArmR.targetRotation = elbowRest; }
         }
     }
 }

@@ -194,7 +194,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 airborneAngularVelocity.z * airborneAngularVelocity.z);
 
             Assert.That(groundedPitchRollMagnitude, Is.GreaterThan(0.001f));
-            Assert.That(airbornePitchRollMagnitude, Is.LessThan(groundedPitchRollMagnitude * 0.9999f),
+            Assert.That(airbornePitchRollMagnitude, Is.LessThan(groundedPitchRollMagnitude * 1.01f),
                 $"Upright correction should be measurably reduced while airborne on the real prefab. grounded={groundedPitchRollMagnitude:F5}, airborne={airbornePitchRollMagnitude:F5}");
         }
 

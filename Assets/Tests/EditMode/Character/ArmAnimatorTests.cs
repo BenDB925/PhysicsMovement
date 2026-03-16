@@ -128,7 +128,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
 
         [Test]
         [Description("When LegAnimator.SmoothedInputMag is 0, upper arm joints should be at rest " +
-                     "abduction pose and lower arm joints at identity.")]
+                     "abduction pose and lower arm joints at elbow bend rest (not identity).")]
         public void FixedUpdate_SmoothedInputMagIsZero_AllArmTargetRotationsAreAtRest()
         {
             // Arrange: inject arm joints via Awake, ensure LegAnimator.SmoothedInputMag=0
@@ -145,7 +145,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Act: invoke FixedUpdate (SmoothedInputMag is 0, so arms should go to rest pose)
             InvokeFixedUpdate(_armAnimator);
 
-            // Assert: upper arms at rest abduction, lower arms at identity.
+            // Assert: upper arms at rest abduction, lower arms at elbow bend (not identity).
             // Rest abduction is 12° by default — upper arms should NOT be identity.
             float upperLAngle = Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity);
             float upperRAngle = Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity);
@@ -156,8 +156,13 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Upper arms should be symmetric (same angle from identity).
             Assert.That(Mathf.Abs(upperLAngle - upperRAngle), Is.LessThan(1f),
                 $"Upper arm abduction should be symmetric. L={upperLAngle:F2}° R={upperRAngle:F2}°.");
-            AssertQuaternionIsIdentity(_lowerArmLJoint.targetRotation, "LowerArm_L");
-            AssertQuaternionIsIdentity(_lowerArmRJoint.targetRotation, "LowerArm_R");
+            // Lower arms: constant elbow bend — should NOT be identity.
+            float lowerLAngle = Quaternion.Angle(_lowerArmLJoint.targetRotation, Quaternion.identity);
+            float lowerRAngle = Quaternion.Angle(_lowerArmRJoint.targetRotation, Quaternion.identity);
+            Assert.That(lowerLAngle, Is.GreaterThan(1f),
+                $"LowerArm_L should be at elbow bend rest (not identity). Angle from identity = {lowerLAngle:F2}°.");
+            Assert.That(lowerRAngle, Is.GreaterThan(1f),
+                $"LowerArm_R should be at elbow bend rest (not identity). Angle from identity = {lowerRAngle:F2}°.");
         }
 
         // ── Test 3: Counter-swing direction ─────────────────────────────────

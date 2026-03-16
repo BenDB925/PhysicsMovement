@@ -127,10 +127,10 @@ namespace PhysicsDrivenMovement.Character
                  "Default: true.")]
         private bool _disableLowerLegGroundCollision = true;
 
-        // DESIGN: UpperArm joint drives are configured here so ArmAnimator targetRotation
-        // commands are honoured by PhysX. LowerArm and Hand joints are intentionally left
-        // without drives (floppy/limp) — they flap naturally as a result of upper arm
-        // motion, which is the desired ragdoll feel for this phase of development.
+        // DESIGN: Arm joint drives are configured here so ArmAnimator targetRotation
+        // commands are honoured by PhysX. Hand joints are intentionally left without
+        // drives (floppy/limp). LowerArm drives are lighter than UpperArm — just
+        // enough to hold a constant elbow bend while remaining somewhat loose.
 
         [SerializeField]
         [Range(100f, 5000f)]
@@ -150,6 +150,23 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("SLERP drive maximumForce for UpperArm joints. " +
                  "Must be high enough that the spring/damper output is not capped. Default 3000.")]
         private float _upperArmMaxForce = 3000f;
+
+        [SerializeField]
+        [Range(10f, 2000f)]
+        [Tooltip("SLERP drive positionSpring for LowerArm_L and LowerArm_R joints. " +
+                 "Light enough to feel loose but sufficient to hold the elbow bend set by ArmAnimator. " +
+                 "Default 200.")]
+        private float _lowerArmSpring = 200f;
+
+        [SerializeField]
+        [Range(1f, 200f)]
+        [Tooltip("SLERP drive positionDamper for LowerArm joints. Default 20.")]
+        private float _lowerArmDamper = 20f;
+
+        [SerializeField]
+        [Range(50f, 5000f)]
+        [Tooltip("SLERP drive maximumForce for LowerArm joints. Default 800.")]
+        private float _lowerArmMaxForce = 800f;
 
         // ─── Private Fields ──────────────────────────────────────────────────
 
@@ -240,6 +257,13 @@ namespace PhysicsDrivenMovement.Character
                 maximumForce   = _upperArmMaxForce,
             };
 
+            JointDrive lowerArmDrive = new JointDrive
+            {
+                positionSpring = _lowerArmSpring,
+                positionDamper = _lowerArmDamper,
+                maximumForce   = _lowerArmMaxForce,
+            };
+
             // STEP 3b: Walk all ConfigurableJoints in the hierarchy. Match by name and apply.
             //          Using name-based matching mirrors LegAnimator's lookup strategy and
             //          is hierarchy-position-agnostic — future skeleton changes won't break
@@ -279,9 +303,18 @@ namespace PhysicsDrivenMovement.Character
                     case "UpperArm_R":
                         // STEP 3f: Apply upper-arm SLERP drive so ArmAnimator targetRotation is
                         //          honoured. Spring is lighter than legs (arm swing is cosmetic).
-                        //          LowerArm and Hand joints are intentionally left floppy.
                         joint.rotationDriveMode = RotationDriveMode.Slerp;
                         joint.slerpDrive        = upperArmDrive;
+                        break;
+
+                    case "LowerArm_L":
+                    case "LowerArm_R":
+                        // STEP 3g: Apply lower-arm SLERP drive so ArmAnimator elbow bend
+                        //          targetRotation is honoured by PhysX. Lighter than upper
+                        //          arm drives for a slightly loose feel. Hand joints remain
+                        //          floppy.
+                        joint.rotationDriveMode = RotationDriveMode.Slerp;
+                        joint.slerpDrive        = lowerArmDrive;
                         break;
                 }
             }
@@ -293,7 +326,8 @@ namespace PhysicsDrivenMovement.Character
                     $"UpperLeg spring={_upperLegSpring} damper={_upperLegDamper} maxForce={_upperLegMaxForce} | " +
                     $"LowerLeg spring={_lowerLegSpring} damper={_lowerLegDamper} maxForce={_lowerLegMaxForce} | " +
                     $"LowerLeg angX={_lowerLegLowAngularX}°/{_lowerLegHighAngularX}° | " +
-                    $"UpperArm spring={_upperArmSpring} damper={_upperArmDamper} maxForce={_upperArmMaxForce}");
+                    $"UpperArm spring={_upperArmSpring} damper={_upperArmDamper} maxForce={_upperArmMaxForce} | " +
+                    $"LowerArm spring={_lowerArmSpring} damper={_lowerArmDamper} maxForce={_lowerArmMaxForce}");
             }
         }
 

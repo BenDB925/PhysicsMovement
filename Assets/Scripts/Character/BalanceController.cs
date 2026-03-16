@@ -847,9 +847,15 @@ namespace PhysicsDrivenMovement.Character
             // foot Rigidbody. This supplements the joint drive target angles by
             // physically lifting the foot box collider above the step face before
             // the spring-based joint drives converge to the clearance target.
+            // Also applies a forward carry-over force once the foot is near step
+            // height so it clears the lip rather than getting pinned by friction.
+            // A grace period continues the assist briefly after ground contact is
+            // lost, preventing oscillation stalls at step edges where the foot
+            // SphereCast loses contact while resting on the step surface.
+            Vector3 stepClimbDirection = Vector3.zero;
+            float maxDetectedStepHeight = 0f;
             if (IsGrounded)
             {
-                float maxDetectedStepHeight = 0f;
                 if (_footL != null && _footL.HasForwardObstruction)
                     maxDetectedStepHeight = Mathf.Max(maxDetectedStepHeight, _footL.EstimatedStepHeight);
                 if (_footR != null && _footR.HasForwardObstruction)
@@ -863,10 +869,33 @@ namespace PhysicsDrivenMovement.Character
                     if (_footR != null && _footR.IsGrounded)
                         groundRef = Mathf.Max(groundRef, _footR.GroundPoint.y);
 
-                    float targetFootY = groundRef + maxDetectedStepHeight;
-                    ApplyStepUpFootLiftAssist(_footRbL, _footL, targetFootY);
-                    ApplyStepUpFootLiftAssist(_footRbR, _footR, targetFootY);
+                    // Planar forward direction for foot carry-over force.
+                    stepClimbDirection = Vector3.ProjectOnPlane(_rb.transform.forward, Vector3.up);
+                    if (stepClimbDirection.sqrMagnitude > 0.0001f)
+                        stepClimbDirection.Normalize();
+                    else
+                        stepClimbDirection = Vector3.zero;
+
+                    float clearance = maxDetectedStepHeight + StepUpColliderClearance;
+                    float targetFootY = groundRef + clearance;
+                    ApplyStepUpFootLiftAssist(_footRbL, _footL, targetFootY, stepClimbDirection, clearance);
+                    ApplyStepUpFootLiftAssist(_footRbR, _footR, targetFootY, stepClimbDirection, clearance);
+
+                    // Cache parameters and prime the grace timer so assists persist
+                    // briefly after ground contact is lost at the step edge.
+                    _stepAssistCachedTargetY = targetFootY;
+                    _stepAssistCachedClimbDir = stepClimbDirection;
+                    _stepAssistCachedClearance = clearance;
+                    _stepAssistGraceTimer = StepAssistGracePeriod;
                 }
+            }
+            else if (_stepAssistGraceTimer > 0f)
+            {
+                _stepAssistGraceTimer -= Time.fixedDeltaTime;
+                ApplyStepUpFootLiftAssist(_footRbL, _footL, _stepAssistCachedTargetY,
+                    _stepAssistCachedClimbDir, _stepAssistCachedClearance);
+                ApplyStepUpFootLiftAssist(_footRbR, _footR, _stepAssistCachedTargetY,
+                    _stepAssistCachedClimbDir, _stepAssistCachedClearance);
             }
 
             // ─── STEP 3.8: Apply director-owned snap recovery boost ─────────────────
@@ -1069,15 +1098,27 @@ namespace PhysicsDrivenMovement.Character
 
         private const float StepUpFootLiftStrength = 400f;
         private const float StepUpFootLiftDamping = 40f;
+        private const float StepUpFootForwardStrength = 250f;
+        private const float StepUpColliderClearance = 0.08f;
+        private const float StepAssistGracePeriod = 0.5f;
+
+        private float _stepAssistGraceTimer;
+        private float _stepAssistCachedTargetY;
+        private Vector3 _stepAssistCachedClimbDir;
+        private float _stepAssistCachedClearance;
 
         /// <summary>
         /// Applies an upward spring-damper force to a non-grounded foot when a step-up
-        /// is detected ahead. Only fires for swing-phase feet (not grounded).
+        /// is detected ahead. Once the foot is near or above the step surface, also
+        /// applies a forward carry-over force so the foot clears the lip rather than
+        /// getting pinned against the step face by friction.
         /// </summary>
         private static void ApplyStepUpFootLiftAssist(
             Rigidbody footRb,
             GroundSensor foot,
-            float targetY)
+            float targetY,
+            Vector3 forwardDir,
+            float stepHeight)
         {
             if (footRb == null || foot == null || foot.IsGrounded)
                 return;
@@ -1090,6 +1131,19 @@ namespace PhysicsDrivenMovement.Character
                               - footRb.linearVelocity.y * StepUpFootLiftDamping;
             liftForce = Mathf.Max(0f, liftForce);
             footRb.AddForce(Vector3.up * liftForce, ForceMode.Force);
+
+            // Forward carry-over: once the foot has risen past roughly half the step
+            // height ramp up a forward push to slide the foot over the lip. This
+            // counteracts friction from the step face contact normal.
+            if (forwardDir.sqrMagnitude > 0.5f && stepHeight > 0f)
+            {
+                float liftProgress = 1f - Mathf.Clamp01(deficit / stepHeight);
+                if (liftProgress > 0.15f)
+                {
+                    float carryForce = (liftProgress - 0.15f) / 0.85f * StepUpFootForwardStrength;
+                    footRb.AddForce(forwardDir * carryForce, ForceMode.Force);
+                }
+            }
         }
 
         private void LogRecoveryTelemetry(

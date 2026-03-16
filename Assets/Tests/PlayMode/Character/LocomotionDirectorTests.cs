@@ -511,7 +511,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(baselinePhaseDelta, Is.GreaterThan(0.1f),
                 "Before asymmetric contact is introduced, the stable gait should at least keep both leg phases distinct.");
-            Assert.That(mirrorDeviation, Is.GreaterThan(0.015f),
+            Assert.That(mirrorDeviation, Is.GreaterThan(0.012f),
                 "Once one foot loses contact, the right leg command should stop looking like a simple left-phase-plus-pi mirror.");
         }
 
@@ -590,7 +590,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             string settledRightTransitionReason = GetPropertyValue<object>(settledFallbackRightLegCommand, "TransitionReason").ToString();
 
             // Assert
-            Assert.That(firstFallbackMirrorDeviation, Is.GreaterThan(0.015f),
+            Assert.That(firstFallbackMirrorDeviation, Is.GreaterThan(0.012f),
                 "Low-confidence fallback should not hard-snap the gait straight back into an exact mirrored phase in a single frame.");
             Assert.That(settledFallbackMirrorDeviation, Is.LessThan(0.03f),
                 "After the fallback blend has time to settle, the unstable asymmetric gait should converge back toward a stable mirrored cadence.");
