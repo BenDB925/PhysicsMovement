@@ -4,9 +4,9 @@
 Make arms pump more aggressively during sprint — wider swing, tighter elbow bend — to visually sell the higher effort level.
 
 ## Current status
-- State: Not started
-- Current next step: Add sprint-scaled arm parameters to `ArmAnimator`
-- Blockers: WP-1 must land first (needs `SprintNormalized`)
+- State: In progress
+- Current next step: Add outcome-based PlayMode coverage for sprint arm swing and elbow bend on `Arena_01`
+- Blockers: None
 
 ## Scope
 
@@ -37,7 +37,12 @@ Make arms pump more aggressively during sprint — wider swing, tighter elbow be
 - **Assert**: Peak arm swing stays within 15–25° — proves sprint parameters are not leaking into walk.
 
 ## Decisions
+- `ArmAnimator` reads `SprintNormalized` directly from sibling `PlayerMovement` instead of routing the value through `LegAnimator`.
+- Rest pose keeps the sprint-blended elbow bend while `SprintNormalized` ramps back down so sprint release does not snap forearms to the walk bend on the first idle frame.
 
 ## Artifacts
+- `Assets/Scripts/Character/ArmAnimator.cs`
+- `Assets/Tests/EditMode/Character/ArmAnimatorTests.cs`
 
 ## Progress notes
+- 2026-03-16: Scope step 1 implemented. `ArmAnimator` now lerps upper-arm swing from 20°→45° and elbow bend from 15°→35° using `PlayerMovement.SprintNormalized`. Focused verification passed: `ArmAnimatorTests` EditMode 7/7 and `ArmAnimatorPlayModeTests` PlayMode 2/2.

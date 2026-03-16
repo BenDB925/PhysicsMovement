@@ -31,6 +31,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         private GameObject _root;
         private ArmAnimator _armAnimator;
         private LegAnimator _legAnimator;
+        private PlayerMovement _playerMovement;
 
         // Child joint GameObjects
         private GameObject _upperArmL;
@@ -66,6 +67,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Arrange: build minimal hierarchy
             _root = new GameObject("Hips");
             _root.AddComponent<Rigidbody>();
+            _playerMovement = _root.AddComponent<PlayerMovement>();
 
             // Required siblings for LegAnimator (it logs warnings but doesn't crash without them)
             // PlayerMovement and CharacterState have their own required components, so we use
@@ -242,6 +244,64 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "Left and right arm swings should be in opposite directions.");
         }
 
+        [Test]
+        [Description("When SprintNormalized is zero, ArmAnimator should keep the existing walk arm swing and elbow bend values.")]
+        public void FixedUpdate_SprintNormalizedIsZero_UsesWalkArmSwingAndElbowBend()
+        {
+            // Arrange
+            InvokeAwake(_armAnimator);
+            SetLegGaitState(phase: Mathf.PI / 2f, smoothedInputMag: 1f);
+            SetSprintNormalized(0f);
+
+            Quaternion expectedUpperLeft = Quaternion.AngleAxis(12f, Vector3.right)
+                * Quaternion.AngleAxis(-20f, new Vector3(0f, 0f, 1f));
+            Quaternion expectedUpperRight = Quaternion.AngleAxis(-12f, Vector3.right)
+                * Quaternion.AngleAxis(20f, new Vector3(0f, 0f, 1f));
+            Quaternion expectedLower = Quaternion.AngleAxis(15f, new Vector3(0f, 0f, 1f));
+
+            // Act
+            InvokeFixedUpdate(_armAnimator);
+
+            // Assert
+            AssertQuaternionApproximately(_upperArmLJoint.targetRotation, expectedUpperLeft,
+                "Walk left upper arm should keep the existing 20° swing relative to rest abduction.");
+            AssertQuaternionApproximately(_upperArmRJoint.targetRotation, expectedUpperRight,
+                "Walk right upper arm should keep the existing 20° swing relative to rest abduction.");
+            AssertQuaternionApproximately(_lowerArmLJoint.targetRotation, expectedLower,
+                "Walk left elbow should keep the existing 15° bend.");
+            AssertQuaternionApproximately(_lowerArmRJoint.targetRotation, expectedLower,
+                "Walk right elbow should keep the existing 15° bend.");
+        }
+
+        [Test]
+        [Description("When SprintNormalized is midway, ArmAnimator should lerp both swing and elbow bend between walk and sprint values.")]
+        public void FixedUpdate_SprintNormalizedIsMidBlend_InterpolatesArmSwingAndElbowBend()
+        {
+            // Arrange
+            InvokeAwake(_armAnimator);
+            SetLegGaitState(phase: Mathf.PI / 2f, smoothedInputMag: 1f);
+            SetSprintNormalized(0.5f);
+
+            Quaternion expectedUpperLeft = Quaternion.AngleAxis(12f, Vector3.right)
+                * Quaternion.AngleAxis(-32.5f, new Vector3(0f, 0f, 1f));
+            Quaternion expectedUpperRight = Quaternion.AngleAxis(-12f, Vector3.right)
+                * Quaternion.AngleAxis(32.5f, new Vector3(0f, 0f, 1f));
+            Quaternion expectedLower = Quaternion.AngleAxis(25f, new Vector3(0f, 0f, 1f));
+
+            // Act
+            InvokeFixedUpdate(_armAnimator);
+
+            // Assert
+            AssertQuaternionApproximately(_upperArmLJoint.targetRotation, expectedUpperLeft,
+                "Mid-blend left upper arm should use a 32.5° swing (lerp from 20° to 45°)." );
+            AssertQuaternionApproximately(_upperArmRJoint.targetRotation, expectedUpperRight,
+                "Mid-blend right upper arm should use a 32.5° swing (lerp from 20° to 45°)." );
+            AssertQuaternionApproximately(_lowerArmLJoint.targetRotation, expectedLower,
+                "Mid-blend left elbow should use a 25° bend (lerp from 15° to 35°)." );
+            AssertQuaternionApproximately(_lowerArmRJoint.targetRotation, expectedLower,
+                "Mid-blend right elbow should use a 25° bend (lerp from 15° to 35°)." );
+        }
+
         // ── GAP-7: Required fields exist with sensible defaults ──────────────
 
         /// <summary>
@@ -266,16 +326,31 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             // Read the serialised field values directly via reflection.
             FieldInfo fieldSwingAngle = typeof(ArmAnimator)
                 .GetField("_armSwingAngle", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo fieldSprintSwingAngle = typeof(ArmAnimator)
+                .GetField("_sprintArmSwingAngle", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo fieldElbowBendAngle = typeof(ArmAnimator)
+                .GetField("_elbowBendAngle", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo fieldSprintElbowBendAngle = typeof(ArmAnimator)
+                .GetField("_sprintElbowBendAngle", BindingFlags.NonPublic | BindingFlags.Instance);
             FieldInfo fieldSwingAxis  = typeof(ArmAnimator)
                 .GetField("_armSwingAxis",  BindingFlags.NonPublic | BindingFlags.Instance);
 
             Assert.That(fieldSwingAngle, Is.Not.Null,
                 "ArmAnimator must have a private serialized field '_armSwingAngle'. " +
                 "Rename check: ensure the field name matches between production code and test.");
+            Assert.That(fieldSprintSwingAngle, Is.Not.Null,
+                "ArmAnimator must have a private serialized field '_sprintArmSwingAngle'.");
+            Assert.That(fieldElbowBendAngle, Is.Not.Null,
+                "ArmAnimator must have a private serialized field '_elbowBendAngle'.");
+            Assert.That(fieldSprintElbowBendAngle, Is.Not.Null,
+                "ArmAnimator must have a private serialized field '_sprintElbowBendAngle'.");
             Assert.That(fieldSwingAxis, Is.Not.Null,
                 "ArmAnimator must have a private serialized field '_armSwingAxis'.");
 
             float armSwingAngle = (float)fieldSwingAngle.GetValue(_armAnimator);
+            float sprintArmSwingAngle = (float)fieldSprintSwingAngle.GetValue(_armAnimator);
+            float elbowBendAngle = (float)fieldElbowBendAngle.GetValue(_armAnimator);
+            float sprintElbowBendAngle = (float)fieldSprintElbowBendAngle.GetValue(_armAnimator);
             Vector3 swingAxis   = (Vector3)fieldSwingAxis.GetValue(_armAnimator);
 
             // Assert: swing angle is a sensible non-zero value.
@@ -283,6 +358,12 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 $"_armSwingAngle default must be > 0° so arms visibly swing. Got {armSwingAngle:F2}°.");
             Assert.That(armSwingAngle, Is.LessThanOrEqualTo(90f),
                 $"_armSwingAngle default must be ≤ 90° (not physically implausible). Got {armSwingAngle:F2}°.");
+            Assert.That(sprintArmSwingAngle, Is.EqualTo(45f).Within(0.01f),
+                $"_sprintArmSwingAngle default should be 45° for sprint posture. Got {sprintArmSwingAngle:F2}°.");
+            Assert.That(elbowBendAngle, Is.EqualTo(15f).Within(0.01f),
+                $"_elbowBendAngle default should remain 15° for walk posture. Got {elbowBendAngle:F2}°.");
+            Assert.That(sprintElbowBendAngle, Is.EqualTo(35f).Within(0.01f),
+                $"_sprintElbowBendAngle default should be 35° for sprint posture. Got {sprintElbowBendAngle:F2}°.");
 
             // Assert: swing axis is not the zero vector.
             Assert.That(swingAxis.sqrMagnitude, Is.GreaterThan(0.01f),
@@ -384,6 +465,35 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 .GetMethod("FixedUpdate", BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.That(fixedUpdateMethod, Is.Not.Null, $"{component.GetType().Name} must have a private FixedUpdate() method.");
             fixedUpdateMethod.Invoke(component, null);
+        }
+
+        private void SetLegGaitState(float phase, float smoothedInputMag)
+        {
+            FieldInfo legSmoothedMag = typeof(LegAnimator)
+                .GetField("_smoothedInputMag", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo legPhase = typeof(LegAnimator)
+                .GetField("_phase", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            Assert.That(legSmoothedMag, Is.Not.Null, "LegAnimator must have private field '_smoothedInputMag'.");
+            Assert.That(legPhase, Is.Not.Null, "LegAnimator must have private field '_phase'.");
+
+            legSmoothedMag.SetValue(_legAnimator, smoothedInputMag);
+            legPhase.SetValue(_legAnimator, phase);
+        }
+
+        private void SetSprintNormalized(float sprintNormalized)
+        {
+            FieldInfo sprintField = typeof(PlayerMovement)
+                .GetField("_sprintNormalized", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            Assert.That(sprintField, Is.Not.Null, "PlayerMovement must have private field '_sprintNormalized'.");
+            sprintField.SetValue(_playerMovement, sprintNormalized);
+        }
+
+        private static void AssertQuaternionApproximately(Quaternion actual, Quaternion expected, string message)
+        {
+            float delta = Quaternion.Angle(actual, expected);
+            Assert.That(delta, Is.LessThanOrEqualTo(0.25f), $"{message} Delta={delta:F3}°.");
         }
 
         /// <summary>Asserts that a quaternion is effectively Quaternion.identity (angle ≤ 0.1°).</summary>

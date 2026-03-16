@@ -8,9 +8,10 @@ namespace PhysicsDrivenMovement.Character
     ///
     /// The arm swing phase is read from <see cref="LegAnimator.Phase"/> and offset by π so
     /// that the left arm swings forward when the right leg swings forward (natural human gait).
-    /// The swing amplitude is blended by <see cref="LegAnimator.SmoothedInputMag"/>: arms
-    /// fade out smoothly as the character decelerates to a stop and fade back in when gait
-    /// resumes, matching the leg blend behaviour exactly without duplicating the ramping logic.
+    /// The swing amplitude is blended by <see cref="LegAnimator.SmoothedInputMag"/> and the
+    /// walk-to-sprint posture blend from <see cref="PlayerMovement.SprintNormalized"/>: arms
+    /// fade out smoothly as the character decelerates to a stop, then widen their swing and
+    /// tighten elbow bend as sprint ramps in.
     ///
     /// Axis convention:
     /// Arm joints use joint.axis = Vector3.forward and secondaryAxis = Vector3.up
@@ -30,7 +31,7 @@ namespace PhysicsDrivenMovement.Character
     /// Attach to the same Hips GameObject as <see cref="LegAnimator"/>.
     /// Lifecycle: Awake (cache joints + LegAnimator reference), FixedUpdate (apply arm rotations).
     /// Collaborators: <see cref="LegAnimator"/> (reads Phase and SmoothedInputMag),
-    /// Unity ConfigurableJoint.
+    /// <see cref="PlayerMovement"/> (reads SprintNormalized), Unity ConfigurableJoint.
     /// </summary>
     public class ArmAnimator : MonoBehaviour
     {
@@ -41,10 +42,20 @@ namespace PhysicsDrivenMovement.Character
                  "Smaller than leg swing for natural proportions. Default 20°.")]
         private float _armSwingAngle = 20f;
 
+        [SerializeField, Range(20f, 60f)]
+        [Tooltip("Peak forward/backward swing angle (degrees) for upper arm joints at full sprint. " +
+             "Blended from _armSwingAngle by PlayerMovement.SprintNormalized. Default 45°.")]
+        private float _sprintArmSwingAngle = 45f;
+
         [SerializeField, Range(0f, 45f)]
         [Tooltip("Constant elbow bend angle (degrees) applied to lower arm joints throughout gait. " +
                  "Keeps the forearm slightly bent for a natural pose. Default 15°.")]
         private float _elbowBendAngle = 15f;
+
+        [SerializeField, Range(15f, 45f)]
+        [Tooltip("Constant elbow bend angle (degrees) applied to lower arm joints at full sprint. " +
+             "Blended from _elbowBendAngle by PlayerMovement.SprintNormalized. Default 35°.")]
+        private float _sprintElbowBendAngle = 35f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Global scale multiplier for arm swing amplitude. " +
@@ -101,6 +112,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private LegAnimator _legAnimator;
 
+        /// <summary>
+        /// Sibling PlayerMovement, used to read <see cref="PlayerMovement.SprintNormalized"/>
+        /// for sprint-scaled arm posture.
+        /// </summary>
+        private PlayerMovement _playerMovement;
+
         /// <summary>Rest abduction rotation cached in Awake for the left upper arm (negative angle).</summary>
         private Quaternion _abductionL;
 
@@ -117,6 +134,11 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[ArmAnimator] No LegAnimator found on this GameObject. " +
                                  "Arm swing will remain at identity.", this);
             }
+
+            // STEP 1a: Cache PlayerMovement when present so sprint posture can use the same
+            //          blend signal as the rest of locomotion. Missing PlayerMovement falls
+            //          back to walk posture instead of warning.
+            TryGetComponent(out _playerMovement);
 
             // STEP 1b: Cache abduction quaternions.
             // In targetRotation space, Vector3.right (X) maps to rotation around the
@@ -194,6 +216,12 @@ namespace PhysicsDrivenMovement.Character
             //         Both are in [0, 1] range; multiplying gives the final blend factor.
             float effectiveScale = smoothedInputMag * _armSwingScale;
 
+            // STEP 3b: Read the locomotion sprint blend so upper-arm swing widens and
+            //          elbow bend tightens as sprint ramps in.
+            float sprintNormalized = GetCurrentSprintNormalized();
+            float effectiveArmSwingAngle = GetEffectiveArmSwingAngle(sprintNormalized);
+            float effectiveElbowBendAngle = GetEffectiveElbowBendAngle(sprintNormalized);
+
             // STEP 4: Read the gait phase from LegAnimator and compute arm phases.
             //         Arms use the OPPOSITE phase from legs:
             //           Left arm uses  (phase + π) → opposite of left leg (phase)
@@ -210,12 +238,12 @@ namespace PhysicsDrivenMovement.Character
             float sinLeft  = Mathf.Sin(legPhase + Mathf.PI);   // opposite to left leg
             float sinRight = Mathf.Sin(legPhase);              // opposite to right leg
 
-            float leftSwingDeg  = sinLeft  * _armSwingAngle * effectiveScale;
-            float rightSwingDeg = sinRight * _armSwingAngle * effectiveScale;
+            float leftSwingDeg  = sinLeft  * effectiveArmSwingAngle * effectiveScale;
+            float rightSwingDeg = sinRight * effectiveArmSwingAngle * effectiveScale;
 
             // STEP 5: Apply upper arm swing rotations using local-space targetRotation.
             //         Pattern is identical to LegAnimator.ApplyLocalSpaceSwing.
-            ApplyArmSwing(leftSwingDeg, rightSwingDeg, effectiveScale);
+            ApplyArmSwing(leftSwingDeg, rightSwingDeg, effectiveElbowBendAngle);
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -229,8 +257,8 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         /// <param name="leftSwingDeg">Signed swing angle (degrees) for the left upper arm.</param>
         /// <param name="rightSwingDeg">Signed swing angle (degrees) for the right upper arm.</param>
-        /// <param name="effectiveScale">Combined amplitude scale [0,1] (smoothedInputMag × _armSwingScale).</param>
-        private void ApplyArmSwing(float leftSwingDeg, float rightSwingDeg, float effectiveScale)
+        /// <param name="elbowDeg">Constant lower-arm bend angle (degrees) for the current locomotion blend.</param>
+        private void ApplyArmSwing(float leftSwingDeg, float rightSwingDeg, float elbowDeg)
         {
             // Upper arms: rest abduction composed with sinusoidal counter-swing.
             // Abduction keeps arms clear of the torso; swing adds the gait motion on top.
@@ -248,8 +276,6 @@ namespace PhysicsDrivenMovement.Character
 
             // Lower arms: constant elbow bend. The bend is NOT scaled by amplitude so the
             // elbows stay bent at rest — straight arms look unnatural even at idle.
-            float elbowDeg = _elbowBendAngle;
-
             if (_lowerArmL != null)
             {
                 _lowerArmL.targetRotation = Quaternion.AngleAxis(elbowDeg, _elbowAxis);
@@ -272,9 +298,26 @@ namespace PhysicsDrivenMovement.Character
             if (_upperArmR != null) { _upperArmR.targetRotation = _abductionR; }
 
             // Keep constant elbow bend even at idle — straight arms look unnatural.
-            Quaternion elbowRest = Quaternion.AngleAxis(_elbowBendAngle, _elbowAxis);
+            float sprintNormalized = GetCurrentSprintNormalized();
+            float elbowBendDeg = GetEffectiveElbowBendAngle(sprintNormalized);
+            Quaternion elbowRest = Quaternion.AngleAxis(elbowBendDeg, _elbowAxis);
             if (_lowerArmL != null) { _lowerArmL.targetRotation = elbowRest; }
             if (_lowerArmR != null) { _lowerArmR.targetRotation = elbowRest; }
+        }
+
+        private float GetCurrentSprintNormalized()
+        {
+            return _playerMovement != null ? Mathf.Clamp01(_playerMovement.SprintNormalized) : 0f;
+        }
+
+        private float GetEffectiveArmSwingAngle(float sprintNormalized)
+        {
+            return Mathf.Lerp(_armSwingAngle, _sprintArmSwingAngle, Mathf.Clamp01(sprintNormalized));
+        }
+
+        private float GetEffectiveElbowBendAngle(float sprintNormalized)
+        {
+            return Mathf.Lerp(_elbowBendAngle, _sprintElbowBendAngle, Mathf.Clamp01(sprintNormalized));
         }
     }
 }

@@ -202,10 +202,10 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; drives UpperArm ConfigurableJoint `targetRotation` for counter-swing arm gait. LowerArm/Hand joints remain floppy. |
+| **What** | MonoBehaviour on Hips; drives UpperArm ConfigurableJoint `targetRotation` for counter-swing arm gait and tightens lower-arm elbow bend as sprint ramps in. LowerArm/Hand joints remain floppy. |
 | **Why** | Separate from LegAnimator — arms will need independent behaviours (punch, grab, idle sway) in Phase 4. |
-| **Public Surface** | None currently — internally reads `LegAnimator.Phase` and `LegAnimator.SmoothedInputMag`. |
-| **Collaborators** | `LegAnimator` (phase/magnitude), `CharacterState` (state gate). |
+| **Public Surface** | None currently — internally reads `LegAnimator.Phase`, `LegAnimator.SmoothedInputMag`, and `PlayerMovement.SprintNormalized`. |
+| **Collaborators** | `LegAnimator` (phase/magnitude), `PlayerMovement` (walk-to-sprint blend). |
 | **Phase** | 3E4 |
 
 ### `Character.TorsoExpression` — `Assets/Scripts/Character/TorsoExpression.cs`
