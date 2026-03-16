@@ -5,8 +5,8 @@ Make the sprint gait visually distinct from the walk gait: longer strides, highe
 
 ## Current status
 - State: In progress
-- Current next step: Implement step 2 knee-lift scaling on top of the new sprint stride blend
-- Blockers: Remaining WP-4 items still depend on WP-1; step 1 now uses the live `SprintNormalized` blend in `LegAnimator`
+- Current next step: Evaluate step 3 cadence at sprint speed and only add an explicit sprint cadence boost if the natural speed-based gait still looks too slow
+- Blockers: Remaining WP-4 items still depend on WP-1; steps 1 and 2 now use the live `SprintNormalized` blend in `LegAnimator`
 
 ## Scope
 
@@ -47,11 +47,13 @@ Make the sprint gait visually distinct from the walk gait: longer strides, highe
 
 ## Decisions
 - 2026-03-16: Step 1 landed by blending `LegAnimator` upper-leg swing amplitude from `_stepAngle` to `_sprintStepAngle` via `SprintNormalized`. `StepPlanner` and step-target placement were left unchanged so this slice only changes visual stride amplitude.
+- 2026-03-16: Step 2 landed by blending `LegAnimator` upper-leg lift from `_upperLegLiftBoost` to `_sprintUpperLegLiftBoost` via `SprintNormalized`. The same effective lift boost now feeds both the explicit per-leg gait path and the low-confidence mirrored fallback so sprint keeps the higher-knee look even when confidence drops.
 
 ## Artifacts
-- `Assets/Scripts/Character/LegAnimator.cs`: runtime stride blend (`_sprintStepAngle`, effective step-angle helpers, executor usage)
-- `Assets/Tests/PlayMode/Character/LegAnimatorSprintStrideTests.cs`: focused PlayMode coverage for walk, mid-blend, and full-sprint stride command output
-- `TestResults/latest-summary.md`: focused PlayMode slice `LegAnimatorSprintStrideTests;LegAnimatorTests;GaitOutcomeTests.HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate` passed with 65 passing / 6 ignored / 0 failed on 2026-03-16
+- `Assets/Scripts/Character/LegAnimator.cs`: runtime sprint stride and knee-lift blends (`_sprintStepAngle`, `_sprintUpperLegLiftBoost`, effective blend helpers, fallback usage)
+- `Assets/Tests/PlayMode/Character/LegAnimatorSprintStrideTests.cs`: focused PlayMode coverage for walk, mid-blend, and full-sprint stride plus knee-lift command output
+- `TestResults/latest-summary.md`: focused PlayMode slice `LegAnimatorSprintStrideTests;LegAnimatorTests;GaitOutcomeTests.HoldingMoveInput_For5Seconds_UpperLegsActuallyRotate` passed after the step 2 update on 2026-03-16
 
 ## Progress notes
 - 2026-03-16: Implemented step 1. Sprint now widens the effective leg step angle without changing step-target planning, and the focused PlayMode regression slice stayed green after adding dedicated sprint-stride tests.
+- 2026-03-16: Implemented step 2. Sprint now raises the effective upper-leg lift boost through the same `SprintNormalized` input used by stride blending, and the focused PlayMode sprint-gait slice covers the walk, mid-blend, and full-sprint lift outputs.

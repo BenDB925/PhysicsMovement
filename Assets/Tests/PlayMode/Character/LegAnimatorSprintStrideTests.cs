@@ -17,6 +17,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     {
         private const float WalkStepAngle = 24f;
         private const float SprintStepAngle = 48f;
+        private const float WalkUpperLegLiftBoost = 10f;
+        private const float SprintUpperLegLiftBoost = 30f;
         private const float TestPhase = Mathf.PI * 0.5f;
 
         private PlayerPrefabTestRig _rig;
@@ -79,6 +81,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float defaultValue = (float)field.GetValue(_rig.LegAnimator);
             Assert.That(defaultValue, Is.EqualTo(75f).Within(0.001f),
                 $"_sprintStepAngle should default to 75° for the first sprint gait pass. Got {defaultValue:F3}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintUpperLegLiftBoost_FieldExists_AndDefaultsTo42Degrees()
+        {
+            // Arrange
+            yield return null;
+
+            // Act
+            FieldInfo field = typeof(LegAnimator).GetField(
+                "_sprintUpperLegLiftBoost",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Assert
+            Assert.That(field, Is.Not.Null,
+                "LegAnimator must serialize a private '_sprintUpperLegLiftBoost' field so sprint knee lift remains tunable.");
+
+            float defaultValue = (float)field.GetValue(_rig.LegAnimator);
+            Assert.That(defaultValue, Is.EqualTo(42f).Within(0.001f),
+                $"_sprintUpperLegLiftBoost should default to 42° for the sprint knee-lift pass. Got {defaultValue:F3}°.");
         }
 
         [UnityTest]
@@ -154,11 +176,75 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Full sprint should use the authored sprint step angle. Expected {SprintStepAngle:F1}°, got {leftSwingDegrees:F2}°.");
         }
 
+        [UnityTest]
+        public IEnumerator BuildPassThroughCommands_WhenSprintNormalizedIsZero_UsesWalkUpperLegLiftBoost()
+        {
+            // Arrange
+            ConfigureLiftBlendAngles();
+            yield return CaptureObservationSnapshot();
+
+            object leftCommand = BuildLeftCommandForSprintBlend(0f);
+            string leftStateName = GetPropertyValue<object>(leftCommand, "State").ToString();
+            float cyclePhase = GetPropertyValue<float>(leftCommand, "CyclePhase");
+            float leftSwingDegrees = GetPropertyValue<float>(leftCommand, "SwingAngleDegrees");
+            float expectedSwingDegrees = ComputeExpectedSwingFromPhase(cyclePhase, 1f, leftStateName, WalkStepAngle, WalkUpperLegLiftBoost);
+
+            // Assert
+            Assert.That(leftSwingDegrees, Is.EqualTo(expectedSwingDegrees).Within(0.5f),
+                $"Walk sprint blend sample should keep the authored walk lift boost. Expected {expectedSwingDegrees:F2}°, got {leftSwingDegrees:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator BuildPassThroughCommands_WhenSprintNormalizedIsHalf_InterpolatesWalkAndSprintUpperLegLiftBoost()
+        {
+            // Arrange
+            ConfigureLiftBlendAngles();
+            yield return CaptureObservationSnapshot();
+
+            object leftCommand = BuildLeftCommandForSprintBlend(0.5f);
+            string leftStateName = GetPropertyValue<object>(leftCommand, "State").ToString();
+            float cyclePhase = GetPropertyValue<float>(leftCommand, "CyclePhase");
+            float leftSwingDegrees = GetPropertyValue<float>(leftCommand, "SwingAngleDegrees");
+            float expectedLiftBoost = Mathf.Lerp(WalkUpperLegLiftBoost, SprintUpperLegLiftBoost, 0.5f);
+            float expectedSwingDegrees = ComputeExpectedSwingFromPhase(cyclePhase, 1f, leftStateName, WalkStepAngle, expectedLiftBoost);
+
+            // Assert
+            Assert.That(leftSwingDegrees, Is.EqualTo(expectedSwingDegrees).Within(0.5f),
+                $"Mid-blend sprint gait should interpolate the upper-leg lift boost between walk and sprint. Expected {expectedSwingDegrees:F2}°, got {leftSwingDegrees:F2}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator BuildPassThroughCommands_WhenSprintNormalizedIsOne_UsesSprintUpperLegLiftBoost()
+        {
+            // Arrange
+            ConfigureLiftBlendAngles();
+            yield return CaptureObservationSnapshot();
+
+            object leftCommand = BuildLeftCommandForSprintBlend(1f);
+            string leftStateName = GetPropertyValue<object>(leftCommand, "State").ToString();
+            float cyclePhase = GetPropertyValue<float>(leftCommand, "CyclePhase");
+            float leftSwingDegrees = GetPropertyValue<float>(leftCommand, "SwingAngleDegrees");
+            float expectedSwingDegrees = ComputeExpectedSwingFromPhase(cyclePhase, 1f, leftStateName, WalkStepAngle, SprintUpperLegLiftBoost);
+
+            // Assert
+            Assert.That(leftSwingDegrees, Is.EqualTo(expectedSwingDegrees).Within(0.5f),
+                $"Full sprint should use the authored sprint lift boost. Expected {expectedSwingDegrees:F2}°, got {leftSwingDegrees:F2}°.");
+        }
+
         private void ConfigureStrideBlendAngles()
         {
             SetPrivateField(_rig.LegAnimator, "_stepAngle", WalkStepAngle);
             SetPrivateField(_rig.LegAnimator, "_sprintStepAngle", SprintStepAngle);
             SetPrivateField(_rig.LegAnimator, "_upperLegLiftBoost", 0f);
+            SetPrivateField(_rig.LegAnimator, "_sprintUpperLegLiftBoost", 0f);
+        }
+
+        private void ConfigureLiftBlendAngles()
+        {
+            SetPrivateField(_rig.LegAnimator, "_stepAngle", WalkStepAngle);
+            SetPrivateField(_rig.LegAnimator, "_sprintStepAngle", WalkStepAngle);
+            SetPrivateField(_rig.LegAnimator, "_upperLegLiftBoost", WalkUpperLegLiftBoost);
+            SetPrivateField(_rig.LegAnimator, "_sprintUpperLegLiftBoost", SprintUpperLegLiftBoost);
         }
 
         private IEnumerator CaptureObservationSnapshot()
@@ -207,6 +293,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_rig.LegAnimator, "_smoothedInputMag", 1f);
             _rig.HipsBody.linearVelocity = Vector3.zero;
             _rig.HipsBody.angularVelocity = Vector3.zero;
+        }
+
+        private object BuildLeftCommandForSprintBlend(float sprintNormalized)
+        {
+            object observation = GetPropertyValue<object>(_director, "CurrentObservation");
+            object desiredInput = CreateDesiredInput(observation, sprintNormalized);
+
+            SeedDeterministicStrideSample();
+            BuildPassThroughCommands(_rig.LegAnimator, desiredInput, observation, out object leftCommand, out _);
+            return leftCommand;
         }
 
         private static void BuildPassThroughCommands(
@@ -267,6 +363,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Expected type '{instance.GetType().FullName}' to expose non-public method '{methodName}'.");
 
             method.Invoke(instance, null);
+        }
+
+        private static float ComputeExpectedSwingFromPhase(
+            float cyclePhase,
+            float amplitudeScale,
+            string stateName,
+            float stepAngle,
+            float upperLegLiftBoost)
+        {
+            float swingSin = Mathf.Sin(cyclePhase);
+            float liftBoost = swingSin > 0f ? swingSin * upperLegLiftBoost * amplitudeScale : 0f;
+            float swingAngle = swingSin * stepAngle * amplitudeScale + liftBoost;
+
+            if ((stateName == "Swing" || stateName == "CatchStep") && amplitudeScale > 0f)
+            {
+                swingAngle += upperLegLiftBoost * 0.6f * amplitudeScale;
+
+                float minimumForwardArc = stepAngle * 0.55f * amplitudeScale;
+                swingAngle = Mathf.Max(swingAngle, minimumForwardArc);
+            }
+
+            return swingAngle;
         }
     }
 }

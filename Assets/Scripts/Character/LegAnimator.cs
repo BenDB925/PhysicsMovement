@@ -55,6 +55,12 @@ namespace PhysicsDrivenMovement.Character
                  "for a powerful, high-stepping gait. Default 15°.")]
         private float _upperLegLiftBoost = 31.9f;
 
+        [SerializeField, Range(30f, 55f)]
+        [Tooltip("Extra upward lift bias (degrees) at full sprint. Blended from " +
+             "_upperLegLiftBoost by PlayerMovement.SprintNormalized so sprint gains " +
+             "a higher-knee forward swing without changing the walk gait. Default 42°.")]
+        private float _sprintUpperLegLiftBoost = 42f;
+
         [SerializeField, Range(0.05f, 0.5f)]
         [Tooltip("Requested clearance height (metres) that maps to the full step-up execution boost. " +
              "Smaller planner requests scale proportionally below this reference height.")]
@@ -335,6 +341,8 @@ namespace PhysicsDrivenMovement.Character
 
         internal float StepAngleDegrees => GetEffectiveStepAngle();
 
+        internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
+
         internal float KneeAngleDegrees => _kneeAngle;
 
         /// <summary>
@@ -558,6 +566,16 @@ namespace PhysicsDrivenMovement.Character
             return Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
         }
 
+        private float GetEffectiveUpperLegLiftBoost()
+        {
+            return GetEffectiveUpperLegLiftBoost(GetCurrentSprintNormalized());
+        }
+
+        private float GetEffectiveUpperLegLiftBoost(float sprintNormalized)
+        {
+            return Mathf.Lerp(_upperLegLiftBoost, _sprintUpperLegLiftBoost, Mathf.Clamp01(sprintNormalized));
+        }
+
         internal void BuildPassThroughCommands(
             DesiredInput desiredInput,
             LocomotionObservation observation,
@@ -728,6 +746,7 @@ namespace PhysicsDrivenMovement.Character
             if (isMoving)
             {
                 float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
+                float effectiveUpperLegLiftBoost = GetEffectiveUpperLegLiftBoost(desiredInput.SprintNormalized);
                 float effectiveCyclesPerSec = Mathf.Max(_stepFrequency, horizontalSpeedGate * _stepFrequencyScale);
                 float phaseAdvance = effectiveCyclesPerSec * 2f * Mathf.PI * Time.fixedDeltaTime;
 
@@ -795,13 +814,13 @@ namespace PhysicsDrivenMovement.Character
                     _smoothedInputMag,
                     leftStateFrame.State,
                     effectiveStepAngle,
-                    _upperLegLiftBoost);
+                    effectiveUpperLegLiftBoost);
                 float rightSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
                     _rightLegStateMachine.CyclePhase,
                     _smoothedInputMag,
                     rightStateFrame.State,
                     effectiveStepAngle,
-                    _upperLegLiftBoost);
+                    effectiveUpperLegLiftBoost);
 
                 if (bothFeetBehind)
                 {
@@ -877,7 +896,7 @@ namespace PhysicsDrivenMovement.Character
                     bothFeetBehind,
                     effectiveStepAngle,
                     _kneeAngle,
-                    _upperLegLiftBoost);
+                    effectiveUpperLegLiftBoost);
 
                 leftCommand = explicitLeftCommand;
                 rightCommand = explicitRightCommand;
