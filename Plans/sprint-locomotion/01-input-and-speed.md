@@ -5,7 +5,7 @@ Give the player a sprint action and make the character move significantly faster
 
 ## Current status
 - State: Active
-- Current next step: Add sprint speed and force scaling in `PlayerMovement`
+- Current next step: Add `SetSprintInputForTest(bool held)` and extend the outcome-based sprint slice beyond the focused `PlayerMovement` seam tests
 - Blockers: None
 
 ## Scope
@@ -49,12 +49,21 @@ Give the player a sprint action and make the character move significantly faster
 ## Decisions
 - 2026-03-16: Button actions in `PlayerMovement` now sample in `Update` and latch into `FixedUpdate` so short presses are not missed between physics ticks.
 - 2026-03-16: `Sprint` now binds to Left Shift and Gamepad Left Stick Press (`L3`). The dormant `Grab` binding remains unchanged for this slice and will need follow-up if grab gameplay is wired to keyboard input.
+- 2026-03-16: Sprint now reuses a single `_sprintSpeedMultiplier` for both the horizontal speed cap and the applied move force, so the higher tier reaches its target speed without introducing a second tuning field yet.
 
 ## Artifacts
 - `Assets/Scripts/Input/PlayerInputActions.cs`: Added `Sprint` action to the hand-written input wrapper.
 - `Assets/Scripts/Input/PlayerInputActions.inputactions`: Mirrored the `Sprint` action and bindings in the Input System asset.
 - `Assets/Scripts/Character/PlayerMovement.cs`: Jump is now Update-latched, and sprint held state is captured for the current physics tick.
 - `Assets/Tests/EditMode/Input/PlayerInputActionsTests.cs`: Regression coverage for the new Sprint action and bindings.
+- `Assets/Scripts/Character/PlayerMovement.cs`: Sprint now scales both effective max speed and move force only while the latched sprint button is held and `CharacterState` is `Moving`.
+- `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs`: Focused sprint coverage compares walk vs sprint acceleration/top speed under fixed CharacterState stubs and verifies no sprint bonus outside `Moving`.
+- `Assets/Scripts/Character/PlayerMovement.cs`: `SprintNormalized` now ramps over a serialized blend duration and feeds the current desired-input snapshot for downstream locomotion readers.
+- `Assets/Scripts/Character/Locomotion/DesiredInput.cs`: Added `SprintNormalized` to the locomotion intent contract with clamping at the input boundary.
+- `Assets/Tests/EditMode/Character/LocomotionContractsTests.cs`: Contract coverage now verifies `DesiredInput` exposes a clamped sprint blend.
+- `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs`: Focused PlayMode coverage now verifies `SprintNormalized` ramps up, ramps down, and propagates into `CurrentDesiredInput`.
 
 ## Progress notes
 - 2026-03-16: Completed scope item 1. Sprint input exists in both input definitions, and `PlayerMovement` now latches Jump and Sprint button state from `Update` into `FixedUpdate`.
+- 2026-03-16: Completed scope item 2. `PlayerMovement` now applies the sprint speed tier through a shared `_sprintSpeedMultiplier`, and the focused `PlayerMovementTests` PlayMode slice passed 15/15 after adding sprint acceleration/top-speed regressions.
+- 2026-03-16: Completed scope item 3. `PlayerMovement` now exposes a smoothed `SprintNormalized` output with a serialized 0.25 s default blend window, `DesiredInput` carries the same clamped sprint blend for the director path, and focused `LocomotionContractsTests` plus `PlayerMovementTests` passed green after adding ramp-up, ramp-down, and propagation coverage.

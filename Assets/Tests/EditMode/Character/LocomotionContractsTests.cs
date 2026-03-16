@@ -109,6 +109,27 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void DesiredInput_ConstructedWithSprintBlend_ClampsAndExposesSprintNormalized()
+        {
+            // Arrange
+            Type desiredInputType = RequireType(DesiredInputTypeName);
+            object desiredInput = CreateInstance(
+                desiredInputType,
+                new Vector2(0f, 1f),
+                new Vector3(0f, 0f, 3f),
+                new Vector3(0f, 0f, 2f),
+                false,
+                1.4f);
+
+            // Act
+            float sprintNormalized = GetPropertyValue<float>(desiredInput, "SprintNormalized");
+
+            // Assert
+            Assert.That(sprintNormalized, Is.EqualTo(1f).Within(0.0001f),
+                "DesiredInput should clamp SprintNormalized to the [0, 1] contract range.");
+        }
+
+        [Test]
         public void LocomotionObservation_ConstructedWithRuntimeState_ReportsPlanarSpeedAndNormalizedBasis()
         {
             // Arrange

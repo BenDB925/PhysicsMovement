@@ -11,6 +11,16 @@ namespace PhysicsDrivenMovement.Character
         private const float IntentEpsilon = 0.0001f;
 
         public DesiredInput(Vector2 moveInput, Vector3 moveWorldDirection, Vector3 facingDirection, bool jumpRequested)
+            : this(moveInput, moveWorldDirection, facingDirection, jumpRequested, 0f)
+        {
+        }
+
+        public DesiredInput(
+            Vector2 moveInput,
+            Vector3 moveWorldDirection,
+            Vector3 facingDirection,
+            bool jumpRequested,
+            float sprintNormalized)
         {
             // STEP 1: Clamp stick intent to a stable unit range at the contract boundary.
             MoveInput = Vector2.ClampMagnitude(moveInput, 1f);
@@ -23,6 +33,7 @@ namespace PhysicsDrivenMovement.Character
             JumpRequested = jumpRequested;
             MoveMagnitude = MoveInput.magnitude;
             HasMoveIntent = MoveMagnitude > IntentEpsilon;
+            SprintNormalized = Mathf.Clamp01(sprintNormalized);
         }
 
         public Vector2 MoveInput { get; }
@@ -36,6 +47,8 @@ namespace PhysicsDrivenMovement.Character
         public float MoveMagnitude { get; }
 
         public bool HasMoveIntent { get; }
+
+        public float SprintNormalized { get; }
 
         private static Vector3 NormalizePlanarDirection(Vector3 rawDirection, Vector3 fallback)
         {

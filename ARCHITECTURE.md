@@ -141,9 +141,9 @@
 
 | Concern | Detail |
 |---------|--------|
-| **What** | MonoBehaviour on Hips; reads player input, applies camera-relative horizontal forces and jump impulses, and snapshots the current desired locomotion intent for the director. |
-| **Why** | Separates input-to-force translation from balance and gait execution concerns while exposing a neutral desired-input view for the locomotion coordinator and deferring collapse safety decisions to authoritative state labels. |
-| **Public Surface** | `CurrentMoveInput: Vector2`, `CurrentDesiredInput`, `SetMoveInputForTest(Vector2)`, `SetJumpInputForTest(bool)` — test and coordination seams. |
+| **What** | MonoBehaviour on Hips; reads player input, applies camera-relative horizontal forces and jump impulses, and snapshots the current desired locomotion intent plus smoothed sprint blend for the director. |
+| **Why** | Separates input-to-force translation from balance and gait execution concerns while exposing a neutral desired-input view for the locomotion coordinator, a single sprint-blend signal for downstream locomotion readers, and deferring collapse safety decisions to authoritative state labels. |
+| **Public Surface** | `CurrentMoveInput: Vector2`, `SprintNormalized: float`, `CurrentDesiredInput`, `SetMoveInputForTest(Vector2)`, `SetJumpInputForTest(bool)` — test and coordination seams. |
 | **Collaborators** | `CharacterState` (jump gate plus non-ambulatory locomotion suppression), `CameraFollow` (movement direction), `LocomotionDirector` (desired-input and jump-intent snapshot). |
 | **Phase** | 3B |
 

@@ -27,6 +27,14 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 20f)]
         private float _maxSpeed = 5f;
 
+        [SerializeField, Range(1f, 3f)]
+        [Tooltip("Multiplier applied to walk max speed and move force while sprint is held and the character is in Moving state.")]
+        private float _sprintSpeedMultiplier = 1.8f;
+
+        [SerializeField, Range(0.01f, 1f)]
+        [Tooltip("Seconds for SprintNormalized to blend between walk and sprint while sprint becomes active or inactive.")]
+        private float _sprintBlendDuration = 0.25f;
+
         [SerializeField, Range(0f, 500f)]
         [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
                  "Jump is only allowed from Standing or Moving state while grounded.")]
@@ -112,6 +120,12 @@ namespace PhysicsDrivenMovement.Character
         private bool _sprintHeldThisPhysicsStep;
 
         /// <summary>
+        /// Smoothed sprint blend exposed to downstream locomotion readers.
+        /// 0 = walk, 1 = full sprint, with the value ramping over <see cref="_sprintBlendDuration"/>.
+        /// </summary>
+        private float _sprintNormalized;
+
+        /// <summary>
         /// Override flag set by <see cref="SetJumpInputForTest"/>. When true,
         /// FixedUpdate reads <see cref="_jumpPressedThisFrame"/> directly and does not
         /// poll the Input System for the jump button.
@@ -143,10 +157,21 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        /// <summary>
+        /// Smoothed sprint blend for downstream locomotion systems.
+        /// 0 = walk, 1 = full sprint.
+        /// </summary>
+        public float SprintNormalized => _sprintNormalized;
+
         internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
         internal DesiredInput CurrentDesiredInput =>
-            new DesiredInput(_currentMoveInput, CurrentMoveWorldDirection, CurrentFacingDirection, _jumpRequestedThisPhysicsStep);
+            new DesiredInput(
+                _currentMoveInput,
+                CurrentMoveWorldDirection,
+                CurrentFacingDirection,
+                _jumpRequestedThisPhysicsStep,
+                _sprintNormalized);
 
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
@@ -238,6 +263,10 @@ namespace PhysicsDrivenMovement.Character
             //         captures the current held state for future sprint-speed logic.
             _jumpRequestedThisPhysicsStep = _jumpPressedThisFrame;
             _sprintHeldThisPhysicsStep = _sprintHeld;
+
+            // STEP 1b: Blend the sprint output using the latched physics-step state so
+            //          downstream locomotion readers observe one stable ramp per physics tick.
+            UpdateSprintNormalized();
 
             // STEP 2: Early-out when required dependencies are missing.
             if (_rb == null || _balance == null)
@@ -373,8 +402,10 @@ namespace PhysicsDrivenMovement.Character
             //         forward vector) so steep pitch angles don't affect WASD direction.
             //         Extracting yaw from the camera's euler angles gives a stable flat
             //         forward regardless of how far up or down the camera is pitched.
-            // STEP 2: Skip force application when input is near zero or speed is capped.
-            // STEP 3: Apply force using ForceMode.Force and update facing direction.
+            // STEP 2: Skip force application when input is near zero or the active walk/sprint
+            //         speed tier is already capped.
+            // STEP 3: Apply force using ForceMode.Force, scaling both cap and force when sprint
+            //         is held in the Moving state, then update facing direction.
             if (_rb == null || _balance == null || ShouldSuppressLocomotion())
             {
                 return;
@@ -391,10 +422,13 @@ namespace PhysicsDrivenMovement.Character
             }
 
             Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            if (horizontalVelocity.magnitude < _maxSpeed)
+            float sprintMovementMultiplier = GetSprintMovementMultiplier();
+            float activeMaxSpeed = _maxSpeed * sprintMovementMultiplier;
+            float activeMoveForce = _moveForce * sprintMovementMultiplier;
+            if (horizontalVelocity.magnitude < activeMaxSpeed)
             {
                 float leanMultiplier = GetLeanForceMultiplier();
-                _rb.AddForce(worldDirection * (_moveForce * leanMultiplier), ForceMode.Force);
+                _rb.AddForce(worldDirection * (activeMoveForce * leanMultiplier), ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
@@ -464,6 +498,64 @@ namespace PhysicsDrivenMovement.Character
                     _currentFacingDirection.Normalize();
                 }
             }
+        }
+
+        private float GetSprintMovementMultiplier()
+        {
+            if (!IsSprintSpeedTierActive())
+            {
+                return 1f;
+            }
+
+            return _sprintSpeedMultiplier;
+        }
+
+        private bool IsSprintSpeedTierActive()
+        {
+            if (!_sprintHeldThisPhysicsStep)
+            {
+                return false;
+            }
+
+            if (_characterState == null)
+            {
+                TryGetComponent(out _characterState);
+            }
+
+            if (_characterState == null)
+            {
+                return false;
+            }
+
+            return _characterState.CurrentState == CharacterStateType.Moving;
+        }
+
+        private void UpdateSprintNormalized()
+        {
+            // STEP 1: Convert the current sprint activation state into a stable walk/sprint target.
+            float targetSprintNormalized = GetSprintNormalizedTarget();
+
+            // STEP 2: Snap immediately only if the blend duration was tuned to a degenerate value.
+            if (_sprintBlendDuration <= 0.0001f)
+            {
+                _sprintNormalized = targetSprintNormalized;
+                return;
+            }
+
+            // STEP 3: Move toward the target at a constant rate so the full 0→1 or 1→0
+            //         transition takes roughly _sprintBlendDuration seconds.
+            float maxDelta = Time.fixedDeltaTime / _sprintBlendDuration;
+            _sprintNormalized = Mathf.MoveTowards(_sprintNormalized, targetSprintNormalized, maxDelta);
+        }
+
+        private float GetSprintNormalizedTarget()
+        {
+            if (_currentMoveInput.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            return IsSprintSpeedTierActive() ? 1f : 0f;
         }
 
         private bool ShouldSuppressLocomotion()

@@ -22,6 +22,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private GameObject _ground;
         private GameObject _player;
         private Camera _camera;
+        private GameObject _movementStateStubRoot;
         private Rigidbody _hipsBody;
         private BalanceController _balance;
         private PlayerMovement _movement;
@@ -77,6 +78,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             if (_camera != null)
             {
                 UnityEngine.Object.Destroy(_camera.gameObject);
+            }
+
+            if (_movementStateStubRoot != null)
+            {
+                UnityEngine.Object.Destroy(_movementStateStubRoot);
             }
 
             if (_player != null)
@@ -179,6 +185,259 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             float speedAfter = Horizontal(_hipsBody.linearVelocity).magnitude;
             Assert.That(speedAfter, Is.LessThanOrEqualTo(speedBefore + 0.05f));
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyMovementForces_WhenSprintHeldInMovingState_AcceleratesFasterThanWalk()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            const float baseMoveForce = 120f;
+            const float walkMaxSpeed = 20f;
+            const float sprintSpeedMultiplier = 2f;
+
+            // Arrange
+            SetPrivateField(_movement, "_moveForce", baseMoveForce);
+            SetPrivateField(_movement, "_maxSpeed", walkMaxSpeed);
+            SetPrivateField(_movement, "_sprintSpeedMultiplier", sprintSpeedMultiplier);
+            SetPrivateField(_movement, "_inputActions", null);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            UseMovementStateStub(CharacterStateType.Moving);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", false);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            // Act
+            float walkSpeedAfterWindow = 0f;
+            for (int frame = 0; frame < 25; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                walkSpeedAfterWindow = Horizontal(_hipsBody.linearVelocity).magnitude;
+            }
+
+            _movement.SetMoveInputForTest(Vector2.zero);
+            yield return WaitForPhysicsFrames(5);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            float sprintSpeedAfterWindow = 0f;
+            for (int frame = 0; frame < 25; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                sprintSpeedAfterWindow = Horizontal(_hipsBody.linearVelocity).magnitude;
+            }
+
+            // Assert
+            Assert.That(sprintSpeedAfterWindow, Is.GreaterThan(walkSpeedAfterWindow * 1.1f),
+                "Sprint should scale movement force enough to accelerate meaningfully faster than walk over the same window.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyMovementForces_WhenSprintHeldInMovingState_AllowsHigherHorizontalSpeedCap()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            const float walkMaxSpeed = 2f;
+            const float sprintSpeedMultiplier = 2f;
+
+            // Arrange
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", walkMaxSpeed);
+            SetPrivateField(_movement, "_sprintSpeedMultiplier", sprintSpeedMultiplier);
+            SetPrivateField(_movement, "_inputActions", null);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            UseMovementStateStub(CharacterStateType.Moving);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", false);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            float walkMaxObservedHorizontalSpeed = 0f;
+            for (int frame = 0; frame < 150; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                float horizontalSpeed = Horizontal(_hipsBody.linearVelocity).magnitude;
+                if (horizontalSpeed > walkMaxObservedHorizontalSpeed)
+                {
+                    walkMaxObservedHorizontalSpeed = horizontalSpeed;
+                }
+            }
+
+            _movement.SetMoveInputForTest(Vector2.zero);
+            yield return WaitForPhysicsFrames(5);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            // Act
+            float maxObservedHorizontalSpeed = 0f;
+            for (int frame = 0; frame < 150; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                float horizontalSpeed = Horizontal(_hipsBody.linearVelocity).magnitude;
+                if (horizontalSpeed > maxObservedHorizontalSpeed)
+                {
+                    maxObservedHorizontalSpeed = horizontalSpeed;
+                }
+            }
+
+            // Assert
+            Assert.That(maxObservedHorizontalSpeed, Is.GreaterThan(walkMaxObservedHorizontalSpeed * 1.5f),
+                "Sprint should raise the reachable horizontal speed well above the walk tier while the character is Moving.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyMovementForces_WhenSprintHeldOutsideMovingState_KeepsWalkSpeedCap()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            const float walkMaxSpeed = 2f;
+            const float sprintSpeedMultiplier = 2f;
+
+            // Arrange
+            SetPrivateField(_movement, "_moveForce", 1500f);
+            SetPrivateField(_movement, "_maxSpeed", walkMaxSpeed);
+            SetPrivateField(_movement, "_sprintSpeedMultiplier", sprintSpeedMultiplier);
+            SetPrivateField(_movement, "_inputActions", null);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            UseMovementStateStub(CharacterStateType.Standing);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", false);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            float walkMaxObservedHorizontalSpeed = 0f;
+            for (int frame = 0; frame < 150; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                float horizontalSpeed = Horizontal(_hipsBody.linearVelocity).magnitude;
+                if (horizontalSpeed > walkMaxObservedHorizontalSpeed)
+                {
+                    walkMaxObservedHorizontalSpeed = horizontalSpeed;
+                }
+            }
+
+            _movement.SetMoveInputForTest(Vector2.zero);
+            yield return WaitForPhysicsFrames(5);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+            _hipsBody.linearVelocity = Vector3.zero;
+            _hipsBody.angularVelocity = Vector3.zero;
+
+            // Act
+            float maxObservedHorizontalSpeed = 0f;
+            for (int frame = 0; frame < 150; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                float horizontalSpeed = Horizontal(_hipsBody.linearVelocity).magnitude;
+                if (horizontalSpeed > maxObservedHorizontalSpeed)
+                {
+                    maxObservedHorizontalSpeed = horizontalSpeed;
+                }
+            }
+
+            // Assert
+            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(walkMaxObservedHorizontalSpeed * 1.05f),
+                "Holding sprint should not raise the walk cap unless CharacterState labels the character as Moving.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintNormalized_WhenSprintHeldInMovingState_RampsUpTowardOne()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            // Arrange
+            SetPrivateField(_movement, "_inputActions", null);
+            SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
+            UseMovementStateStub(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+
+            // Act
+            yield return WaitForPhysicsFrames(10);
+            float rampedSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+
+            yield return WaitForPhysicsFrames(15);
+            float settledSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+
+            // Assert
+            Assert.That(rampedSprintNormalized, Is.GreaterThan(0.2f).And.LessThan(0.8f),
+                "SprintNormalized should ramp over time instead of snapping immediately to full sprint.");
+            Assert.That(settledSprintNormalized, Is.EqualTo(1f).Within(0.05f),
+                "SprintNormalized should reach full sprint after roughly one blend window while sprint remains active.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintNormalized_WhenSprintReleased_RampsBackToWalk()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            // Arrange
+            SetPrivateField(_movement, "_inputActions", null);
+            SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
+            UseMovementStateStub(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+            yield return WaitForPhysicsFrames(25);
+
+            float fullSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+            SetPrivateField(_movement, "_sprintHeld", false);
+
+            // Act
+            yield return WaitForPhysicsFrames(10);
+            float rampedDownSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+
+            yield return WaitForPhysicsFrames(15);
+            float walkSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+
+            // Assert
+            Assert.That(fullSprintNormalized, Is.EqualTo(1f).Within(0.05f),
+                "SprintNormalized should be fully blended in before the release portion of the test begins.");
+            Assert.That(rampedDownSprintNormalized, Is.GreaterThan(0.2f).And.LessThan(0.8f),
+                "SprintNormalized should decay over time instead of snapping back to walk immediately.");
+            Assert.That(walkSprintNormalized, Is.EqualTo(0f).Within(0.05f),
+                "SprintNormalized should return to walk after roughly one blend window once sprint is released.");
+        }
+
+        [UnityTest]
+        public IEnumerator CurrentDesiredInput_WhenSprintNormalizedIsBlending_ReportsSameValue()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            // Arrange
+            SetPrivateField(_movement, "_inputActions", null);
+            SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
+            UseMovementStateStub(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(Vector2.up);
+            SetPrivateField(_movement, "_sprintHeld", true);
+
+            // Act
+            yield return WaitForPhysicsFrames(10);
+            float sprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
+            object desiredInput = GetNonPublicProperty<object>(_movement, "CurrentDesiredInput");
+            float desiredSprintNormalized = GetNonPublicProperty<float>(desiredInput, "SprintNormalized");
+
+            // Assert
+            Assert.That(sprintNormalized, Is.GreaterThan(0.2f).And.LessThan(0.8f),
+                "SprintNormalized should be mid-blend for this propagation check.");
+            Assert.That(desiredSprintNormalized, Is.EqualTo(sprintNormalized).Within(0.0001f),
+                "CurrentDesiredInput should carry the same smoothed sprint value seen on PlayerMovement.");
         }
 
         [UnityTest]
@@ -353,6 +612,23 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static Vector3 Horizontal(Vector3 value)
         {
             return new Vector3(value.x, 0f, value.z);
+        }
+
+        private void UseMovementStateStub(CharacterStateType state)
+        {
+            if (_movementStateStubRoot != null)
+            {
+                UnityEngine.Object.Destroy(_movementStateStubRoot);
+            }
+
+            _movementStateStubRoot = new GameObject("PlayerMovementTests_StateStub");
+            _movementStateStubRoot.AddComponent<Rigidbody>();
+            _movementStateStubRoot.AddComponent<BalanceController>();
+
+            CharacterState stateStub = _movementStateStubRoot.AddComponent<CharacterState>();
+            stateStub.enabled = false;
+            stateStub.SetStateForTest(state);
+            SetPrivateField(_movement, "_characterState", stateStub);
         }
 
         private static void SetPrivateField(object instance, string fieldName, object value)
