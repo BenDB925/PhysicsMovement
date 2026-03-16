@@ -85,6 +85,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             PlayerMovement.SetMoveInputForTest(Vector2.zero);
             PlayerMovement.SetJumpInputForTest(false);
+            PlayerMovement.SetSprintInputForTest(false);
 
             if (options.CreateCamera)
             {
@@ -163,6 +164,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             PlayerMovement.SetMoveInputForTest(Vector2.zero);
             PlayerMovement.SetJumpInputForTest(false);
+            PlayerMovement.SetSprintInputForTest(false);
 
             for (int frame = 0; frame < physicsFrames; frame++)
             {

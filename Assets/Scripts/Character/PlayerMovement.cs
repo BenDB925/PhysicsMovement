@@ -132,6 +132,13 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private bool _overrideJumpInput;
 
+        /// <summary>
+        /// Override flag set by <see cref="SetSprintInputForTest"/>. When true,
+        /// Update keeps <see cref="_sprintHeld"/> at the test-provided held state and does
+        /// not poll the Input System for sprint.
+        /// </summary>
+        private bool _overrideSprintInput;
+
         private bool _overrideMoveInput;
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
@@ -201,6 +208,25 @@ namespace PhysicsDrivenMovement.Character
             _jumpPressedThisFrame = pressed;
             _jumpRequestedThisPhysicsStep = pressed;
             _overrideJumpInput = true;
+        }
+
+        /// <summary>
+        /// Test seam: directly inject a sprint-button held state, bypassing the Input System.
+        /// The override persists until the test calls this method again, matching the held-state
+        /// behaviour of <see cref="SetMoveInputForTest"/> rather than the one-frame consume used
+        /// by <see cref="SetJumpInputForTest"/>.
+        /// Update will not poll the Input System for sprint while this override is active.
+        /// Do not call from production code.
+        /// </summary>
+        /// <param name="held">
+        /// <c>true</c> to simulate sprint held;
+        /// <c>false</c> to simulate sprint released.
+        /// </param>
+        public void SetSprintInputForTest(bool held)
+        {
+            _sprintHeld = held;
+            _sprintHeldThisPhysicsStep = held;
+            _overrideSprintInput = true;
         }
 
         private void Awake()
@@ -319,7 +345,10 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 3: Keep Sprint as a held-state sample so FixedUpdate can snapshot the
             //         latest button state without polling the Input System from physics code.
-            _sprintHeld = _inputActions.Player.Sprint.IsPressed();
+            if (!_overrideSprintInput)
+            {
+                _sprintHeld = _inputActions.Player.Sprint.IsPressed();
+            }
         }
 
         private void OnDestroy()

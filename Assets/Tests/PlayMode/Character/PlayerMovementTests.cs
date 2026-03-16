@@ -70,6 +70,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _camera.transform.rotation = Quaternion.identity;
             SetPrivateField(_movement, "_camera", _camera);
             _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetSprintInputForTest(false);
         }
 
         [TearDown]
@@ -206,7 +207,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             UseMovementStateStub(CharacterStateType.Moving);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", false);
+            _movement.SetSprintInputForTest(false);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -222,7 +223,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return WaitForPhysicsFrames(5);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -256,7 +257,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             UseMovementStateStub(CharacterStateType.Moving);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", false);
+            _movement.SetSprintInputForTest(false);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -275,7 +276,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return WaitForPhysicsFrames(5);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -314,7 +315,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             UseMovementStateStub(CharacterStateType.Standing);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", false);
+            _movement.SetSprintInputForTest(false);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -333,7 +334,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return WaitForPhysicsFrames(5);
 
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
             _hipsBody.linearVelocity = Vector3.zero;
             _hipsBody.angularVelocity = Vector3.zero;
 
@@ -365,7 +366,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
             UseMovementStateStub(CharacterStateType.Moving);
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
 
             // Act
             yield return WaitForPhysicsFrames(10);
@@ -392,11 +393,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
             UseMovementStateStub(CharacterStateType.Moving);
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
             yield return WaitForPhysicsFrames(25);
 
             float fullSprintNormalized = GetNonPublicProperty<float>(_movement, "SprintNormalized");
-            SetPrivateField(_movement, "_sprintHeld", false);
+            _movement.SetSprintInputForTest(false);
 
             // Act
             yield return WaitForPhysicsFrames(10);
@@ -425,7 +426,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_movement, "_sprintBlendDuration", 0.25f);
             UseMovementStateStub(CharacterStateType.Moving);
             _movement.SetMoveInputForTest(Vector2.up);
-            SetPrivateField(_movement, "_sprintHeld", true);
+            _movement.SetSprintInputForTest(true);
 
             // Act
             yield return WaitForPhysicsFrames(10);
@@ -573,6 +574,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private IEnumerator PrepareStandingBaseline()
         {
             _movement.SetMoveInputForTest(Vector2.zero);
+            _movement.SetSprintInputForTest(false);
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
             _characterState.SetStateForTest(CharacterStateType.Standing);
             _hipsBody.linearVelocity = Vector3.zero;

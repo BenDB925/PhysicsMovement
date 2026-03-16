@@ -5,7 +5,7 @@ Give the player a sprint action and make the character move significantly faster
 
 ## Current status
 - State: Active
-- Current next step: Add `SetSprintInputForTest(bool held)` and extend the outcome-based sprint slice beyond the focused `PlayerMovement` seam tests
+- Current next step: Extend the outcome-based sprint slice beyond the focused `PlayerMovement` seam tests
 - Blockers: None
 
 ## Scope
@@ -62,8 +62,10 @@ Give the player a sprint action and make the character move significantly faster
 - `Assets/Scripts/Character/Locomotion/DesiredInput.cs`: Added `SprintNormalized` to the locomotion intent contract with clamping at the input boundary.
 - `Assets/Tests/EditMode/Character/LocomotionContractsTests.cs`: Contract coverage now verifies `DesiredInput` exposes a clamped sprint blend.
 - `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs`: Focused PlayMode coverage now verifies `SprintNormalized` ramps up, ramps down, and propagates into `CurrentDesiredInput`.
+- `Assets/Scripts/Character/PlayerMovement.cs`: Added `SetSprintInputForTest(bool held)` so sprint held-state tests can bypass Update sampling without reflecting private fields.
 
 ## Progress notes
 - 2026-03-16: Completed scope item 1. Sprint input exists in both input definitions, and `PlayerMovement` now latches Jump and Sprint button state from `Update` into `FixedUpdate`.
 - 2026-03-16: Completed scope item 2. `PlayerMovement` now applies the sprint speed tier through a shared `_sprintSpeedMultiplier`, and the focused `PlayerMovementTests` PlayMode slice passed 15/15 after adding sprint acceleration/top-speed regressions.
 - 2026-03-16: Completed scope item 3. `PlayerMovement` now exposes a smoothed `SprintNormalized` output with a serialized 0.25 s default blend window, `DesiredInput` carries the same clamped sprint blend for the director path, and focused `LocomotionContractsTests` plus `PlayerMovementTests` passed green after adding ramp-up, ramp-down, and propagation coverage.
+- 2026-03-16: Completed scope item 4. `PlayerMovement` now exposes `SetSprintInputForTest(bool held)` with a persistent sprint-held override, and the focused sprint PlayMode tests now drive sprint through the public seam instead of reflecting `_sprintHeld`.
