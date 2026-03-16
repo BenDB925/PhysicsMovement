@@ -128,6 +128,86 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenSprintBlendIsMidRamp_LeanCommandTracksSprintNormalizedOnEntryAndRelease()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for sprint-lean ramp coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo sprintLeanField = typeof(LocomotionDirector).GetField("_maxSprintLeanDegrees", flags);
+            Assert.That(sprintLeanField, Is.Not.Null,
+                "LocomotionDirector should keep its serialized sprint-lean tuning field for the ramp coverage test.");
+
+            float maxSprintLeanDegrees = (float)sprintLeanField.GetValue(_director);
+            object walkSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float walkLeanDegrees = GetPropertyValue<float>(walkSupportCommand, "DesiredLeanDegrees");
+
+            _rig.PlayerMovement.SetSprintInputForTest(true);
+
+            for (int frame = 0; frame < 12; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object entryDesiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object entrySupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float entrySprintNormalized = GetPropertyValue<float>(entryDesiredInput, "SprintNormalized");
+            float entryLeanDegrees = GetPropertyValue<float>(entrySupportCommand, "DesiredLeanDegrees");
+
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object fullSprintDesiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object fullSprintSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float fullSprintNormalized = GetPropertyValue<float>(fullSprintDesiredInput, "SprintNormalized");
+            float fullSprintLeanDegrees = GetPropertyValue<float>(fullSprintSupportCommand, "DesiredLeanDegrees");
+
+            _rig.PlayerMovement.SetSprintInputForTest(false);
+
+            for (int frame = 0; frame < 12; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Act
+            object exitDesiredInput = GetPropertyValue<object>(_director, "CurrentDesiredInput");
+            object exitSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float exitSprintNormalized = GetPropertyValue<float>(exitDesiredInput, "SprintNormalized");
+            float exitLeanDegrees = GetPropertyValue<float>(exitSupportCommand, "DesiredLeanDegrees");
+
+            // Assert
+            Assert.That(entrySprintNormalized, Is.GreaterThan(0.2f).And.LessThan(0.8f),
+                "SprintNormalized should be mid-ramp shortly after sprint engagement so the lean command can track the same blend window.");
+            Assert.That(fullSprintNormalized, Is.EqualTo(1f).Within(0.05f),
+                "SprintNormalized should reach full sprint before the release half of the ramp test begins.");
+            Assert.That(exitSprintNormalized, Is.GreaterThan(0.2f).And.LessThan(0.8f),
+                "SprintNormalized should be mid-ramp shortly after sprint release so the lean command can track the walk recovery window.");
+            Assert.That(fullSprintLeanDegrees, Is.EqualTo(maxSprintLeanDegrees).Within(0.75f),
+                "Once sprint is fully blended in, the support-command lean should reach the configured max sprint lean budget.");
+            Assert.That(entryLeanDegrees, Is.GreaterThan(walkLeanDegrees + 0.25f),
+                "During sprint ramp-in, the support-command lean should already rise above the walk posture instead of waiting for full sprint.");
+            Assert.That(entryLeanDegrees, Is.LessThan(fullSprintLeanDegrees - 0.5f),
+                "The ramp-in sample should still be materially below the fully blended sprint lean posture.");
+            Assert.That(exitLeanDegrees, Is.GreaterThan(walkLeanDegrees + 0.25f),
+                "During sprint release, the support-command lean should still be decaying through an in-between posture rather than popping straight back to the walk lean.");
+            Assert.That(exitLeanDegrees, Is.LessThan(fullSprintLeanDegrees - 0.5f),
+                "The ramp-out sample should have already shed a material portion of the full sprint lean budget.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenSupportCenterFallsBehindHips_MarksObservationAsComOutsideSupport()
         {
             // Arrange

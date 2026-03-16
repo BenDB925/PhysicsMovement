@@ -407,7 +407,6 @@ namespace PhysicsDrivenMovement.Character
             float sprintLeanDegrees = _currentDesiredInput.HasMoveIntent
                 ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees
                 : 0f;
-            float baseLeanDegrees = turnLeanDegrees + sprintLeanDegrees;
 
             // Apply per-situation response profile blended by the current recovery envelope.
             RecoveryResponseProfile profile = RecoveryResponseProfile.For(_currentRecoveryState.Situation);
@@ -418,8 +417,12 @@ namespace PhysicsDrivenMovement.Character
                 profile.MinYawStrengthScale * recoveryBlend);
             float stabilizationStrengthScale = Mathf.Lerp(baseStabilizationStrengthScale,
                 baseStabilizationStrengthScale * profile.StabilizationBoostMultiplier, recoveryBlend);
-            float desiredLeanDegrees = Mathf.Lerp(baseLeanDegrees,
-                baseLeanDegrees * profile.LeanDegreesMultiplier, recoveryBlend);
+
+            // Keep sprint posture independent so recovery-specific turn attenuation does not
+            // erase the straight-line sprint silhouette on otherwise stable runs.
+            float desiredTurnLeanDegrees = Mathf.Lerp(turnLeanDegrees,
+                turnLeanDegrees * profile.LeanDegreesMultiplier, recoveryBlend);
+            float desiredLeanDegrees = desiredTurnLeanDegrees + sprintLeanDegrees;
 
             _currentBodySupportCommand = new BodySupportCommand(
                 supportFacing,

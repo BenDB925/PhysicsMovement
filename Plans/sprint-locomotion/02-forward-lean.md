@@ -4,8 +4,8 @@
 Tilt the character's upright target forward during sprint so the body visually leans into the run — a key visual cue that distinguishes sprinting from walking.
 
 ## Current status
-- State: In progress
-- Current next step: Implement the remaining WP-2 outcome tests and the step-2/step-3 follow-up checks.
+- State: Complete
+- Current next step: None. WP-2 acceptance scope is complete; resume from the parent sprint plan for the next slice.
 - Blockers: None for step 1. `SprintNormalized` is already available and the lean path now runs through `LocomotionDirector` -> `BodySupportCommand` -> `BalanceController`.
 
 ## Scope
@@ -38,9 +38,15 @@ Tilt the character's upright target forward during sprint so the body visually l
 - **Assert**: `CharacterState` never enters `Fallen` during the run.
 
 ## Decisions
+- 2026-03-16: Recovery-profile lean attenuation now applies only to turn lean. Sprint lean remains independent so stable straight sprint keeps its full posture cue even when observation recovery is active.
 
 ## Artifacts
+- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`: Sprint lean now bypasses recovery-only turn-lean attenuation while still ramping from `SprintNormalized`.
+- `Assets/Tests/PlayMode/Character/LocomotionDirectorTests.cs`: Direct PlayMode coverage that the director lean command rises and falls through an in-between posture during sprint onset and release.
+- `Assets/Tests/PlayMode/Character/SprintLeanOutcomeTests.cs`: Arena_01 outcome coverage for sprint lean increase, lean recovery after sprint release, and Fallen-state safety.
 
 ## Progress notes
 - 2026-03-16: Step 1 implemented through the existing body-support command path instead of a direct `BalanceController` read. `LocomotionDirector` now adds sprint-normalized lean degrees, and `BalanceController` applies commanded lean to the upright target in addition to the existing COM lean shift.
 - 2026-03-16: Added focused coverage for the new sprint-lean tuning field, sprint-to-support-command propagation, and runtime commanded-lean posture on the real prefab. Focused verification passed: `LocomotionDirectorEditModeTests` (8/8) and `LocomotionDirectorTests` + `BalanceControllerIntegrationTests` (26/26).
+- 2026-03-16: Added the remaining WP-2 PlayMode coverage: a direct director ramp test plus Arena_01 outcome tests for forward-lean increase, release back to walk posture, and Fallen-state safety. Focused sprint-lean verification passed 4/4.
+- 2026-03-16: Fixed a runtime gap where recovery response scaling damped the entire lean budget and erased the sprint posture cue on straight runs. The broader nearby regression slice `LocomotionDirectorTests` + `BalanceControllerIntegrationTests` + `SprintLeanOutcomeTests` passed 29/30; the remaining `FixedUpdate_WhenStateMachineConfidenceDrops_ConvergesTowardMirroredFallbackWithoutOneFrameSnap` failure is pre-existing/unrelated and still fails in isolation.

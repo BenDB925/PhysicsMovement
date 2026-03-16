@@ -3,22 +3,22 @@
 ## Status
 - State: Active
 - Acceptance target: Character sprints at higher speed with visible forward lean, pumping arms, longer stride — and existing walk gait never regresses to legs dragging behind hips
-- Current next step: WP-1 — Add sprint speed/force scaling now that Sprint input binding is in place
+- Current next step: Finish WP-1 Arena_01 sprint speed outcomes so the speed tier has the same scene-level coverage now added for WP-2, then continue to WP-3 arm behaviour
 - Active blockers: None
 
 ## Quick Resume
-- Sprint input now exists in both `PlayerInputActions` definitions, and `PlayerMovement` latches Jump/Sprint button state in `Update` for the next physics tick.
-- Walk-gait outcome coverage is solid (`GaitOutcomeTests`) and will be the regression baseline.
-- Next WP-1 slice: add sprint speed/force scaling and outcome tests, then layer visual changes on top.
+- WP-2 is complete: sprint lean now ramps through `LocomotionDirector` and no longer gets damped by recovery-only turn-lean attenuation on stable straight runs.
+- New PlayMode sprint-lean coverage lives in `SprintLeanOutcomeTests` plus a focused `LocomotionDirectorTests` ramp check; the dedicated sprint-lean slice passed 4/4.
+- Remaining open sprint validation is still WP-1's missing Arena_01 speed/displacement outcomes; after that, the next visual slice is WP-3 sprint arms.
 
 ## Verified Artifacts
-- [Assets/Scripts/Character/PlayerMovement.cs](Assets/Scripts/Character/PlayerMovement.cs): Movement force, max speed, test seams (`SetMoveInputForTest`)
-- [Assets/Scripts/Input/PlayerInputActions.cs](Assets/Scripts/Input/PlayerInputActions.cs): Hand-written player input wrapper now includes `Sprint`
-- [Assets/Tests/PlayMode/Character/GaitOutcomeTests.cs](Assets/Tests/PlayMode/Character/GaitOutcomeTests.cs): Existing outcome tests that must stay green throughout
+- [Assets/Scripts/Character/Locomotion/LocomotionDirector.cs](Assets/Scripts/Character/Locomotion/LocomotionDirector.cs): Sprint lean now stays independent from recovery-only turn attenuation while still ramping from `SprintNormalized`
+- [Assets/Tests/PlayMode/Character/SprintLeanOutcomeTests.cs](Assets/Tests/PlayMode/Character/SprintLeanOutcomeTests.cs): Arena_01 acceptance coverage for sprint lean increase, release, and Fallen-state safety
+- [Plans/sprint-locomotion/02-forward-lean.md](Plans/sprint-locomotion/02-forward-lean.md): Completed WP-2 record with the runtime decision and verification results
 
 ## Child docs
 - [ ] WP-1: Sprint input and speed tier ([Plans/sprint-locomotion/01-input-and-speed.md](Plans/sprint-locomotion/01-input-and-speed.md))
-- [ ] WP-2: Forward lean during sprint ([Plans/sprint-locomotion/02-forward-lean.md](Plans/sprint-locomotion/02-forward-lean.md))
+- [x] WP-2: Forward lean during sprint ([Plans/sprint-locomotion/02-forward-lean.md](Plans/sprint-locomotion/02-forward-lean.md))
 - [ ] WP-3: Sprint arm behaviour ([Plans/sprint-locomotion/03-sprint-arms.md](Plans/sprint-locomotion/03-sprint-arms.md))
 - [ ] WP-4: Sprint gait — stride and cadence ([Plans/sprint-locomotion/04-sprint-gait.md](Plans/sprint-locomotion/04-sprint-gait.md))
 - [ ] WP-5: Balance retuning at sprint speed ([Plans/sprint-locomotion/05-balance-retuning.md](Plans/sprint-locomotion/05-balance-retuning.md))
@@ -57,3 +57,4 @@ Every work package includes at least one outcome-based PlayMode test. Tests asse
 ## Progress notes
 - 2026-03-16: Plan created. Seven work packages scoped from codebase analysis.
 - 2026-03-16: WP-1 scope item 1 completed. `Sprint` input is bound in both input definitions, and `PlayerMovement` now Update-latches Jump/Sprint button state before physics consumption.
+- 2026-03-16: WP-2 completed. `LocomotionDirector` sprint lean now stays independent from recovery-only turn attenuation, and new PlayMode coverage (`SprintLeanOutcomeTests` plus a director ramp test) passed on the focused sprint-lean slice 4/4. A broader nearby slice passed 29/30 with one pre-existing unrelated `LocomotionDirectorTests` fallback red still failing in isolation.
