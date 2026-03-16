@@ -6,7 +6,7 @@ namespace PhysicsDrivenMovement.Input
 {
     /// <summary>
     /// Wrapper for project player input actions.
-    /// Defines the Player action map with Move, Look, Jump, Grab, and Punch actions.
+    /// Defines the Player action map with Move, Look, Jump, Sprint, Grab, and Punch actions.
     /// </summary>
     public sealed class PlayerInputActions : IDisposable
     {
@@ -15,6 +15,7 @@ namespace PhysicsDrivenMovement.Input
         private readonly InputAction _playerMove;
         private readonly InputAction _playerLook;
         private readonly InputAction _playerJump;
+        private readonly InputAction _playerSprint;
         private readonly InputAction _playerGrab;
         private readonly InputAction _playerPunch;
 
@@ -32,6 +33,9 @@ namespace PhysicsDrivenMovement.Input
             _playerJump = _player.AddAction("Jump", InputActionType.Button);
             _playerJump.expectedControlType = "Button";
 
+            _playerSprint = _player.AddAction("Sprint", InputActionType.Button);
+            _playerSprint.expectedControlType = "Button";
+
             _playerGrab = _player.AddAction("Grab", InputActionType.Button);
             _playerGrab.expectedControlType = "Button";
 
@@ -47,7 +51,19 @@ namespace PhysicsDrivenMovement.Input
 
         public void Dispose()
         {
-            UnityEngine.Object.Destroy(_asset);
+            if (_asset == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(_asset);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(_asset);
+            }
         }
 
         public void Enable()
@@ -84,6 +100,9 @@ namespace PhysicsDrivenMovement.Input
             _playerJump.AddBinding("<Keyboard>/space");
             _playerJump.AddBinding("<Gamepad>/buttonSouth");
 
+            _playerSprint.AddBinding("<Keyboard>/leftShift");
+            _playerSprint.AddBinding("<Gamepad>/leftStickPress");
+
             _playerGrab.AddBinding("<Keyboard>/leftShift");
             _playerGrab.AddBinding("<Gamepad>/leftTrigger");
 
@@ -105,6 +124,8 @@ namespace PhysicsDrivenMovement.Input
             public InputAction Look => _wrapper._playerLook;
 
             public InputAction Jump => _wrapper._playerJump;
+
+            public InputAction Sprint => _wrapper._playerSprint;
 
             public InputAction Grab => _wrapper._playerGrab;
 

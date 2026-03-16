@@ -4,7 +4,9 @@
     "references": [
         "PhysicsDrivenMovement.Core",
         "PhysicsDrivenMovement.Character",
-        "PhysicsDrivenMovement.Environment"
+        "PhysicsDrivenMovement.Environment",
+        "PhysicsDrivenMovement.Input",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

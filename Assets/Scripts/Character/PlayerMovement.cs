@@ -8,7 +8,8 @@ namespace PhysicsDrivenMovement.Character
     /// Converts player input into locomotion forces for the active ragdoll hips body.
     /// This component belongs to the Character locomotion system and is responsible for
     /// camera-relative movement, speed limiting, jump impulse, and forwarding facing
-    /// direction intent to <see cref="BalanceController"/>.
+    /// direction intent to <see cref="BalanceController"/> while latching transient button
+    /// input in Update for the next physics step.
     /// Jump is only permitted when the character is grounded and in the
     /// <see cref="CharacterStateType.Standing"/> or <see cref="CharacterStateType.Moving"/>
     /// state; a one-frame consume prevents repeated impulses while the button is held.
@@ -97,6 +98,20 @@ namespace PhysicsDrivenMovement.Character
         private bool _jumpRequestedThisPhysicsStep;
 
         /// <summary>
+        /// Latest sampled held state of the Sprint button from Update.
+        /// FixedUpdate snapshots this into <see cref="_sprintHeldThisPhysicsStep"/> so
+        /// future physics-owned sprint logic uses a stable value for the current tick.
+        /// </summary>
+        private bool _sprintHeld;
+
+        /// <summary>
+        /// Sprint held state latched for the current physics step.
+        /// This is intentionally separate from Update sampling so button state changes are
+        /// observed once per physics tick instead of polling the Input System in FixedUpdate.
+        /// </summary>
+        private bool _sprintHeldThisPhysicsStep;
+
+        /// <summary>
         /// Override flag set by <see cref="SetJumpInputForTest"/>. When true,
         /// FixedUpdate reads <see cref="_jumpPressedThisFrame"/> directly and does not
         /// poll the Input System for the jump button.
@@ -127,6 +142,8 @@ namespace PhysicsDrivenMovement.Character
                     : Vector3.zero;
             }
         }
+
+        internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
         internal DesiredInput CurrentDesiredInput =>
             new DesiredInput(_currentMoveInput, CurrentMoveWorldDirection, CurrentFacingDirection, _jumpRequestedThisPhysicsStep);
@@ -216,16 +233,11 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            // STEP 1: Read Jump action (button, WasPressedThisFrame) unless overridden.
-            //         Use WasPressedThisFrame so the impulse fires on the leading edge
-            //         of the button press and cannot repeat while held.
-            if (!_overrideJumpInput)
-            {
-                _jumpPressedThisFrame = _inputActions != null &&
-                                        _inputActions.Player.Jump.WasPressedThisFrame();
-            }
-
+            // STEP 1: Snapshot button states sampled in Update for this physics tick.
+            //         Jump stays edge-latched until TryApplyJump consumes it, while Sprint
+            //         captures the current held state for future sprint-speed logic.
             _jumpRequestedThisPhysicsStep = _jumpPressedThisFrame;
+            _sprintHeldThisPhysicsStep = _sprintHeld;
 
             // STEP 2: Early-out when required dependencies are missing.
             if (_rb == null || _balance == null)
@@ -257,6 +269,28 @@ namespace PhysicsDrivenMovement.Character
             //         because the goal is to bleed off existing horizontal momentum that feeds
             //         the topple, not to add new movement.
             ApplyLeanBraking();
+        }
+
+        private void Update()
+        {
+            // STEP 1: Sample transient button input in Update so edge-triggered presses are
+            //         not missed when multiple render frames occur before the next physics tick.
+            if (_inputActions == null)
+            {
+                return;
+            }
+
+            // STEP 2: Latch jump press edges until FixedUpdate consumes them.
+            //         OR-assignment preserves a press that happened on any render frame
+            //         since the last physics step.
+            if (!_overrideJumpInput)
+            {
+                _jumpPressedThisFrame |= _inputActions.Player.Jump.WasPressedThisFrame();
+            }
+
+            // STEP 3: Keep Sprint as a held-state sample so FixedUpdate can snapshot the
+            //         latest button state without polling the Input System from physics code.
+            _sprintHeld = _inputActions.Player.Sprint.IsPressed();
         }
 
         private void OnDestroy()
