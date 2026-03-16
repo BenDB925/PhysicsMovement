@@ -14,7 +14,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
     /// </summary>
     public class PlayerRagdollPrefabTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         [Test]
         [Description("All Rigidbody body-part GameObjects in PlayerRagdoll prefab should be assigned to Player1Parts layer, not Default.")]

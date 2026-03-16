@@ -15,7 +15,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class BalanceControllerTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private static readonly Vector3 TestOrigin = new Vector3(0f, 0f, 2200f);
 
         private GameObject _instance;

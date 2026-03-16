@@ -28,7 +28,7 @@ Transform:
   m_GameObject: {fileID: 528393211530223381}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.22, z: 0}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -81,7 +81,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.08, y: 0.1, z: 0.04}
+  m_Size: {x: 0.06, y: 0.08, z: 0.03}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &5863884903581894572
 ConfigurableJoint:
@@ -303,7 +303,7 @@ Transform:
   m_GameObject: {fileID: 1514296019524667596}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.32, z: 0}
+  m_LocalPosition: {x: 0, y: 0.46, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -359,7 +359,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.28, y: 0.32, z: 0.14}
+  m_Size: {x: 0.32, y: 0.53, z: 0.14}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &8538185375607081478
 ConfigurableJoint:
@@ -581,7 +581,7 @@ Transform:
   m_GameObject: {fileID: 1824484379910562877}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.38, z: 0}
+  m_LocalPosition: {x: 0, y: -0.19, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -635,8 +635,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.055
-  m_Height: 0.33
+  m_Radius: 0.04
+  m_Height: 0.15
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &3511426229652638436
@@ -949,7 +949,7 @@ Transform:
   m_GameObject: {fileID: 3054373066927700912}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.23, y: 0.08, z: 0}
+  m_LocalPosition: {x: 0.21, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1003,8 +1003,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.05
-  m_Height: 0.26
+  m_Radius: 0.045
+  m_Height: 0.24
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &571873726749617674
@@ -1236,7 +1236,7 @@ Transform:
   m_GameObject: {fileID: 3651069376947674363}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.5, z: 0}
+  m_LocalPosition: {x: 0, y: 0.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1292,7 +1292,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.26, y: 0.2, z: 0.15}
+  m_Size: {x: 0.34, y: 0.16, z: 0.12}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &7066174292541792433
 MonoBehaviour:
@@ -1350,9 +1350,9 @@ MonoBehaviour:
   _enablePersistentSeatedRecovery: 0
   _persistentSeatedRecoveryAssistScale: 0.35
   _persistentSeatedRecoveryMinAssistScale: 0.55
-  _startupAssistTargetHeight: 0.9
+  _startupAssistTargetHeight: 0.35
   _startupStandAssistForce: 1200
-  _startupAssistHeightRange: 0.35
+  _startupAssistHeightRange: 0.15
   _startupAssistUseBodyUp: 0.4
   _startupAssistMaxRiseSpeed: 2
   _startupLegSpringMultiplier: 2.25
@@ -1362,12 +1362,19 @@ MonoBehaviour:
   _debugStateTransitions: 0
   _debugRecoveryTelemetry: 0
   _debugRecoveryTelemetryInterval: 0.25
-  _debugSeatedHeightThreshold: 0.75
+  _debugSeatedHeightThreshold: 0.25
   _enableComStabilization: 1
   _comStabilizationStrength: 200
   _comStabilizationDamping: 40
+  _maxComLeanOffset: 0.09
+  _pelvisTiltMaxDeg: 3
+  _pelvisTiltSmoothing: 8
+  _pelvisSwayMaxOffset: 0.015
+  _pelvisSwaySmoothing: 8
+  _accelStartLeanDeg: 5
+  _accelStartLeanDecay: 0.3
   _enableHeightMaintenance: 1
-  _standingHipsHeight: 0.95
+  _standingHipsHeight: 0.5
   _heightMaintenanceStrength: 1500
   _heightMaintenanceDamping: 160
 --- !u!114 &6486983645047844952
@@ -1387,12 +1394,20 @@ MonoBehaviour:
   _stepFrequency: 1.25
   _kneeAngle: 65
   _upperLegLiftBoost: 45
+  _stepUpClearanceReferenceHeight: 0.1
+  _stepUpClearanceSwingBoost: 16
+  _stepUpClearanceKneeBoost: 42
   _idleBlendSpeed: 5
-  _yawAlignThresholdDeg: 90
   _swingAxis: {x: 1, y: 0, z: 0}
   _kneeAxis: {x: 1, y: 0, z: 0}
   _useWorldSpaceSwing: 0
   _debugLog: 0
+  _debugStateTransitions: 0
+  _useStateDrivenExecution: 1
+  _minimumStateMachineConfidence: 0.18
+  _minimumStateMachineConfidenceExit: 0.35
+  _fallbackGaitBlendRiseSpeed: 2
+  _fallbackGaitBlendFallSpeed: 4
   _airborneSpringMultiplier: 0.15
   _angularVelocityGaitThreshold: 8
   _stuckFrameThreshold: 25
@@ -1471,6 +1486,7 @@ MonoBehaviour:
   _knockoutDuration: 1.5
   _getUpForce: 250
   _getUpTimeout: 3
+  _collapseDeferralLimit: 1
 --- !u!114 &3352970662418711214
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1484,6 +1500,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.LocomotionDirector
   _passThroughMode: 1
+  _contactConfidenceRiseSpeed: 20
+  _contactConfidenceFallSpeed: 30
+  _plantedConfidenceRiseSpeed: 12
+  _plantedConfidenceFallSpeed: 20
+  _plantedEnterThreshold: 0.75
+  _plantedExitThreshold: 0.55
+  _turnRecoveryThreshold: 0.45
+  _supportRiskRecoveryThreshold: 0.45
+  _minimumRiskYawStrengthScale: 0.45
+  _supportRiskUprightBoost: 0.5
+  _supportRiskStabilizationBoost: 0.75
+  _maxTurnLeanDegrees: 5
+  _recoveryEntryDebounceFrames: 3
+  _recoveryExitCooldownFrames: 20
+  _recoveryRampInFrames: 8
+  _debugObservationDraw: 0
+  _debugStepTargetDraw: 0
+  _debugObservationTelemetry: 0
+  _debugObservationTelemetryInterval: 0.25
+  _debugObservationDrawHeight: 0.05
 --- !u!114 &1142327125434414261
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1551,7 +1587,7 @@ Transform:
   m_GameObject: {fileID: 4190906008843255351}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.1, y: -0.22, z: 0.09}
+  m_LocalPosition: {x: -0.17, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1605,8 +1641,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.07
-  m_Height: 0.36
+  m_Radius: 0.06
+  m_Height: 0.22
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &127028068731456933
@@ -2099,7 +2135,7 @@ Transform:
   m_GameObject: {fileID: 5918100858669635451}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.22, z: 0}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2152,7 +2188,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.08, y: 0.1, z: 0.04}
+  m_Size: {x: 0.06, y: 0.08, z: 0.03}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &8279252572608148650
 ConfigurableJoint:
@@ -2284,7 +2320,7 @@ Transform:
   m_GameObject: {fileID: 6990593848179909852}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.1, y: -0.22, z: 0.09}
+  m_LocalPosition: {x: 0.17, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2338,8 +2374,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.07
-  m_Height: 0.36
+  m_Radius: 0.06
+  m_Height: 0.22
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &1700245121881406408
@@ -2472,7 +2508,7 @@ Transform:
   m_GameObject: {fileID: 7062038854640815217}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.23, y: 0.08, z: 0}
+  m_LocalPosition: {x: -0.21, y: 0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2526,8 +2562,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.05
-  m_Height: 0.26
+  m_Radius: 0.045
+  m_Height: 0.24
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &1035748567841938779
@@ -2840,7 +2876,7 @@ Transform:
   m_GameObject: {fileID: 7607373864827765266}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.27, z: 0}
+  m_LocalPosition: {x: 0, y: 0.41, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2893,7 +2929,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.11
+  m_Radius: 0.13
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &7723394085436483908
 ConfigurableJoint:
@@ -3026,7 +3062,7 @@ Transform:
   m_GameObject: {fileID: 7725431814163097983}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.35, z: 0.07}
+  m_LocalPosition: {x: 0, y: -0.13, z: 0.04}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3079,7 +3115,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.1, y: 0.07, z: 0.22}
+  m_Size: {x: 0.08, y: 0.05, z: 0.14}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &3349499625700296026
 ConfigurableJoint:
@@ -3195,12 +3231,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2778246b9d64502408db2779f926bb3b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.GroundSensor
-  _castRadius: 0.08
-  _castDistance: 0.25
+  _castRadius: 0.04
+  _castDistance: 0.12
   _groundedExitDelay: 0.03
   _groundLayers:
     serializedVersion: 2
     m_Bits: 4096
+  _forwardProbeDistance: 0.18
+  _forwardProbeRadius: 0.035
+  _forwardProbeHeight: 0.025
+  _maxStepHeight: 0.3
 --- !u!1 &7937265436837360337
 GameObject:
   m_ObjectHideFlags: 0
@@ -3319,7 +3359,7 @@ Transform:
   m_GameObject: {fileID: 7968946256512561873}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.27, z: 0}
+  m_LocalPosition: {x: 0, y: -0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3373,8 +3413,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.04
-  m_Height: 0.24
+  m_Radius: 0.035
+  m_Height: 0.26
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &639334089597718503
@@ -3507,7 +3547,7 @@ Transform:
   m_GameObject: {fileID: 8031733521593715811}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.38, z: 0}
+  m_LocalPosition: {x: 0, y: -0.19, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3561,8 +3601,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.055
-  m_Height: 0.33
+  m_Radius: 0.04
+  m_Height: 0.15
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &1673658866341993901
@@ -3696,7 +3736,7 @@ Transform:
   m_GameObject: {fileID: 8083327000302989377}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.35, z: 0.07}
+  m_LocalPosition: {x: 0, y: -0.13, z: 0.04}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3749,7 +3789,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.1, y: 0.07, z: 0.22}
+  m_Size: {x: 0.08, y: 0.05, z: 0.14}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &3778396630448778344
 ConfigurableJoint:
@@ -3865,12 +3905,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2778246b9d64502408db2779f926bb3b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.GroundSensor
-  _castRadius: 0.08
-  _castDistance: 0.25
+  _castRadius: 0.04
+  _castDistance: 0.12
   _groundedExitDelay: 0.03
   _groundLayers:
     serializedVersion: 2
     m_Bits: 4096
+  _forwardProbeDistance: 0.18
+  _forwardProbeRadius: 0.035
+  _forwardProbeHeight: 0.025
+  _maxStepHeight: 0.3
 --- !u!1 &8164491257311461232
 GameObject:
   m_ObjectHideFlags: 0
@@ -3899,7 +3943,7 @@ Transform:
   m_GameObject: {fileID: 8164491257311461232}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.27, z: 0}
+  m_LocalPosition: {x: 0, y: -0.24, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3953,8 +3997,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.04
-  m_Height: 0.24
+  m_Radius: 0.035
+  m_Height: 0.26
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!153 &4368824073946661807

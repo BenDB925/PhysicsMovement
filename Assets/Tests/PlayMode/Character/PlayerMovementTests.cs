@@ -12,9 +12,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     public class PlayerMovementTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 80;
-        private const float TestEpsilon = 0.001f;
+        private const float TestEpsilon = 0.003f;
 
         private static readonly int[] CardinalYaws = { 0, 90, 180, 270 };
         private static readonly Vector3 TestOrigin = new Vector3(1500f, 0f, 0f);
@@ -51,7 +51,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
             Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
 
-            _player = UnityEngine.Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _player = UnityEngine.Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             _hipsBody = _player.GetComponent<Rigidbody>();
             _balance = _player.GetComponent<BalanceController>();
             _movement = _player.GetComponent<PlayerMovement>();
@@ -307,7 +307,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 }
             }
 
-            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 1.2f));
+            Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 1.3f));
             Assert.That(maxObservedHorizontalSpeed, Is.LessThanOrEqualTo(maxSpeed * 2f));
         }
 

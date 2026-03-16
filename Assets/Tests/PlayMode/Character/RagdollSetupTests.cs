@@ -17,7 +17,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class RagdollSetupTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         private float _originalFixedDeltaTime;
         private int _originalSolverIterations;

@@ -11,7 +11,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     public class JumpTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 80;
 
         private static readonly Vector3 TestOrigin = new Vector3(1650f, 0f, 0f);

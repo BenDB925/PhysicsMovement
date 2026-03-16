@@ -1293,7 +1293,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(isValid, Is.True, "Swing-phase left leg should produce a valid step target.");
 
             Vector3 landing = GetPropertyValue<Vector3>(result, "LandingPosition");
-            Assert.That(landing.z, Is.GreaterThan(0.3f),
+            Assert.That(landing.z, Is.GreaterThan(0.1f),
                 "Landing position should be ahead of hips when walking forward.");
 
             float confidence = GetPropertyValue<float>(result, "Confidence");
@@ -1723,9 +1723,9 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             object result = InvokeComputeSwingTarget(planner, args);
 
             // Assert — stride should be at the default value (no shortening).
-            // Base stride = 0.45 + 2.5 * 0.12 = 0.75. Hips at y=1, z=0 → landing z = 0 + 0.75.
+            // Base stride = 0.15 + 2.5 * 0.04 = 0.25. Hips at y=1, z=0 → landing z = 0 + 0.25.
             Vector3 landing = GetPropertyValue<Vector3>(result, "LandingPosition");
-            Assert.That(landing.z, Is.GreaterThan(0.7f),
+            Assert.That(landing.z, Is.GreaterThan(0.15f),
                 "DefaultCadence at 2.5 m/s should produce a full-length stride with no braking shortening.");
         }
 

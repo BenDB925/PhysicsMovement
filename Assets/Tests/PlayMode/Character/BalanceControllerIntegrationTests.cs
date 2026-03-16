@@ -15,7 +15,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class BalanceControllerIntegrationTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrameCount = 220;
         private const int RecoveryFrameCount = 300;
 
@@ -360,7 +360,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
-            _instance = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _instance = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             Assert.That(_instance, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             _balance = _instance.GetComponent<BalanceController>();

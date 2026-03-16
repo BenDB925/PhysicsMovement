@@ -16,13 +16,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class GetUpReliabilityTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 220;
         private const int WaitForDestabilizationFrames = 500;
         private const float GetUpTimeoutScale = 1.5f;
         private const float DefaultGetUpTimeout = 3f;
-        private const float FallImpulseMagnitude = 900f;
-        private const float DestabilizationTiltThreshold = 35f;
+        private const float FallImpulseMagnitude = 400f;
+        private const float DestabilizationTiltThreshold = 15f;
 
         private static readonly Vector3 TestOrigin = new Vector3(700f, 0f, 700f);
 
@@ -103,7 +103,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Vector3 impulse = direction.normalized * FallImpulseMagnitude;
             Vector3 forcePoint = _torsoRb != null
                 ? _torsoRb.worldCenterOfMass
-                : _hipsRb.worldCenterOfMass + Vector3.up * 0.35f;
+                : _hipsRb.worldCenterOfMass + Vector3.up * 0.15f;
 
             _hipsRb.AddForceAtPosition(impulse, forcePoint, ForceMode.Impulse);
 
@@ -142,7 +142,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 float currentHipsHeight = _hipsRb.position.y;
                 if ((state == CharacterStateType.Standing || state == CharacterStateType.Moving) &&
                     tilt < DestabilizationTiltThreshold &&
-                    currentHipsHeight > 0.65f)
+                    currentHipsHeight > 0.20f)
                 {
                     recovered = true;
                     break;
@@ -158,7 +158,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"[{directionLabel}] BalanceController should clear fallen state after recovery.");
             Assert.That(finalTilt, Is.LessThan(DestabilizationTiltThreshold),
                 $"[{directionLabel}] Recovered posture should be upright in world space. final tilt={finalTilt:F1} degrees.");
-            Assert.That(hipsHeight, Is.GreaterThan(0.65f),
+            Assert.That(hipsHeight, Is.GreaterThan(0.20f),
                 $"[{directionLabel}] Recovered posture should lift the hips back off the ground. hipsY={hipsHeight:F2}.");
         }
 
@@ -170,7 +170,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
-            _instance = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.15f, 0f), Quaternion.identity);
+            _instance = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             Assert.That(_instance, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             _hipsRb = _instance.GetComponent<Rigidbody>();

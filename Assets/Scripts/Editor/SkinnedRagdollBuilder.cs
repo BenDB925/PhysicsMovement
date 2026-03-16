@@ -5,8 +5,8 @@ using PhysicsDrivenMovement.Character;
 namespace PhysicsDrivenMovement.Editor
 {
     /// <summary>
-    /// Editor utility that creates a skinned ragdoll prefab by layering a Mixamo FBX model
-    /// on top of the existing physics-driven <c>PlayerRagdoll.prefab</c>.
+    /// Editor utility that creates a skinned ragdoll prefab by layering a KayKit Skeleton Minion FBX
+    /// model on top of the existing physics-driven <c>PlayerRagdoll.prefab</c>.
     /// Strips primitive mesh visuals, parents the skinned model under Hips, disables
     /// its Animator, and adds <see cref="RagdollMeshFollower"/> to sync bones at runtime.
     /// Access via: Tools → PhysicsDrivenMovement → Build Skinned Player Ragdoll.
@@ -15,13 +15,10 @@ namespace PhysicsDrivenMovement.Editor
     public static class SkinnedRagdollBuilder
     {
         private const string SourcePrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
-        private const string ModelPath        = "Assets/Models/character.fbx";
+        private const string ModelPath        = "Assets/Models/KayKit_Skeletons/Skeleton_Minion.fbx";
         private const string OutputPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
-        private const string CharacterMatPath = "Assets/Materials/PlayerColors/CharacterSkin.mat";
-        private const string DiffusePath      = "Assets/Materials/PlayerColors/Ch43_1001_Diffuse.png";
-        private const string NormalPath       = "Assets/Materials/PlayerColors/Ch43_1001_Normal.png";
-        private const string SpecularPath     = "Assets/Materials/PlayerColors/Ch43_1001_Specular.png";
-        private const string GlossinessPath   = "Assets/Materials/PlayerColors/Ch43_1001_Glossiness.png";
+        private const string CharacterMatPath = "Assets/Materials/SkeletonMinion.mat";
+        private const string DiffusePath      = "Assets/Models/KayKit_Skeletons/skeleton_texture.png";
 
         [MenuItem("Tools/PhysicsDrivenMovement/Build Skinned Player Ragdoll")]
         public static void BuildSkinnedRagdollPrefab()
@@ -103,9 +100,7 @@ namespace PhysicsDrivenMovement.Editor
         }
 
         /// <summary>
-        /// Creates or loads a URP Lit material using the Mixamo character textures
-        /// from <c>Assets/Materials/PlayerColors/</c>. Maps Diffuse → Base Map,
-        /// Normal → Normal Map, Specular → Specular Map, Glossiness → Smoothness.
+        /// Creates or loads a URP Lit material using the KayKit skeleton texture.
         /// </summary>
         private static Material CreateOrLoadCharacterMaterial()
         {
@@ -113,59 +108,30 @@ namespace PhysicsDrivenMovement.Editor
             if (mat != null)
                 return mat;
 
-            Texture2D diffuse    = AssetDatabase.LoadAssetAtPath<Texture2D>(DiffusePath);
-            Texture2D normal     = AssetDatabase.LoadAssetAtPath<Texture2D>(NormalPath);
-            Texture2D specular   = AssetDatabase.LoadAssetAtPath<Texture2D>(SpecularPath);
-            Texture2D glossiness = AssetDatabase.LoadAssetAtPath<Texture2D>(GlossinessPath);
-
+            Texture2D diffuse = AssetDatabase.LoadAssetAtPath<Texture2D>(DiffusePath);
             if (diffuse == null)
             {
                 Debug.LogWarning("[SkinnedRagdollBuilder] Diffuse texture not found — skipping material creation.");
                 return null;
             }
 
-            // Mark the normal map import as Normal Map type so Unity processes it correctly.
-            if (normal != null)
-            {
-                string normalAssetPath = AssetDatabase.GetAssetPath(normal);
-                TextureImporter importer = AssetImporter.GetAtPath(normalAssetPath) as TextureImporter;
-                if (importer != null && importer.textureType != TextureImporterType.NormalMap)
-                {
-                    importer.textureType = TextureImporterType.NormalMap;
-                    importer.SaveAndReimport();
-                    normal = AssetDatabase.LoadAssetAtPath<Texture2D>(NormalPath);
-                }
-            }
-
             Shader shader = Shader.Find("Universal Render Pipeline/Lit")
                          ?? Shader.Find("Standard");
 
-            mat = new Material(shader) { name = "CharacterSkin" };
-
-            // Base Map (Albedo)
+            mat = new Material(shader) { name = "SkeletonMinion" };
             mat.SetTexture("_BaseMap", diffuse);
             mat.mainTexture = diffuse;
 
-            // Normal Map
-            if (normal != null)
+            string directory = System.IO.Path.GetDirectoryName(CharacterMatPath);
+            if (!AssetDatabase.IsValidFolder(directory))
             {
-                mat.SetTexture("_BumpMap", normal);
-                mat.EnableKeyword("_NORMALMAP");
-            }
-
-            // Specular workflow: set specular + smoothness from glossiness map.
-            if (specular != null)
-            {
-                mat.SetTexture("_SpecGlossMap", specular);
-                mat.EnableKeyword("_SPECGLOSSMAP");
-            }
-            if (glossiness != null)
-            {
-                mat.SetTexture("_SmoothnessTextureChannel", glossiness);
+                AssetDatabase.CreateFolder(
+                    System.IO.Path.GetDirectoryName(directory),
+                    System.IO.Path.GetFileName(directory));
             }
 
             AssetDatabase.CreateAsset(mat, CharacterMatPath);
-            Debug.Log($"[SkinnedRagdollBuilder] Character material created at '{CharacterMatPath}'.");
+            Debug.Log($"[SkinnedRagdollBuilder] Skeleton material created at '{CharacterMatPath}'.");
             return mat;
         }
 

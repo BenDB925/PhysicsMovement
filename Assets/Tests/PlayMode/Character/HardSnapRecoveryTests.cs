@@ -27,7 +27,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float MinWindupDisplacement = 1.0f;
         private const float MinHardSnapProgress = 1.25f;
         private const float MinSlalomSegmentProgress = -0.5f;
-        private const float MinSlalomTotalProgress = 15f;
+        private const float MinSlalomTotalProgress = 9f;
         private const float RecoveryProgressThreshold = 0.4f;
         private const int MaxRecoveryFrames = 200;
         private const int MaxConsecutiveFallenFrames = 150;

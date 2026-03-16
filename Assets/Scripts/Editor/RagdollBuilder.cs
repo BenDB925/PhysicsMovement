@@ -104,6 +104,12 @@ namespace PhysicsDrivenMovement.Editor
         //         of its body part. joint.anchor = zero; autoConfigureConnectedAnchor
         //         = true so Unity resolves the connected anchor in parent space.
         // Masses total ~49 kg; adjust Torso to reach desired total.
+        //
+        // Dimensions derived from KayKit Skeleton_Minion.fbx bone measurements:
+        //   Model height ~1.24m, hips at 0.406m, head at 1.241m,
+        //   upper-leg bone 0.227m, lower-leg bone 0.149m,
+        //   upper-arm bone 0.242m, lower-arm bone 0.260m,
+        //   shoulder width ±0.212m, hip width ±0.171m.
 
         private static readonly SegmentDef[] Segments = new[]
         {
@@ -112,22 +118,22 @@ namespace PhysicsDrivenMovement.Editor
                 name: "Hips", parent: null, mass: 10f,
                 localPos: Vector3.zero,
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.26f, 0.20f, 0.15f)),
+                boxSize: new Vector3(0.34f, 0.16f, 0.12f)),
 
             new SegmentDef(
                 name: "Torso", parent: "Hips", mass: 12f,
-                localPos: new Vector3(0f, 0.32f, 0f),
+                localPos: new Vector3(0f, 0.46f, 0f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.28f, 0.32f, 0.14f),
+                boxSize: new Vector3(0.32f, 0.53f, 0.14f),
                 lowAngX: -40f, highAngX: 40f, angY: 30f, angZ: 25f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "Head", parent: "Torso", mass: 4f,
-                localPos: new Vector3(0f, 0.27f, 0f),
+                localPos: new Vector3(0f, 0.41f, 0f),
                 shape: ColliderShape.Sphere,
-                sphereRadius: 0.11f,
+                sphereRadius: 0.13f,
                 lowAngX: -40f, highAngX: 40f, angY: 35f, angZ: 20f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(150f, 15f, 500f)),
@@ -135,27 +141,27 @@ namespace PhysicsDrivenMovement.Editor
             // ── Left Arm ────────────────────────────────────────────────────────
             new SegmentDef(
                 name: "UpperArm_L", parent: "Torso", mass: 2f,
-                localPos: new Vector3(-0.23f, 0.08f, 0f),
+                localPos: new Vector3(-0.21f, 0.24f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
+                capsuleRadius: 0.045f, capsuleHeight: 0.24f, capsuleDir: 1,
                 lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_L", parent: "UpperArm_L", mass: 1.5f,
-                localPos: new Vector3(0f, -0.27f, 0f),
+                localPos: new Vector3(0f, -0.24f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                capsuleRadius: 0.035f, capsuleHeight: 0.26f, capsuleDir: 1,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_L", parent: "LowerArm_L", mass: 0.5f,
-                localPos: new Vector3(0f, -0.22f, 0f),
+                localPos: new Vector3(0f, -0.20f, 0f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                boxSize: new Vector3(0.06f, 0.08f, 0.03f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(50f, 5f, 200f)),
@@ -163,27 +169,27 @@ namespace PhysicsDrivenMovement.Editor
             // ── Right Arm ───────────────────────────────────────────────────────
             new SegmentDef(
                 name: "UpperArm_R", parent: "Torso", mass: 2f,
-                localPos: new Vector3(0.23f, 0.08f, 0f),
+                localPos: new Vector3(0.21f, 0.24f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.05f, capsuleHeight: 0.26f, capsuleDir: 1,
+                capsuleRadius: 0.045f, capsuleHeight: 0.24f, capsuleDir: 1,
                 lowAngX: -70f, highAngX: 70f, angY: 60f, angZ: 40f,
                 jointAxis: Vector3.forward, jointSecondaryAxis: Vector3.up,
                 driveProfile: new JointDriveProfile(100f, 10f, 400f)),
 
             new SegmentDef(
                 name: "LowerArm_R", parent: "UpperArm_R", mass: 1.5f,
-                localPos: new Vector3(0f, -0.27f, 0f),
+                localPos: new Vector3(0f, -0.24f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.04f, capsuleHeight: 0.24f, capsuleDir: 1,
+                capsuleRadius: 0.035f, capsuleHeight: 0.26f, capsuleDir: 1,
                 lowAngX: 0f, highAngX: 140f, angY: 10f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(80f, 8f, 300f)),
 
             new SegmentDef(
                 name: "Hand_R", parent: "LowerArm_R", mass: 0.5f,
-                localPos: new Vector3(0f, -0.22f, 0f),
+                localPos: new Vector3(0f, -0.20f, 0f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.08f, 0.10f, 0.04f),
+                boxSize: new Vector3(0.06f, 0.08f, 0.03f),
                 lowAngX: -30f, highAngX: 30f, angY: 20f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(50f, 5f, 200f)),
@@ -191,27 +197,27 @@ namespace PhysicsDrivenMovement.Editor
             // ── Left Leg ────────────────────────────────────────────────────────
             new SegmentDef(
                 name: "UpperLeg_L", parent: "Hips", mass: 4f,
-                localPos: new Vector3(-0.10f, -0.22f, 0f),
+                localPos: new Vector3(-0.17f, 0f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
+                capsuleRadius: 0.06f, capsuleHeight: 0.22f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 12f, angZ: 12f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "LowerLeg_L", parent: "UpperLeg_L", mass: 2.5f,
-                localPos: new Vector3(0f, -0.38f, 0f),
+                localPos: new Vector3(0f, -0.19f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
+                capsuleRadius: 0.04f, capsuleHeight: 0.15f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(550f, 55f, 2200f)),
 
             new SegmentDef(
                 name: "Foot_L", parent: "LowerLeg_L", mass: 1f,
-                localPos: new Vector3(0f, -0.35f, 0.07f),
+                localPos: new Vector3(0f, -0.13f, 0.04f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.10f, 0.07f, 0.22f),
+                boxSize: new Vector3(0.08f, 0.05f, 0.14f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(350f, 35f, 1200f)),
@@ -219,27 +225,27 @@ namespace PhysicsDrivenMovement.Editor
             // ── Right Leg ───────────────────────────────────────────────────────
             new SegmentDef(
                 name: "UpperLeg_R", parent: "Hips", mass: 4f,
-                localPos: new Vector3(0.10f, -0.22f, 0f),
+                localPos: new Vector3(0.17f, 0f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.07f, capsuleHeight: 0.36f, capsuleDir: 1,
+                capsuleRadius: 0.06f, capsuleHeight: 0.22f, capsuleDir: 1,
                 lowAngX: -60f, highAngX: 60f, angY: 12f, angZ: 12f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(650f, 65f, 2500f)),
 
             new SegmentDef(
                 name: "LowerLeg_R", parent: "UpperLeg_R", mass: 2.5f,
-                localPos: new Vector3(0f, -0.38f, 0f),
+                localPos: new Vector3(0f, -0.19f, 0f),
                 shape: ColliderShape.Capsule,
-                capsuleRadius: 0.055f, capsuleHeight: 0.33f, capsuleDir: 1,
+                capsuleRadius: 0.04f, capsuleHeight: 0.15f, capsuleDir: 1,
                 lowAngX: -120f, highAngX: 0f, angY: 5f, angZ: 5f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(550f, 55f, 2200f)),
 
             new SegmentDef(
                 name: "Foot_R", parent: "LowerLeg_R", mass: 1f,
-                localPos: new Vector3(0f, -0.35f, 0.07f),
+                localPos: new Vector3(0f, -0.13f, 0.04f),
                 shape: ColliderShape.Box,
-                boxSize: new Vector3(0.10f, 0.07f, 0.22f),
+                boxSize: new Vector3(0.08f, 0.05f, 0.14f),
                 lowAngX: -30f, highAngX: 30f, angY: 15f, angZ: 10f,
                 jointAxis: Vector3.right, jointSecondaryAxis: Vector3.forward,
                 driveProfile: new JointDriveProfile(350f, 35f, 1200f)),

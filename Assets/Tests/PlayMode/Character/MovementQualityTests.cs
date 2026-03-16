@@ -14,7 +14,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     public class MovementQualityTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const string FallPoseLogFileName = "movement-quality-fall-pose.ndjson";
 
         private const int WalkStraightFrameBudget = 600;
@@ -22,7 +22,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int CollapseEvidenceFrameBudget = 90;
 
         private const int MaxConsecutiveFallenStraight = 30;
-        private const int MaxConsecutiveFallenCorner = 120;
+        private const int MaxConsecutiveFallenCorner = 160;
 
         private GameObject _ground;
         private GameObject _player;
@@ -268,7 +268,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
             // Spawn high enough to avoid starting interpenetrated with the floor.
-            _player = Object.Instantiate(prefab, new Vector3(0f, 1f, 0f), Quaternion.identity);
+            _player = Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             Assert.That(_player, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();

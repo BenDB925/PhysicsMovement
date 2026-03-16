@@ -52,7 +52,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0.05f, 0.5f)]
         [Tooltip("Requested clearance height (metres) that maps to the full step-up execution boost. " +
              "Smaller planner requests scale proportionally below this reference height.")]
-        private float _stepUpClearanceReferenceHeight = 0.25f;
+        private float _stepUpClearanceReferenceHeight = 0.10f;
 
         [SerializeField, Range(0f, 45f)]
         [Tooltip("Extra upper-leg swing angle (degrees) available to step-up-tagged swings when the " +
@@ -712,7 +712,7 @@ namespace PhysicsDrivenMovement.Character
                     float leftFootForwardOffset = GetFootForwardOffsetFromHips(_footL, gaitReferenceDirection);
                     float rightFootForwardOffset = GetFootForwardOffsetFromHips(_footR, gaitReferenceDirection);
                     bothFeetBehind = leftFootForwardOffset < 0f && rightFootForwardOffset < 0f;
-                    bothFeetFarBehind = leftFootForwardOffset < -0.2f && rightFootForwardOffset < -0.2f;
+                    bothFeetFarBehind = leftFootForwardOffset < -0.07f && rightFootForwardOffset < -0.07f;
                 }
 
                 // STEP 2: Chapter 3.4 gives sharp turns and recovery explicit per-leg ownership
@@ -1107,7 +1107,7 @@ namespace PhysicsDrivenMovement.Character
                 float footForwardOffset = GetFootForwardOffsetFromHips(footTransform, gaitReferenceDirection);
                 if (footForwardOffset < 0f)
                 {
-                    recoveryScore += Mathf.Clamp01(-footForwardOffset / 0.4f) * 0.4f;
+                    recoveryScore += Mathf.Clamp01(-footForwardOffset / 0.15f) * 0.4f;
                 }
             }
 
@@ -1329,7 +1329,7 @@ namespace PhysicsDrivenMovement.Character
 
             float swingProgress = Mathf.InverseLerp(0f, Mathf.PI, Mathf.Min(command.CyclePhase, Mathf.PI));
             float reachBlend = Mathf.SmoothStep(0.2f, 1f, swingProgress);
-            float normalizedReach = Mathf.Clamp01(reachDeficit / 0.65f) * reachBlend;
+            float normalizedReach = Mathf.Clamp01(reachDeficit / 0.22f) * reachBlend;
             float reachFloor = Mathf.Lerp(_stepAngle * 0.62f, _stepAngle * 1.08f, normalizedReach) * command.BlendWeight;
             return Mathf.Max(swingAngleDegrees, reachFloor);
         }

@@ -25,7 +25,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class LegJointSpringTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         // ─── Minimum Thresholds ───────────────────────────────────────────────
 

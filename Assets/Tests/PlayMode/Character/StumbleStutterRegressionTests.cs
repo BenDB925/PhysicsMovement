@@ -35,7 +35,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
             {
                 TestOrigin = TestOriginOffset,
-                SpawnOffset = new Vector3(0f, 1.1f, 0f),
+                SpawnOffset = new Vector3(0f, 0.5f, 0f),
                 GroundName = "StumbleTestGround",
                 GroundScale = new Vector3(600f, 1f, 600f),
             });
@@ -232,13 +232,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             float meanHeight = totalHeight / sampleCount;
 
-            Assert.That(meanHeight, Is.GreaterThanOrEqualTo(0.75f),
+            Assert.That(meanHeight, Is.GreaterThanOrEqualTo(0.28f),
                 $"Mean hips height during steady walk was {meanHeight:F3}m " +
-                $"(minimum expected: 0.75m). Character may be in a crouch or stumble loop.");
+                $"(minimum expected: 0.28m). Character may be in a crouch or stumble loop.");
 
-            Assert.That(minHeight, Is.GreaterThanOrEqualTo(0.55f),
+            Assert.That(minHeight, Is.GreaterThanOrEqualTo(0.20f),
                 $"Minimum hips height during steady walk was {minHeight:F3}m " +
-                $"(minimum expected: 0.55m). Character nearly collapsed.");
+                $"(minimum expected: 0.20m). Character nearly collapsed.");
         }
 
         /// <summary>

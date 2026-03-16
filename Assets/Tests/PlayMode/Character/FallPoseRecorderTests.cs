@@ -11,7 +11,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     public class FallPoseRecorderTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 60;
 
         private static readonly Vector3 TestOrigin = new Vector3(2100f, 0f, 0f);

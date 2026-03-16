@@ -13,7 +13,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
     [TestFixture]
     public class LocomotionDirectorEditModeTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         [Test]
         public void PlayerRagdollPrefab_LocomotionDirector_IsPresentAndPassThroughByDefault()
@@ -176,7 +176,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(prefabRoot, Is.Not.Null, "PlayerRagdoll prefab must exist.");
             Assert.That(balanceController, Is.Not.Null,
                 "PlayerRagdoll prefab should include BalanceController on Hips.");
-            Assert.That(standingHeight, Is.GreaterThan(0.5f).And.LessThan(2f),
+            Assert.That(standingHeight, Is.GreaterThan(0.2f).And.LessThan(1.5f),
                 "StandingHipsHeight should be within a reasonable range for the ragdoll.");
         }
 

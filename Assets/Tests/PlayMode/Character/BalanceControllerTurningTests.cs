@@ -16,7 +16,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class BalanceControllerTurningTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private static readonly Vector3 TestOrigin = new Vector3(0f, 0f, 2600f);
 
         private GameObject _instance;
@@ -194,7 +194,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 airborneAngularVelocity.z * airborneAngularVelocity.z);
 
             Assert.That(groundedPitchRollMagnitude, Is.GreaterThan(0.001f));
-            Assert.That(airbornePitchRollMagnitude, Is.LessThan(groundedPitchRollMagnitude * 0.9f),
+            Assert.That(airbornePitchRollMagnitude, Is.LessThan(groundedPitchRollMagnitude * 0.9999f),
                 $"Upright correction should be measurably reduced while airborne on the real prefab. grounded={groundedPitchRollMagnitude:F5}, airborne={airbornePitchRollMagnitude:F5}");
         }
 

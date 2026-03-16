@@ -14,7 +14,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class PlayerRagdollPrefabPlayModeTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 220;
         private const int RecoveryFrames = 420;
         private const int LongStabilityFrames = 2000;
@@ -71,7 +71,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
             Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
 
-            _instance = Object.Instantiate(prefab, new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _instance = Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             BalanceController balance = _instance.GetComponent<BalanceController>();
             Assert.That(balance, Is.Not.Null, "PlayerRagdoll prefab should include BalanceController on root Hips.");
 
@@ -86,7 +86,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float hipsHeight = balance.transform.position.y;
             Assert.That(balance.IsGrounded, Is.True,
                 "At least one foot should report grounded on Environment-layer ground.");
-            Assert.That(hipsHeight, Is.GreaterThan(0.65f),
+            Assert.That(hipsHeight, Is.GreaterThan(0.24f),
                 $"PlayerRagdoll hips should remain elevated (height={hipsHeight:F2}m), not settle into a seated pose.");
             Assert.That(tilt, Is.LessThan(45f),
                 $"PlayerRagdoll should not immediately topple on spawn (tilt={tilt:F1}°).");
@@ -126,7 +126,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
 
             Quaternion backFallRotation = Quaternion.Euler(95f, 0f, 0f);
-            _instance = Object.Instantiate(prefab, new Vector3(0f, 1.15f, 0f), backFallRotation);
+            _instance = Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), backFallRotation);
             BalanceController balance = _instance.GetComponent<BalanceController>();
             Assert.That(balance, Is.Not.Null, "PlayerRagdoll prefab should include BalanceController on root Hips.");
 
@@ -141,7 +141,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "At least one foot should report grounded during recovery.");
             Assert.That(balance.IsFallen, Is.False,
                 "Controller should recover out of fallen state after seated/back startup.");
-            Assert.That(hipsHeight, Is.GreaterThan(0.72f),
+            Assert.That(hipsHeight, Is.GreaterThan(0.27f),
                 $"Recovery should lift hips off seated posture (height={hipsHeight:F2}m).");
             Assert.That(tilt, Is.LessThan(35f),
                 $"Recovered posture should be mostly upright (tilt={tilt:F1}°).");
@@ -159,7 +159,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
             Assert.That(prefab, Is.Not.Null, "PlayerRagdoll prefab must be loadable from Assets/Prefabs.");
 
-            _instance = Object.Instantiate(prefab, new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _instance = Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             BalanceController balance = _instance.GetComponent<BalanceController>();
             Assert.That(balance, Is.Not.Null, "PlayerRagdoll prefab should include BalanceController on root Hips.");
 
@@ -201,7 +201,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Character may have toppled or left the ground permanently.");
             Assert.That(fallenFrames, Is.LessThan(150),
                 $"Long-run stability should not remain fallen for extended periods (fallenFrames={fallenFrames}).");
-            Assert.That(minHipsHeight, Is.GreaterThan(0.62f),
+            Assert.That(minHipsHeight, Is.GreaterThan(0.23f),
                 $"Long-run behavior should avoid sustained seated collapse (minHipsHeight={minHipsHeight:F2}m).");
             Assert.That(maxTilt, Is.LessThan(75f),
                 $"Long-run behavior should avoid catastrophic topple (maxTilt={maxTilt:F1}°).");

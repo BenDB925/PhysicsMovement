@@ -639,7 +639,7 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Scale linearly from 1.0 at standing height to a configurable
             // maximum when the hips are well below the target. The range covers
             // the typical seated-to-standing gap.
-            const float deficitRange = 0.4f;
+            const float deficitRange = 0.15f;
             const float maxBoost = 1.5f;
             float t = Mathf.Clamp01(deficit / deficitRange);
             return Mathf.Lerp(1f, maxBoost, t);

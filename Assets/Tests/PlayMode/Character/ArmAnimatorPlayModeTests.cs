@@ -23,7 +23,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public class ArmAnimatorPlayModeTests
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         // ── Constants ─────────────────────────────────────────────────────────
 
@@ -269,7 +269,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
 
-            _hipsGO = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 1.1f, 0f), Quaternion.identity);
+            _hipsGO = Object.Instantiate(prefab, TestOrigin + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             _hipsRb = _hipsGO.GetComponent<Rigidbody>();
             _movement = _hipsGO.GetComponent<PlayerMovement>();
 

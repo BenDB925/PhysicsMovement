@@ -13,10 +13,10 @@ namespace PhysicsDrivenMovement.Character
     /// </summary>
     public class GroundSensor : MonoBehaviour
     {
-        private const float DefaultForwardProbeDistance = 0.4f;
-        private const float DefaultForwardProbeHeight = 0.04f;
-        private const float DefaultForwardProbeRadius = 0.05f;
-        private const float DefaultMaxStepHeight = 0.85f;
+        private const float DefaultForwardProbeDistance = 0.18f;
+        private const float DefaultForwardProbeHeight = 0.025f;
+        private const float DefaultForwardProbeRadius = 0.035f;
+        private const float DefaultMaxStepHeight = 0.30f;
         private const float DirectionEpsilon = 0.0001f;
         private const float MinimumStepHeight = 0.03f;
         private const float UpwardSurfaceNormalThreshold = 0.55f;
@@ -25,11 +25,11 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0.02f, 0.2f)]
         [Tooltip("Radius of the downward SphereCast. Should be slightly smaller than the foot width.")]
-        private float _castRadius = 0.08f;
+        private float _castRadius = 0.04f;
 
         [SerializeField, Range(0.05f, 0.5f)]
         [Tooltip("Maximum distance the cast travels below the foot origin to check for ground.")]
-        private float _castDistance = 0.25f;
+        private float _castDistance = 0.12f;
 
         [SerializeField, Range(0f, 0.2f)]
         [Tooltip("How long a grounded foot may temporarily miss the floor before the sensor reports ungrounded. " +
@@ -42,19 +42,19 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0.05f, 0.6f)]
         [Tooltip("How far ahead of the foot to probe for a step face or other forward obstruction.")]
-        private float _forwardProbeDistance = 0.4f;
+        private float _forwardProbeDistance = 0.18f;
 
         [SerializeField, Range(0.01f, 0.12f)]
         [Tooltip("Radius of the forward obstruction SphereCast. Keep slightly smaller than the foot sole.")]
-        private float _forwardProbeRadius = 0.05f;
+        private float _forwardProbeRadius = 0.035f;
 
         [SerializeField, Range(0f, 0.2f)]
         [Tooltip("Height above the current sole/support height used for the forward obstruction probe.")]
-        private float _forwardProbeHeight = 0.04f;
+        private float _forwardProbeHeight = 0.025f;
 
         [SerializeField, Range(0.1f, 1f)]
         [Tooltip("Maximum rise considered a step-up candidate when probing forward.")]
-        private float _maxStepHeight = 0.85f;
+        private float _maxStepHeight = 0.30f;
 
         // ─── Private Fields ──────────────────────────────────────────────────
 

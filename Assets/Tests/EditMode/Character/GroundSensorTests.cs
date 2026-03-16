@@ -12,7 +12,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
     /// </summary>
     public class GroundSensorTests
     {
-        private const float StepHeight = 0.3f;
+        private const float StepHeight = 0.2f;
 
         private static readonly BindingFlags PrivateInstance = BindingFlags.NonPublic | BindingFlags.Instance;
         private static readonly int EnvironmentMask = 1 << GameSettings.LayerEnvironment;
@@ -68,7 +68,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "A clean face-plus-top detection should produce a usable non-zero confidence.");
             Assert.That(_sensor.ForwardObstructionTopSurfacePoint.y, Is.EqualTo(StepHeight).Within(0.08f),
                 "GroundSensor should preserve the sampled top-surface point so the planner can place touchdown onto the raised landing.");
-            Assert.That(_sensor.ForwardObstructionTopSurfacePoint.z, Is.GreaterThan(0.1f),
+            Assert.That(_sensor.ForwardObstructionTopSurfacePoint.z, Is.GreaterThan(0.01f),
                 "The preserved top-surface point should lie ahead of the current support point.");
         }
 
@@ -107,23 +107,23 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             _step = GameObject.CreatePrimitive(PrimitiveType.Cube);
             _step.name = "Step";
             _step.layer = GameSettings.LayerEnvironment;
-            _step.transform.position = new Vector3(0f, StepHeight * 0.5f, 0.38f);
+            _step.transform.position = new Vector3(0f, StepHeight * 0.5f, 0.20f);
             _step.transform.localScale = new Vector3(1.4f, StepHeight, 0.3f);
         }
 
         private void CreateFootSensor()
         {
             _foot = new GameObject("Foot");
-            _foot.transform.position = new Vector3(0f, 0.16f, -0.08f);
+            _foot.transform.position = new Vector3(0f, 0.08f, 0.0f);
 
             SphereCollider collider = _foot.AddComponent<SphereCollider>();
-            collider.radius = 0.05f;
+            collider.radius = 0.035f;
             collider.center = Vector3.zero;
 
             _sensor = _foot.AddComponent<GroundSensor>();
             SetPrivateField(_sensor, "_groundLayers", (LayerMask)EnvironmentMask);
-            SetPrivateField(_sensor, "_castRadius", 0.08f);
-            SetPrivateField(_sensor, "_castDistance", 0.25f);
+            SetPrivateField(_sensor, "_castRadius", 0.04f);
+            SetPrivateField(_sensor, "_castDistance", 0.12f);
 
             Physics.SyncTransforms();
         }

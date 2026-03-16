@@ -21,7 +21,7 @@ namespace PhysicsDrivenMovement.Editor
     public static class SceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/Arena_01.unity";
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const string PhysMatPath = "Assets/PhysicsMaterials/Ragdoll.asset";
 
         private static readonly Vector3 GroundScale = new Vector3(70.72f, 1f, 63.6f);

@@ -16,13 +16,13 @@ namespace PhysicsDrivenMovement.Character
     {
         // STEP 1: Base stride geometry — how far forward and how wide a default step lands
         //         relative to the hips, scaled by current planar speed.
-        private const float BaseStrideLength = 0.45f;
-        private const float MaxStrideLength = 0.85f;
-        private const float BaseStepWidth = 0.15f;
+        private const float BaseStrideLength = 0.15f;
+        private const float MaxStrideLength = 0.30f;
+        private const float BaseStepWidth = 0.17f;
 
         // STEP 2: Speed influence — stride length scales linearly with planar speed
         //         and clamps at a maximum to keep steps physically plausible.
-        private const float SpeedStrideScale = 0.12f;
+        private const float SpeedStrideScale = 0.04f;
 
         // STEP 3: Turn influence — sharp turns widen the outside leg and shorten the inside
         //         leg to improve support geometry during direction changes.
@@ -55,7 +55,7 @@ namespace PhysicsDrivenMovement.Character
         //          All three scale with support urgency (1 - SupportQuality) so a mild dip
         //          produces a small correction while a near-airborne catch-step reaches aggressively.
         private const float CatchStepStrideScale = 0.30f;
-        private const float CatchStepWidenScale = 0.12f;
+        private const float CatchStepWidenScale = 0.04f;
         private const float CatchStepTimingScale = 0.20f;
 
         // STEP 3d-terrain: Surface-aware catch-step modulation (C7.4b).
@@ -64,7 +64,7 @@ namespace PhysicsDrivenMovement.Character
         //          the support polygon. Both scale with surface instability so flat-ground
         //          catch-steps remain unchanged.
         private const float TerrainCatchStepStrideRetention = 0.50f;
-        private const float TerrainCatchStepExtraWiden = 0.04f;
+        private const float TerrainCatchStepExtraWiden = 0.015f;
 
         // STEP 3e: Partial-contact bracing (C7.3b).
         //          When surface normal quality drops (slope, edge, uneven surface) the planner
@@ -74,7 +74,7 @@ namespace PhysicsDrivenMovement.Character
         //          (1 - MinSurfaceNormalQuality). A quality floor avoids triggering on noise.
         private const float BracingSurfaceQualityFloor = 0.85f;
         private const float BracingStrideScale = 0.15f;
-        private const float BracingWidenScale = 0.06f;
+        private const float BracingWidenScale = 0.02f;
         private const float BracingTimingScale = 0.10f;
 
         // STEP 4: COM drift compensation — when the COM leads or trails the support center,
@@ -93,9 +93,9 @@ namespace PhysicsDrivenMovement.Character
         //          the obstruction sample is tall and confident enough to represent a real step-up.
         private const float MinimumClearanceRequestHeight = 0.05f;
         private const float MinimumClearanceRequestConfidence = 0.35f;
-        private const float MinimumStepUpLandingCarryDistance = 0.08f;
-        private const float SevereStepCarryStartHeight = 0.15f;
-        private const float SevereStepCarryFullHeight = 0.35f;
+        private const float MinimumStepUpLandingCarryDistance = 0.03f;
+        private const float SevereStepCarryStartHeight = 0.06f;
+        private const float SevereStepCarryFullHeight = 0.12f;
 
         /// <summary>
         /// Computes a step target for a single leg that is currently in a swing-like state.

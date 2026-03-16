@@ -73,8 +73,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(maxTilt, Is.LessThan(75f),
                 $"Arena_01 long-run exceeded catastrophic tilt threshold: maxTilt={maxTilt:F1}° (limit < 75°).");
-            Assert.That(minHipsHeight, Is.GreaterThan(0.60f),
-                $"Arena_01 long-run dropped below seated-collapse floor: minHipsHeight={minHipsHeight:F2}m (limit > 0.60m).");
+            Assert.That(minHipsHeight, Is.GreaterThan(0.22f),
+                $"Arena_01 long-run dropped below seated-collapse floor: minHipsHeight={minHipsHeight:F2}m (limit > 0.22m).");
             Assert.That(fallenFrameCount, Is.LessThan(600),
                 $"Arena_01 long-run spent too many frames fallen: fallenFrameCount={fallenFrameCount} / {LongRunFrames} (limit < 600).");
             Assert.That(balance.IsGrounded, Is.True,
@@ -111,8 +111,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
                 Assert.That(maxTilt, Is.LessThan(75f),
                     $"Repeat run {runIndex + 1}/{RepeatRuns} exceeded maxTilt bound: {maxTilt:F1}° (limit < 75°).");
-                Assert.That(minHipsHeight, Is.GreaterThan(0.60f),
-                    $"Repeat run {runIndex + 1}/{RepeatRuns} dipped below minHipsHeight bound: {minHipsHeight:F2}m (limit > 0.60m).");
+                Assert.That(minHipsHeight, Is.GreaterThan(0.22f),
+                    $"Repeat run {runIndex + 1}/{RepeatRuns} dipped below minHipsHeight bound: {minHipsHeight:F2}m (limit > 0.22m).");
                 Assert.That(fallenFrameCount, Is.LessThan(300),
                     $"Repeat run {runIndex + 1}/{RepeatRuns} had too many fallen frames: {fallenFrameCount} / {RepeatRunFrames} (limit < 300).");
                 Assert.That(balance.IsGrounded, Is.True,

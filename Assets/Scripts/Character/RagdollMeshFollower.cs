@@ -23,6 +23,10 @@ namespace PhysicsDrivenMovement.Character
         private Transform _modelRoot;
 
         [SerializeField]
+        [Tooltip("Vertical offset applied after hips alignment. Negative moves the mesh down.")]
+        private float _verticalOffset;
+
+        [SerializeField]
         [Tooltip("Log bone mapping results to the console on startup.")]
         private bool _debugMapping;
 
@@ -42,24 +46,24 @@ namespace PhysicsDrivenMovement.Character
         private int _mappedCount;
 
         // ─── Bone Mapping Table ─────────────────────────────────────────────
-        // ragdoll segment name → Mixamo bone name
-        private static readonly (string ragdoll, string mixamo)[] BoneMap = new[]
+        // ragdoll segment name → model bone name (KayKit Skeleton Minion)
+        private static readonly (string ragdoll, string modelBone)[] BoneMap = new[]
         {
-            ("Hips",        "mixamorig:Hips"),
-            ("Torso",       "mixamorig:Spine2"),
-            ("Head",        "mixamorig:Head"),
-            ("UpperLeg_L",  "mixamorig:LeftUpLeg"),
-            ("LowerLeg_L",  "mixamorig:LeftLeg"),
-            ("Foot_L",      "mixamorig:LeftFoot"),
-            ("UpperLeg_R",  "mixamorig:RightUpLeg"),
-            ("LowerLeg_R",  "mixamorig:RightLeg"),
-            ("Foot_R",      "mixamorig:RightFoot"),
-            ("UpperArm_L",  "mixamorig:LeftArm"),
-            ("LowerArm_L",  "mixamorig:LeftForeArm"),
-            ("Hand_L",      "mixamorig:LeftHand"),
-            ("UpperArm_R",  "mixamorig:RightArm"),
-            ("LowerArm_R",  "mixamorig:RightForeArm"),
-            ("Hand_R",      "mixamorig:RightHand"),
+            ("Hips",        "hips"),
+            ("Torso",       "spine"),
+            ("Head",        "head"),
+            ("UpperLeg_L",  "upperleg.l"),
+            ("LowerLeg_L",  "lowerleg.l"),
+            ("Foot_L",      "foot.l"),
+            ("UpperLeg_R",  "upperleg.r"),
+            ("LowerLeg_R",  "lowerleg.r"),
+            ("Foot_R",      "foot.r"),
+            ("UpperArm_L",  "upperarm.l"),
+            ("LowerArm_L",  "lowerarm.l"),
+            ("Hand_L",      "hand.l"),
+            ("UpperArm_R",  "upperarm.r"),
+            ("LowerArm_R",  "lowerarm.r"),
+            ("Hand_R",      "hand.r"),
         };
 
         // ─── Unity Lifecycle ────────────────────────────────────────────────
@@ -88,7 +92,7 @@ namespace PhysicsDrivenMovement.Character
             var ragdollList = new List<Transform>(BoneMap.Length);
             var modelList   = new List<Transform>(BoneMap.Length);
 
-            foreach ((string ragdollName, string mixamoName) in BoneMap)
+            foreach ((string ragdollName, string boneName) in BoneMap)
             {
                 Transform ragdollSegment = FindSegment(ragdollName);
                 if (ragdollSegment == null)
@@ -98,10 +102,10 @@ namespace PhysicsDrivenMovement.Character
                     continue;
                 }
 
-                if (!modelBonesByName.TryGetValue(mixamoName, out Transform modelBone))
+                if (!modelBonesByName.TryGetValue(boneName, out Transform modelBone))
                 {
                     if (_debugMapping)
-                        Debug.LogWarning($"[RagdollMeshFollower] Model bone '{mixamoName}' not found.", this);
+                        Debug.LogWarning($"[RagdollMeshFollower] Model bone '{boneName}' not found.", this);
                     continue;
                 }
 
@@ -117,7 +121,7 @@ namespace PhysicsDrivenMovement.Character
             // offset = Inverse(ragdollRest) * modelRest
             // At runtime: modelBone.rotation = ragdollSegment.rotation * offset
             // This accounts for the different rest orientations between the ragdoll
-            // primitives and the Mixamo skeleton.
+            // primitives and the model skeleton.
             _rotationOffsets = new Quaternion[_mappedCount];
             for (int i = 0; i < _mappedCount; i++)
             {
@@ -147,7 +151,7 @@ namespace PhysicsDrivenMovement.Character
             if (_mappedCount > 0)
             {
                 Vector3 hipsError = _ragdollSegments[0].position - _modelBones[0].position;
-                _modelRoot.position += hipsError;
+                _modelRoot.position += hipsError + new Vector3(0f, _verticalOffset, 0f);
             }
         }
 
@@ -196,8 +200,10 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private Transform FindSegment(string segmentName)
         {
-            // Check this GameObject first (Hips is the root).
-            if (gameObject.name == segmentName)
+            // This component lives on the Hips root. Match "Hips" even when the
+            // GameObject has been renamed (e.g. the skinned prefab root is named
+            // after the prefab, not the segment).
+            if (segmentName == "Hips")
                 return transform;
 
             // Search ragdoll children (skip the model subtree by checking for Rigidbody).

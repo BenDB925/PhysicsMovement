@@ -17,7 +17,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// </summary>
     public sealed class PlayerPrefabTestRig : IDisposable
     {
-        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll.prefab";
+        private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
 
         private static readonly FieldInfo CameraTargetField = typeof(CameraFollow)
             .GetField("_target", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -102,7 +102,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         public sealed class Options
         {
             public Vector3 TestOrigin { get; set; } = Vector3.zero;
-            public Vector3 SpawnOffset { get; set; } = new Vector3(0f, 1.1f, 0f);
+            public Vector3 SpawnOffset { get; set; } = new Vector3(0f, 0.5f, 0f);
             public Quaternion SpawnRotation { get; set; } = Quaternion.identity;
             public Vector3 GroundOffset { get; set; } = new Vector3(0f, -0.5f, 0f);
             public Vector3 GroundScale { get; set; } = new Vector3(400f, 1f, 400f);

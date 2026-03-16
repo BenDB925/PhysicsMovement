@@ -136,7 +136,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 2f)]
         [Tooltip("Target minimum hips world height for startup stand assist. " +
                  "Assist applies only when current height is below this value.")]
-        private float _startupAssistTargetHeight = 0.9f;
+        private float _startupAssistTargetHeight = 0.35f;
 
         [SerializeField, Range(0f, 2000f)]
         [Tooltip("Maximum upward force (Newtons) applied by startup stand assist.")]
@@ -144,7 +144,7 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0.05f, 1f)]
         [Tooltip("Height error range used to scale stand assist force from 0 to max.")]
-        private float _startupAssistHeightRange = 0.35f;
+        private float _startupAssistHeightRange = 0.15f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("How strongly assist force follows current hips-up direction (0 = world up, 1 = hips up).")]
@@ -190,7 +190,7 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0f, 2f)]
         [Tooltip("Hips height below this threshold is considered seated for telemetry.")]
-        private float _debugSeatedHeightThreshold = 0.75f;
+        private float _debugSeatedHeightThreshold = 0.25f;
 
         // ─── COM Stabilization ──────────────────────────────────────────────
 
@@ -212,7 +212,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 0.5f)]
         [Tooltip("Maximum horizontal COM target shift (meters) when DesiredLeanDegrees is at its peak. " +
                  "The shift nudges the stabilization target toward the facing direction during turns.")]
-        private float _maxComLeanOffset = 0.12f;
+        private float _maxComLeanOffset = 0.09f;
 
         // ─── Pelvis Expression ────────────────────────────────────────────────
 
@@ -232,7 +232,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum lateral COM target shift (meters) toward the stance foot during " +
                  "single-support phases. Creates a visible hip sway toward the planted leg. " +
                  "Blended by LegAnimator.SmoothedInputMag so it is zero at idle.")]
-        private float _pelvisSwayMaxOffset = 0.02f;
+        private float _pelvisSwayMaxOffset = 0.015f;
 
         [SerializeField, Range(1f, 30f)]
         [Tooltip("Smoothing speed for the lateral pelvis sway signal. Higher = more responsive, " +
@@ -259,10 +259,10 @@ namespace PhysicsDrivenMovement.Character
                  "Prevents settling into a seated pose.")]
         private bool _enableHeightMaintenance = true;
 
-        [SerializeField, Range(0.5f, 2f)]
+        [SerializeField, Range(0.1f, 2f)]
         [Tooltip("Target world-space Y position for the hips when standing. " +
                  "Height force only applies when hips are below this value.")]
-        private float _standingHipsHeight = 0.95f;
+        private float _standingHipsHeight = 0.35f;
 
         [SerializeField, Range(0f, 3000f)]
         [Tooltip("Spring strength for height maintenance. Higher = faster lift from seated.")]
