@@ -492,6 +492,20 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public float StandingHipsHeight => _standingHipsHeight;
 
+        // ─── Jump Crouch Offset (C8.5) ────────────────────────────────────
+
+        /// <summary>Additive offset applied to the height-maintenance target during jump wind-up.</summary>
+        private float _jumpCrouchHeightOffset;
+
+        /// <summary>
+        /// Set a temporary height offset for the jump wind-up crouch.
+        /// Pass a negative value to lower the hips.
+        /// </summary>
+        public void SetJumpCrouchOffset(float offset) { _jumpCrouchHeightOffset = offset; }
+
+        /// <summary>Clear the jump crouch offset, restoring normal height maintenance.</summary>
+        public void ClearJumpCrouchOffset() { _jumpCrouchHeightOffset = 0f; }
+
         /// <summary>
         /// Test seam: directly override IsGrounded/IsFallen without needing GroundSensor components.
         /// FixedUpdate will not overwrite these values while the override is active.
@@ -571,6 +585,7 @@ namespace PhysicsDrivenMovement.Character
             _transientLeanDecay = 0f;
             _reversalWeightShiftTimer = 0f;
             _reversalWeightShiftDirection = Vector3.zero;
+            _jumpCrouchHeightOffset = 0f;
 
             if (_ragdollSetup != null)
             {
@@ -1170,7 +1185,7 @@ namespace PhysicsDrivenMovement.Character
                 if (_footR != null && _footR.HasForwardObstruction)
                     anticipatedStepHeight = Mathf.Max(anticipatedStepHeight, _footR.EstimatedStepHeight);
 
-                float hipsHeightError = (_standingHipsHeight + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
+                float hipsHeightError = (_standingHipsHeight + _jumpCrouchHeightOffset + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
                     float heightScale = commandHeightScale;

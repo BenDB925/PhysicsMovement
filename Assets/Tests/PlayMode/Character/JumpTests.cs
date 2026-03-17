@@ -14,6 +14,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 80;
 
+        /// <summary>
+        /// Default wind-up duration set on the prefab / at runtime (0.2 s).
+        /// At fixedDeltaTime 0.01 s this is 20 physics frames.
+        /// </summary>
+        private const float WindUpDuration = 0.2f;
+
         private static readonly Vector3 TestOrigin = new Vector3(1650f, 0f, 0f);
 
         private GameObject _ground;
@@ -86,9 +92,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_movement, "_jumpForce", 15f);
             _hipsBody.linearVelocity = Vector3.zero;
             _movement.SetJumpInputForTest(true);
-            yield return new WaitForFixedUpdate();
 
-            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Standing));
+            // Wait for wind-up to complete + 1 frame for the impulse to register.
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) + 1;
+            yield return WaitForPhysicsFrames(windUpFrames);
+
             Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f));
         }
 
@@ -104,7 +112,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             _hipsBody.linearVelocity = new Vector3(_hipsBody.linearVelocity.x, 0f, _hipsBody.linearVelocity.z);
             _movement.SetJumpInputForTest(true);
-            yield return new WaitForFixedUpdate();
+
+            // Wait for wind-up to complete + 1 frame for the impulse to register.
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) + 1;
+            yield return WaitForPhysicsFrames(windUpFrames);
 
             Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f));
         }
@@ -152,9 +163,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _hipsBody.linearVelocity = Vector3.zero;
             _movement.SetJumpInputForTest(true);
 
-            yield return new WaitForFixedUpdate();
+            // Wait for wind-up + impulse.
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) + 1;
+            yield return WaitForPhysicsFrames(windUpFrames);
             Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f));
 
+            // Second frame without re-pressing should not fire again.
             _hipsBody.linearVelocity = Vector3.zero;
             yield return new WaitForFixedUpdate();
 

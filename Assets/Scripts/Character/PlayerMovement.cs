@@ -5,6 +5,15 @@ using UnityEngine;
 namespace PhysicsDrivenMovement.Character
 {
     /// <summary>
+    /// Tracks the multi-frame jump sequence introduced in C8.5.
+    /// </summary>
+    public enum JumpPhase
+    {
+        None = 0,
+        WindUp = 1
+    }
+
+    /// <summary>
     /// Converts player input into locomotion forces for the active ragdoll hips body.
     /// This component belongs to the Character locomotion system and is responsible for
     /// camera-relative movement, speed limiting, jump impulse, and forwarding facing
@@ -39,6 +48,22 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
                  "Jump is only allowed from Standing or Moving state while grounded.")]
         private float _jumpForce = 100f;
+
+        [Header("Jump Wind-Up (C8.5)")]
+        [SerializeField, Range(0f, 0.5f)]
+        [Tooltip("Duration of the crouch wind-up before the jump impulse fires. " +
+                 "During this time the character crouches and braces legs.")]
+        private float _jumpWindUpDuration = 0.2f;
+
+        [SerializeField, Range(0f, 0.2f)]
+        [Tooltip("Metres to lower the hips height-maintenance target during wind-up. " +
+                 "Creates the visible crouch before launch.")]
+        private float _jumpCrouchHeightOffset = 0.07f;
+
+        [SerializeField, Range(0f, 90f)]
+        [Tooltip("Extra knee-bend degrees applied to both legs during wind-up " +
+                 "so the character visibly loads the spring.")]
+        private float _jumpWindUpKneeBendBoost = 25f;
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
@@ -85,6 +110,7 @@ namespace PhysicsDrivenMovement.Character
         private Rigidbody _rb;
         private BalanceController _balance;
         private CharacterState _characterState;
+        private LegAnimator _legAnimator;
         private PlayerInputActions _inputActions;
         private Vector2 _currentMoveInput;
         private Vector3 _currentFacingDirection = Vector3.forward;
@@ -97,6 +123,12 @@ namespace PhysicsDrivenMovement.Character
         /// enforce the one-frame consume rule - the impulse never fires twice per press.
         /// </summary>
         private bool _jumpPressedThisFrame;
+
+        /// <summary>Current phase of the multi-frame jump sequence (C8.5).</summary>
+        private JumpPhase _jumpPhase;
+
+        /// <summary>Remaining wind-up time in seconds.</summary>
+        private float _jumpWindUpTimer;
 
         /// <summary>
         /// Latest jump intent sampled for the current physics step before TryApplyJump consumes it.
@@ -169,6 +201,12 @@ namespace PhysicsDrivenMovement.Character
         /// 0 = walk, 1 = full sprint.
         /// </summary>
         public float SprintNormalized => _sprintNormalized;
+
+        /// <summary>
+        /// Current phase of the multi-frame jump sequence.
+        /// <see cref="JumpPhase.None"/> outside of a jump.
+        /// </summary>
+        public JumpPhase CurrentJumpPhase => _jumpPhase;
 
         internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
@@ -249,6 +287,9 @@ namespace PhysicsDrivenMovement.Character
             //         we attempt to cache here but also retry lazily in FixedUpdate on first use.
             TryGetComponent(out _characterState);
 
+            // STEP 2b: Cache LegAnimator for jump wind-up gait suppression (C8.5).
+            TryGetComponent(out _legAnimator);
+
             // STEP 3: Resolve a camera reference (serialized value preferred, main camera fallback).
             if (_camera == null)
             {
@@ -312,7 +353,10 @@ namespace PhysicsDrivenMovement.Character
             //           (c) BalanceController.IsGrounded is true.
             //         The input flag is consumed immediately regardless of whether the
             //         jump succeeded, enforcing the one-frame consume rule.
+            //         C8.5: TryApplyJump now enters a wind-up phase. TickJumpWindUp
+            //         counts down the wind-up and fires the impulse when it expires.
             TryApplyJump();
+            TickJumpWindUp();
 
             // STEP 4: Movement forces. Skip when the character is in a confirmed fall/collapse path.
             if (!ShouldSuppressLocomotion())
@@ -362,10 +406,9 @@ namespace PhysicsDrivenMovement.Character
         }
 
         /// <summary>
-        /// Evaluates the jump gate and, if all conditions are met, applies a single upward
-        /// impulse to the Hips Rigidbody. The jump input flag is consumed (cleared)
-        /// unconditionally at the end of this method, enforcing the one-frame consume rule
-        /// so the impulse cannot repeat while the button is held.
+        /// Evaluates the jump gate and, if all conditions are met, begins the multi-frame
+        /// jump wind-up sequence (C8.5). The jump input flag is consumed (cleared)
+        /// unconditionally so the impulse cannot repeat while the button is held.
         ///
         /// Gate conditions (ALL must be true):
         ///   1. <see cref="_jumpPressedThisFrame"/> is set.
@@ -373,6 +416,7 @@ namespace PhysicsDrivenMovement.Character
         ///      <see cref="CharacterStateType.Standing"/> or
         ///      <see cref="CharacterStateType.Moving"/>.
         ///   3. <see cref="BalanceController.IsGrounded"/> is true.
+        ///   4. No wind-up is already in progress.
         /// </summary>
         private void TryApplyJump()
         {
@@ -390,6 +434,12 @@ namespace PhysicsDrivenMovement.Character
             }
 
             if (!wantsJump)
+            {
+                return;
+            }
+
+            // Gate 0: already winding up — consume the input but don't restart.
+            if (_jumpPhase != JumpPhase.None)
             {
                 return;
             }
@@ -420,8 +470,63 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // All gates passed - apply impulse.
+            // All gates passed — enter wind-up phase (C8.5a).
+            if (_jumpWindUpDuration > 0f)
+            {
+                _jumpPhase = JumpPhase.WindUp;
+                _jumpWindUpTimer = _jumpWindUpDuration;
+                _balance.SetJumpCrouchOffset(-_jumpCrouchHeightOffset);
+                if (_legAnimator != null)
+                {
+                    _legAnimator.SetJumpWindUp(true, _jumpWindUpKneeBendBoost);
+                }
+            }
+            else
+            {
+                // Zero-duration wind-up: fire immediately (legacy behaviour / test override).
+                _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            }
+        }
+
+        /// <summary>
+        /// Ticks the jump wind-up timer each FixedUpdate. When the timer expires the
+        /// upward impulse fires and all wind-up overrides are cleared.
+        /// </summary>
+        private void TickJumpWindUp()
+        {
+            if (_jumpPhase != JumpPhase.WindUp)
+            {
+                return;
+            }
+
+            // Abort wind-up if the character fell or left the ground unexpectedly.
+            if (_balance.IsFallen || !_balance.IsGrounded)
+            {
+                ClearJumpWindUp();
+                return;
+            }
+
+            _jumpWindUpTimer -= Time.fixedDeltaTime;
+
+            if (_jumpWindUpTimer > 0f)
+            {
+                return;
+            }
+
+            // Wind-up complete — fire impulse and clean up.
             _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            ClearJumpWindUp();
+        }
+
+        private void ClearJumpWindUp()
+        {
+            _jumpPhase = JumpPhase.None;
+            _jumpWindUpTimer = 0f;
+            _balance.ClearJumpCrouchOffset();
+            if (_legAnimator != null)
+            {
+                _legAnimator.SetJumpWindUp(false, 0f);
+            }
         }
 
         private void ApplyMovementForces(Vector2 moveInput)

@@ -276,6 +276,14 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True while CharacterState is Airborne; used to suppress gait phase advancement.</summary>
         private bool _isAirborne;
 
+        // ── Jump Wind-Up (C8.5a) ───────────────────────────────────────────
+
+        /// <summary>True while PlayerMovement is in the jump wind-up crouch phase.</summary>
+        private bool _isJumpWindUp;
+
+        /// <summary>Extra knee-bend degrees requested during jump wind-up.</summary>
+        private float _jumpWindUpKneeBendBoost;
+
         // ── Angular Velocity Gait Gate — Hysteresis (Phase 3T — GAP-2 fix) ─
 
         /// <summary>
@@ -372,6 +380,17 @@ namespace PhysicsDrivenMovement.Character
         /// Exposed for test verification; read-only at runtime.
         /// </summary>
         public bool IsGaitBiasedForward => _isGaitBiasedForward;
+
+        /// <summary>
+        /// Called by <see cref="PlayerMovement"/> to enter or exit the jump wind-up
+        /// braced-leg pose. While active, gait phase advancement is suppressed and
+        /// both legs hold a high-knee-bend stance.
+        /// </summary>
+        public void SetJumpWindUp(bool active, float kneeBendBoostDeg)
+        {
+            _isJumpWindUp = active;
+            _jumpWindUpKneeBendBoost = active ? kneeBendBoostDeg : 0f;
+        }
 
         /// <summary>Absolute path to the debug gait log file.</summary>
         private static readonly string DebugLogPath =
@@ -639,6 +658,36 @@ namespace PhysicsDrivenMovement.Character
             float inputMagnitude = desiredInput.MoveMagnitude;
             float horizontalSpeedGate = observation.PlanarSpeed;
             bool isMoving = inputMagnitude > 0.01f || horizontalSpeedGate > 0.15f;
+
+            // C8.5a: During jump wind-up, suppress normal gait and hold a braced stance
+            // with boosted knee bend so the character visibly loads the spring.
+            if (_isJumpWindUp)
+            {
+                _confidenceEvaluator.Reset();
+                EnsureLegStateMachines();
+                LegStateFrame bracedLeft = BuildStateFrame(_leftLegStateMachine);
+                LegStateFrame bracedRight = BuildStateFrame(_rightLegStateMachine);
+
+                leftCommand = new LegCommandOutput(
+                    LocomotionLeg.Left,
+                    LegCommandMode.HoldPose,
+                    bracedLeft,
+                    _leftLegStateMachine.CyclePhase,
+                    0f,
+                    _jumpWindUpKneeBendBoost,
+                    1f,
+                    StepTarget.Invalid);
+                rightCommand = new LegCommandOutput(
+                    LocomotionLeg.Right,
+                    LegCommandMode.HoldPose,
+                    bracedRight,
+                    _rightLegStateMachine.CyclePhase,
+                    0f,
+                    _jumpWindUpKneeBendBoost,
+                    1f,
+                    StepTarget.Invalid);
+                return;
+            }
 
             if (_isAirborne || state == CharacterStateType.Airborne)
             {
@@ -1689,6 +1738,8 @@ namespace PhysicsDrivenMovement.Character
             {
                 // Entering airborne: loosen springs so legs dangle naturally.
                 _isAirborne = true;
+                _isJumpWindUp = false;
+                _jumpWindUpKneeBendBoost = 0f;
                 _jointDriver.SetSpringMultiplier(_airborneSpringMultiplier);
             }
             else if (previousState == CharacterStateType.Airborne)
@@ -1697,6 +1748,12 @@ namespace PhysicsDrivenMovement.Character
                 // restore full spring stiffness.
                 _isAirborne = false;
                 _jointDriver.SetSpringMultiplier(1f);
+            }
+
+            if (newState == CharacterStateType.Fallen)
+            {
+                _isJumpWindUp = false;
+                _jumpWindUpKneeBendBoost = 0f;
             }
         }
     }
