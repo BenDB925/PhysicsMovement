@@ -284,6 +284,11 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Extra knee-bend degrees requested during jump wind-up.</summary>
         private float _jumpWindUpKneeBendBoost;
 
+        // ── Jump Launch (C8.5b) ───────────────────────────────────────────
+
+        /// <summary>True while PlayerMovement is in the jump launch leg-extension phase.</summary>
+        private bool _isJumpLaunch;
+
         // ── Angular Velocity Gait Gate — Hysteresis (Phase 3T — GAP-2 fix) ─
 
         /// <summary>
@@ -390,6 +395,16 @@ namespace PhysicsDrivenMovement.Character
         {
             _isJumpWindUp = active;
             _jumpWindUpKneeBendBoost = active ? kneeBendBoostDeg : 0f;
+        }
+
+        /// <summary>
+        /// Called by <see cref="PlayerMovement"/> to enter or exit the jump launch
+        /// leg-extension phase (C8.5b). While active, both legs drive toward full
+        /// extension (0° knee bend) so the character visibly springs upward.
+        /// </summary>
+        public void SetJumpLaunch(bool active)
+        {
+            _isJumpLaunch = active;
         }
 
         /// <summary>Absolute path to the debug gait log file.</summary>
@@ -684,6 +699,36 @@ namespace PhysicsDrivenMovement.Character
                     _rightLegStateMachine.CyclePhase,
                     0f,
                     _jumpWindUpKneeBendBoost,
+                    1f,
+                    StepTarget.Invalid);
+                return;
+            }
+
+            // C8.5b: During jump launch, drive both legs toward full extension (0° knee
+            // bend) so the character visibly springs upward from the crouch.
+            if (_isJumpLaunch)
+            {
+                _confidenceEvaluator.Reset();
+                EnsureLegStateMachines();
+                LegStateFrame launchLeft = BuildStateFrame(_leftLegStateMachine);
+                LegStateFrame launchRight = BuildStateFrame(_rightLegStateMachine);
+
+                leftCommand = new LegCommandOutput(
+                    LocomotionLeg.Left,
+                    LegCommandMode.HoldPose,
+                    launchLeft,
+                    _leftLegStateMachine.CyclePhase,
+                    0f,
+                    0f,
+                    1f,
+                    StepTarget.Invalid);
+                rightCommand = new LegCommandOutput(
+                    LocomotionLeg.Right,
+                    LegCommandMode.HoldPose,
+                    launchRight,
+                    _rightLegStateMachine.CyclePhase,
+                    0f,
+                    0f,
                     1f,
                     StepTarget.Invalid);
                 return;
@@ -1740,6 +1785,7 @@ namespace PhysicsDrivenMovement.Character
                 _isAirborne = true;
                 _isJumpWindUp = false;
                 _jumpWindUpKneeBendBoost = 0f;
+                _isJumpLaunch = false;
                 _jointDriver.SetSpringMultiplier(_airborneSpringMultiplier);
             }
             else if (previousState == CharacterStateType.Airborne)
@@ -1754,6 +1800,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _isJumpWindUp = false;
                 _jumpWindUpKneeBendBoost = 0f;
+                _isJumpLaunch = false;
             }
         }
     }

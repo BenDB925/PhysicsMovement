@@ -10,7 +10,8 @@ namespace PhysicsDrivenMovement.Character
     public enum JumpPhase
     {
         None = 0,
-        WindUp = 1
+        WindUp = 1,
+        Launch = 2
     }
 
     /// <summary>
@@ -64,6 +65,11 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Extra knee-bend degrees applied to both legs during wind-up " +
                  "so the character visibly loads the spring.")]
         private float _jumpWindUpKneeBendBoost = 25f;
+
+        [SerializeField, Range(0f, 0.3f)]
+        [Tooltip("Duration of the leg-straighten window after the jump impulse fires. " +
+                 "During this time both legs drive toward full extension.")]
+        private float _jumpLaunchDuration = 0.1f;
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
@@ -129,6 +135,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Remaining wind-up time in seconds.</summary>
         private float _jumpWindUpTimer;
+
+        /// <summary>Remaining launch-extension time in seconds.</summary>
+        private float _jumpLaunchTimer;
 
         /// <summary>
         /// Latest jump intent sampled for the current physics step before TryApplyJump consumes it.
@@ -355,8 +364,10 @@ namespace PhysicsDrivenMovement.Character
             //         jump succeeded, enforcing the one-frame consume rule.
             //         C8.5: TryApplyJump now enters a wind-up phase. TickJumpWindUp
             //         counts down the wind-up and fires the impulse when it expires.
+            //         C8.5b: TickJumpLaunch drives leg extension after the impulse.
             TryApplyJump();
             TickJumpWindUp();
+            TickJumpLaunch();
 
             // STEP 4: Movement forces. Skip when the character is in a confirmed fall/collapse path.
             if (!ShouldSuppressLocomotion())
@@ -502,7 +513,7 @@ namespace PhysicsDrivenMovement.Character
             // Abort wind-up if the character fell or left the ground unexpectedly.
             if (_balance.IsFallen || !_balance.IsGrounded)
             {
-                ClearJumpWindUp();
+                ClearJumpSequence();
                 return;
             }
 
@@ -513,19 +524,79 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // Wind-up complete — fire impulse and clean up.
+            // Wind-up complete — fire impulse and transition to launch phase.
             _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
-            ClearJumpWindUp();
-        }
 
-        private void ClearJumpWindUp()
-        {
-            _jumpPhase = JumpPhase.None;
+            // Clear wind-up overrides.
             _jumpWindUpTimer = 0f;
             _balance.ClearJumpCrouchOffset();
             if (_legAnimator != null)
             {
                 _legAnimator.SetJumpWindUp(false, 0f);
+            }
+
+            // Enter launch phase for visible leg extension (C8.5b).
+            if (_jumpLaunchDuration > 0f)
+            {
+                _jumpPhase = JumpPhase.Launch;
+                _jumpLaunchTimer = _jumpLaunchDuration;
+                if (_legAnimator != null)
+                {
+                    _legAnimator.SetJumpLaunch(true);
+                }
+            }
+            else
+            {
+                _jumpPhase = JumpPhase.None;
+            }
+        }
+
+        /// <summary>
+        /// Ticks the jump launch timer each FixedUpdate. When the timer expires the
+        /// leg-extension override is cleared. The launch phase naturally overlaps with
+        /// early airborne — LegAnimator clears the flag on Airborne entry.
+        /// </summary>
+        private void TickJumpLaunch()
+        {
+            if (_jumpPhase != JumpPhase.Launch)
+            {
+                return;
+            }
+
+            _jumpLaunchTimer -= Time.fixedDeltaTime;
+
+            if (_jumpLaunchTimer > 0f)
+            {
+                return;
+            }
+
+            ClearJumpLaunch();
+        }
+
+        private void ClearJumpLaunch()
+        {
+            _jumpPhase = JumpPhase.None;
+            _jumpLaunchTimer = 0f;
+            if (_legAnimator != null)
+            {
+                _legAnimator.SetJumpLaunch(false);
+            }
+        }
+
+        /// <summary>
+        /// Aborts the entire jump sequence (wind-up or launch) and clears all overrides.
+        /// Used when the character falls or loses ground during the jump preparation.
+        /// </summary>
+        private void ClearJumpSequence()
+        {
+            _jumpPhase = JumpPhase.None;
+            _jumpWindUpTimer = 0f;
+            _jumpLaunchTimer = 0f;
+            _balance.ClearJumpCrouchOffset();
+            if (_legAnimator != null)
+            {
+                _legAnimator.SetJumpWindUp(false, 0f);
+                _legAnimator.SetJumpLaunch(false);
             }
         }
 
