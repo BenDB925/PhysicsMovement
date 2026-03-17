@@ -271,6 +271,15 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration in seconds for the start-walk forward lean to decay back to zero.")]
         private float _accelStartLeanDecay = 0.3f;
 
+        [SerializeField, Range(0f, 10f)]
+        [Tooltip("Backward lean impulse in degrees applied when transitioning from " +
+                 "Moving to Standing. Decays linearly to zero over the configured decay duration.")]
+        private float _decelStopLeanDeg = 3f;
+
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Duration in seconds for the stop-walk backward lean to decay back to zero.")]
+        private float _decelStopLeanDecay = 0.2f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -713,6 +722,12 @@ namespace PhysicsDrivenMovement.Character
                 _transientLeanDeg = _accelStartLeanDeg;
                 _transientLeanTimer = _accelStartLeanDecay;
                 _transientLeanDecay = _accelStartLeanDecay;
+            }
+            else if (previous == CharacterStateType.Moving && next == CharacterStateType.Standing)
+            {
+                _transientLeanDeg = -_decelStopLeanDeg;
+                _transientLeanTimer = _decelStopLeanDecay;
+                _transientLeanDecay = _decelStopLeanDecay;
             }
         }
 

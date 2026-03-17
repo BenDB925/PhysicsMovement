@@ -21,9 +21,9 @@ Layer character identity only after control architecture is stable. Replace abru
 ## Status
 
 - State: In progress.
-- Current next step: C8.2b backward settle on stop.
+- Current next step: C8.2c reversal weight shift.
 - Active blockers: None.
-- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1b torso twist driven by gait phase (new TorsoExpression component on Hips, 1° amplitude at Torso ConfigurableJoint, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1c lateral pelvis sway during single-support (0.02 m max COM shift toward stance foot in BalanceController STEP 3.6c, verified against MovementQualityTests + Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.2a forward lean on movement start (5° transient forward tilt triggered by CharacterState.OnStateChanged Standing→Moving, decaying over 0.3 s in BalanceController STEP 3.10, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests).
+- Completed: C8.1a pelvis tilt driven by acceleration (speed-delta approach in BalanceController, verified against Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1b torso twist driven by gait phase (new TorsoExpression component on Hips, 1° amplitude at Torso ConfigurableJoint, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.1c lateral pelvis sway during single-support (0.02 m max COM shift toward stance foot in BalanceController STEP 3.6c, verified against MovementQualityTests + Arena01BalanceStabilityTests + FullStackSanityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.2a forward lean on movement start (5° transient forward tilt triggered by CharacterState.OnStateChanged Standing→Moving, decaying over 0.3 s in BalanceController STEP 3.10, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests + HardSnapRecoveryTests + SpinRecoveryTests), C8.2b backward settle on stop (3° transient backward lean triggered by Moving→Standing, decaying over 0.2 s via same transient lean system, verified against MovementQualityTests + FullStackSanityTests + Arena01BalanceStabilityTests).
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls` and `SustainedLocomotionCollapse_TransitionsIntoFallen` fail on baseline (not caused by C8.1a/C8.1b).
 
 ## Primary touchpoints
@@ -67,9 +67,10 @@ Each unchecked sub-slice is intentionally small enough for one agent pass: make 
        - Implementation notes: 5° default forward lean set via OnCharacterStateChanged event subscription. Decays linearly over 0.3 s via STEP 3.10 in FixedUpdate. Added to existing pelvis tilt as `totalPelvisTilt` in STEP 4. Transient lean system designed for reuse by C8.2b (backward settle) and C8.2c (reversal weight shift).
        - Done when: Starting to walk produces a visible forward dip that decays to normal posture within a few hundred milliseconds.
        - Verification: `MovementQualityTests`, `FullStackSanityTests`, `Arena01BalanceStabilityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`.
-    - [ ] C8.2b Backward settle on stop:
+    - [x] C8.2b Backward settle on stop:
        - Scope: When `CharacterState` transitions from `Moving` to `Standing`, apply a brief backward-lean offset (smaller than the start lean) so the character appears to brake. Decay over ~0.2s.
        - Touchpoints: `BalanceController.cs` (same transient posture mechanism as C8.2a, opposite direction).
+       - Implementation notes: 3° default backward lean (negative transient) with 0.2 s decay. Reuses the same `_transientLeanDeg`/`_transientLeanTimer`/`_transientLeanDecay` mechanism from C8.2a. Wired alongside the Standing→Moving case in `OnCharacterStateChanged`.
        - Done when: Stopping from a walk produces a small backward rock before settling to idle.
        - Verification: `MovementQualityTests`, `FullStackSanityTests`.
     - [ ] C8.2c Reversal weight shift:
