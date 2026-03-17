@@ -7,7 +7,7 @@
 1. Read `.copilot-instructions.md` for repo-wide guardrails.
 2. Immediately load `CODING_STANDARDS.md` and `ARCHITECTURE.md` before touching code.
 3. Use the table below to jump straight to the right scripts, scenes, and tests.
-4. If the task depends on live Unity editor state, read `UNITY_MCP.md` before choosing between MCP, terminal, or direct asset-edit workflows.
+4. If the task depends on live Unity editor state, inspect the relevant editor scripts, scene assets, and builder entry points before choosing between manual editor work, terminal commands, or direct asset-edit workflows.
 5. Do not assume folders listed in roadmap docs already contain code.
 
 ## Context Budget Rules
@@ -32,9 +32,9 @@
 | Global physics settings, layers, project bootstrapping | `Assets/Scripts/Core/GameSettings.cs` | `ProjectSettings/ProjectVersion.txt`, `ARCHITECTURE.md` physics settings section | `Assets/Tests/EditMode/Core/GameSettingsTests.cs` |
 | Input wiring | `Assets/Scripts/Input/PlayerInputActions.cs`, `Assets/Scripts/Character/PlayerMovement.cs` | `ARCHITECTURE.md` PlayerMovement section, `.copilot-instructions.md` phase tracker | `Assets/Tests/PlayMode/Character/PlayerMovementTests.cs` |
 | Environment, room queries, terrain scenario metadata, museum layout, generated arenas | `Assets/Scripts/Environment/ArenaRoom.cs`, `Assets/Scripts/Environment/TerrainScenarioMarker.cs`, `Assets/Scripts/Editor/ArenaBuilder.cs`, `Assets/Scripts/Editor/SceneBuilder.cs`, `Assets/Scripts/Editor/TerrainScenarioBuilder.cs` | `Assets/Scripts/Editor/PropBuilder.cs`, `Assets/Scenes/Museum_01.unity`, `Assets/Scenes/Arena_01.unity`, `CONCEPT.md` | `Assets/Tests/EditMode/Environment/TerrainScenarioSceneTests.cs` plus the smallest relevant scene-level PlayMode slice through `Tools/Run-UnityTests.ps1` |
-| Live Unity editor work: scene hierarchy, prefab or component wiring, material edits, menu-item builders, console inspection, or quick in-editor smoke checks | `UNITY_MCP.md` | Relevant runtime or editor scripts, current scene or prefab asset, and `ARCHITECTURE.md` when ownership is unclear | Unity MCP tools for editor-state work; finish with `Tools/Run-UnityTests.ps1` when you need authoritative regression artifacts or fresh XML |
+| Live Unity editor work: scene hierarchy, prefab or component wiring, material edits, menu-item builders, or quick in-editor smoke checks | `Assets/Scripts/Editor/*.cs`, the current scene or prefab asset, and `ARCHITECTURE.md` when ownership is unclear | Relevant runtime or editor scripts plus `AGENT_TEST_RUNNING.md` for verification | Prefer builder or menu-item flows, or manual Unity editor changes, over raw YAML edits; finish with `Tools/Run-UnityTests.ps1` when you need authoritative regression artifacts or fresh XML |
 | Test execution, lock handling, result parsing | `AGENT_TEST_RUNNING.md`, `TestResults/latest-summary.md` when present, `Tools/Run-UnityTests.ps1` | `Tools/Write-TestSummary.ps1`, `Tools/ParseResults.ps1`, `parse_results.ps1`, `summary.ps1` | Fresh summary or XML under `TestResults/`; open the raw Unity log only when the summary or XML is insufficient |
-| Documentation updates | `.copilot-instructions.md`, `ARCHITECTURE.md`, `TASK_ROUTING.md`, `UNITY_MCP.md`, `PLAN.md`, `Plans/unified-locomotion-roadmap.plan.md` | `Plans/README.md`, the active roadmap instruction or chapter doc when applicable, and `CODING_STANDARDS.md` F9 rule | Confirm references point to real files and current systems, and that the active parent plan or chapter doc reflects the current status, blockers, next step, and first resume artifacts |
+| Documentation updates | `.copilot-instructions.md`, `ARCHITECTURE.md`, `TASK_ROUTING.md`, `PLAN.md`, `Plans/unified-locomotion-roadmap.plan.md` | `Plans/README.md`, the active roadmap instruction or chapter doc when applicable, and `CODING_STANDARDS.md` F9 rule | Confirm references point to real files and current systems, and that the active parent plan or chapter doc reflects the current status, blockers, next step, and first resume artifacts |
 
 ## Current Implemented Surface
 
@@ -66,7 +66,7 @@
 - Treat `LocomotionCollapseDetector` as watchdog-only in Chapter 1 slices: `CharacterState` consumes it for fall transitions, while movement, balance, and leg execution should react through authoritative state labels or `LocomotionDirector` commands instead of reading the raw detector directly.
 - For movement regressions, prefer outcome-based PlayMode tests over only checking `targetRotation` or internal state.
 - For scene-generation work, look in `Assets/Scripts/Editor/` before assuming the scene was hand-authored.
-- Prefer Unity MCP over direct `.unity`, `.prefab`, or `.mat` YAML edits when the task depends on live editor serialization, hierarchy state, or menu-driven builders.
-- Keep `Tools/Run-UnityTests.ps1` as the authoritative unattended test path; Unity MCP test execution is a quick in-editor supplement, not the final regression artifact source.
+- Prefer builder or menu-item flows, or manual Unity editor changes, over direct `.unity`, `.prefab`, or `.mat` YAML edits when the task depends on live editor serialization, hierarchy state, or menu-driven builders.
+- Keep `Tools/Run-UnityTests.ps1` as the authoritative unattended test path.
 - Run Unity tests sequentially, never in parallel.
 - Finish with the smallest relevant regression slice for the touched feature, and only escalate to the full suite when the change crosses system boundaries.

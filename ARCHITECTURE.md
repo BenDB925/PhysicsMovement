@@ -9,7 +9,7 @@
 - The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
 - `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity`; both now share `TerrainScenarioBuilder` for Chapter 7 terrain galleries.
 - The `Environment` assembly now carries both room metadata (`ArenaRoom`) and terrain scenario metadata (`TerrainScenarioMarker`, `TerrainScenarioType`) so generated scenes expose stable query surfaces at runtime.
-- A live Unity MCP bridge is available for editor automation through the MCP stdio server plus Unity's `ws://localhost:8090/McpUnity` endpoint; use it for editor-state work and keep unattended regression verification on `Tools/Run-UnityTests.ps1`.
+- This repo does not ship a repository-managed Unity automation bridge; use the relevant editor builders or manual Unity editor work for scene, prefab, and material changes, and keep unattended regression verification on `Tools/Run-UnityTests.ps1`.
 - When ownership boundaries or key collaborators change, keep this file, `TASK_ROUTING.md`, and `.copilot-instructions.md` aligned in the same slice.
 
 ## Read More When
@@ -64,10 +64,10 @@
 ★ = not yet implemented
 ```
 
-## 1.5 — Editor Automation Surface
+## 1.5 — Editor Workflow Surface
 
-- VS Code agents can drive the open Unity editor through the Unity MCP bridge documented in `UNITY_MCP.md`.
-- Prefer that bridge for console inspection, script recompiles, menu-item execution, scene or prefab mutation, component wiring, material edits, and quick in-editor smoke tests.
+- Use the editor builders under `Assets/Scripts/Editor/` or manual Unity editor work when a task depends on live serialization, hierarchy state, or menu-driven scene generation.
+- Prefer builder or menu-item flows over hand-editing `.unity`, `.prefab`, or `.mat` YAML unless the change is tightly bounded and easy to review.
 - Keep unattended regression verification on `Tools/Run-UnityTests.ps1` so `TestResults/` remains the authoritative artifact source.
 
 ---

@@ -124,7 +124,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 
 ### Framework
 
-- **Prefer MCP for test runs** When Unity is open, use the Unity MCP `run_tests` tool as the primary test runner — it keeps the editor live so other MCP tools (console logs, recompile, scene inspection) remain available. Fall back to `Tools/Run-UnityTests.ps1` when MCP is unavailable, when you need CI-like XML artifacts, or when Unity is not open.
+- **Prefer the repo test runner** Use `Tools/Run-UnityTests.ps1` as the primary unattended EditMode and PlayMode runner so `TestResults/` remains the authoritative artifact source. Fall back to raw Unity CLI only when the repo script is insufficient.
 - **Unity Test Framework** (NUnit-based).
 - **EditMode tests** for pure logic, data transforms, state machines, utility functions — anything that doesn't need a scene or MonoBehaviour lifecycle.
 - **PlayMode tests** for physics interactions, coroutine/async flows, component integration, NetworkBehaviour, and anything requiring `Awake`/`Start`/`Update`.

@@ -6,11 +6,11 @@
 
 ## Quick Load
 
-- **When Unity is open and MCP is connected, prefer Unity MCP `run_tests` as the primary test runner.** This keeps the editor live so other MCP tools (console logs, recompile, scene inspection) remain available throughout the edit-compile-test loop.
-- Fall back to `Tools/Run-UnityTests.ps1` when MCP is unavailable, when you need CI-like `TestResults/*.xml` artifacts, or when Unity is not open. Use the smallest meaningful `-TestFilter` slice for the feature you changed; only escalate to full-platform coverage when the impact is cross-cutting.
+- **Use `Tools/Run-UnityTests.ps1` as the primary test runner.** It writes the NUnit XML and log artifacts under `TestResults/` that the rest of the workflow expects.
+- Use the smallest meaningful `-TestFilter` slice for the feature you changed; only escalate to full-platform coverage when the impact is cross-cutting.
 - Run EditMode and PlayMode sequentially, never in parallel, and verify that fresh XML was written under `TestResults/` before trusting a batch-script result.
 - Prefer the absolute-path, `-NoProfile` invocation of the repo script for terminal reliability; use raw Unity CLI only when the repo script is insufficient.
-- Decide pass/fail from the NUnit XML (for batch runs) or the MCP response (for in-editor runs); use the log file for compile or infrastructure diagnostics.
+- Decide pass/fail from the NUnit XML and use the log file for compile or infrastructure diagnostics.
 
 ## Read More When
 
@@ -24,7 +24,7 @@
 
 Unity's Test Framework supports headless execution via the Unity Editor's **command-line / batch mode**. The agent can invoke the Unity executable with specific arguments to run tests, produce an NUnit XML results file, and then parse that file to determine pass/fail status — all without the user interacting with the Unity GUI.
 
-**Preferred path:** When Unity is already open, use MCP `run_tests` — it runs tests inside the live editor, returns results directly, and keeps the full MCP tool surface available for the rest of the workflow. The batch-mode script below is the fallback for when MCP is unavailable or CI-like XML artifacts are needed.
+**Preferred path:** Use `Tools/Run-UnityTests.ps1` — it wraps Unity batch mode, handles common lock and retry cases, and keeps `TestResults/` as the authoritative artifact source for the rest of the workflow.
 
 ---
 

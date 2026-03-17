@@ -867,6 +867,9 @@ MonoBehaviour:
   _upperArmSpring: 800
   _upperArmDamper: 80
   _upperArmMaxForce: 3000
+  _lowerArmSpring: 200
+  _lowerArmDamper: 20
+  _lowerArmMaxForce: 800
 --- !u!114 &8927490194607149143
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -893,6 +896,9 @@ MonoBehaviour:
   _snapRecoveryKdDurationFrames: 80
   _fallenEnterAngleThreshold: 65
   _fallenExitAngleThreshold: 55
+  _surrenderAngleThreshold: 80
+  _surrenderAnglePlusMomentumThreshold: 65
+  _surrenderAngularVelocityThreshold: 3
   _enableStartupStandAssist: 1
   _startupStandAssistDuration: 4
   _enablePersistentSeatedRecovery: 0
@@ -938,10 +944,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.LegAnimator
   _stepAngle: 60
+  _sprintStepAngle: 75
   _stepFrequencyScale: 0.1
   _stepFrequency: 1.25
+  _sprintCadenceBoost: 1.2
   _kneeAngle: 65
+  _sprintKneeAngle: 68
   _upperLegLiftBoost: 45
+  _sprintUpperLegLiftBoost: 30
   _stepUpClearanceReferenceHeight: 0.1
   _stepUpClearanceSwingBoost: 16
   _stepUpClearanceKneeBoost: 42
@@ -975,7 +985,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.ArmAnimator
   _armSwingAngle: 20
+  _sprintArmSwingAngle: 45
   _elbowBendAngle: 15
+  _sprintElbowBendAngle: 35
   _armSwingScale: 1
   _restAbductionAngle: 12
   _armSwingAxis: {x: 0, y: 0, z: 1}
@@ -1006,7 +1018,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d8a48dadac0ad774cbf1658bd2cb2db0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.PlayerMovement
-  _moveForce: 300
+  _moveForce: 200
   _maxSpeed: 5
   _sprintSpeedMultiplier: 1.8
   _sprintBlendDuration: 0.25
@@ -1035,6 +1047,9 @@ MonoBehaviour:
   _moveExitThreshold: 0.05
   _getUpDelay: 0.5
   _knockoutDuration: 1.5
+  _minFloorDwell: 1.5
+  _maxFloorDwell: 3
+  _reKnockdownFloorDwellCap: 4.5
   _getUpForce: 250
   _getUpTimeout: 3
   _collapseDeferralLimit: 1
@@ -1063,6 +1078,9 @@ MonoBehaviour:
   _supportRiskUprightBoost: 0.5
   _supportRiskStabilizationBoost: 0.75
   _maxTurnLeanDegrees: 5
+  _maxSprintLeanDegrees: 8
+  _surrenderRecoveryTimeout: 0.8
+  _surrenderRecoveryAngleCeiling: 50
   _recoveryEntryDebounceFrames: 3
   _recoveryExitCooldownFrames: 20
   _recoveryRampInFrames: 8
