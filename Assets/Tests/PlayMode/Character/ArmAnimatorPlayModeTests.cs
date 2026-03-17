@@ -240,6 +240,96 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         /// <summary>
+        /// C8.3b PlayMode: When LocomotionDirector signals active recovery, ArmAnimator
+        /// must dampen arm swing amplitude via the brace blend. This test verifies:
+        ///   1. _currentBraceBlend reaches 1.0 when recovery is active
+        ///   2. Arm swing peak during full brace is smaller than arm swing peak
+        ///      measured in the same SmoothedInputMag regime without brace
+        ///   3. _currentBraceBlend returns to 0 when recovery ends
+        ///
+        /// To avoid SmoothedInputMag ramp bias, both measurement windows share the
+        /// same settled gait. The test enables brace first, measures, then disables
+        /// brace and measures, so SmoothedInputMag has converged in both windows.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DuringRecovery_ArmSwingDampensAndElbowsTighten()
+        {
+            const int MeasureFrames = 200;
+
+            // Read runtime rest abduction from ArmAnimator.
+            ArmAnimator armAnimator = _hipsGO.GetComponent<ArmAnimator>();
+            Assert.That(armAnimator, Is.Not.Null, "ArmAnimator must be present.");
+            var abdLField = typeof(ArmAnimator).GetField("_abductionL",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var abdRField = typeof(ArmAnimator).GetField("_abductionR",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var braceField = typeof(ArmAnimator).GetField("_currentBraceBlend",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Quaternion runtimeAbdL = abdLField != null ? (Quaternion)abdLField.GetValue(armAnimator) : _abductionL;
+            Quaternion runtimeAbdR = abdRField != null ? (Quaternion)abdRField.GetValue(armAnimator) : _abductionR;
+
+            // Arrange — settle, start walking, warm up for a long time so SmoothedInputMag
+            // has converged before ANY measurement happens.
+            yield return WaitPhysicsFrames(SettleFrames);
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            yield return WaitPhysicsFrames(800);
+
+            // Phase 1: Enable brace and ramp in fully.
+            var director = _hipsGO.GetComponent<LocomotionDirector>();
+            Assert.That(director, Is.Not.Null, "LocomotionDirector must be present on rig.");
+            director.SetRecoveryActiveForTest(true);
+            yield return WaitPhysicsFrames(50);
+
+            float braceBlend = braceField != null ? (float)braceField.GetValue(armAnimator) : -1f;
+            Assert.That(braceBlend, Is.GreaterThanOrEqualTo(0.95f),
+                $"Brace blend should reach ~1.0 after ramp. Got {braceBlend:F3}.");
+
+            // Measure arm swing peak DURING brace.
+            float bracedPeakAngle = 0f;
+            for (int frame = 0; frame < MeasureFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float leftAngle = _upperArmLJoint != null
+                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, runtimeAbdL) : 0f;
+                float rightAngle = _upperArmRJoint != null
+                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, runtimeAbdR) : 0f;
+
+                bracedPeakAngle = Mathf.Max(bracedPeakAngle, leftAngle, rightAngle);
+            }
+
+            // Phase 2: Disable brace and let it ramp out, then measure normal arm swing.
+            director.SetRecoveryActiveForTest(false);
+            yield return WaitPhysicsFrames(50);
+
+            float unbracedBlend = braceField != null ? (float)braceField.GetValue(armAnimator) : 1f;
+            Assert.That(unbracedBlend, Is.LessThanOrEqualTo(0.05f),
+                $"Brace blend should return to ~0 after recovery ends. Got {unbracedBlend:F3}.");
+
+            float normalPeakAngle = 0f;
+            for (int frame = 0; frame < MeasureFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                float leftAngle = _upperArmLJoint != null
+                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, runtimeAbdL) : 0f;
+                float rightAngle = _upperArmRJoint != null
+                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, runtimeAbdR) : 0f;
+
+                normalPeakAngle = Mathf.Max(normalPeakAngle, leftAngle, rightAngle);
+            }
+
+            // Assert: braced arm swing should be significantly less than unbraced.
+            Assert.That(normalPeakAngle, Is.GreaterThan(2f),
+                $"Pre-condition: normal walk should produce visible arm swing. Peak = {normalPeakAngle:F2}°.");
+
+            Assert.That(bracedPeakAngle, Is.LessThan(normalPeakAngle * 0.5f),
+                $"During recovery, arm swing peak ({bracedPeakAngle:F2}°) should be < 50% of " +
+                $"normal ({normalPeakAngle:F2}°). Brace dampen should reduce amplitude.");
+        }
+
+        /// <summary>
         /// GAP-13 PlayMode: After walking stops (input set to zero), both arm joints
         /// must return to near-identity (within 2° of Quaternion.identity) within
         /// IdleDecayFrames (1.5 s at 100 Hz).

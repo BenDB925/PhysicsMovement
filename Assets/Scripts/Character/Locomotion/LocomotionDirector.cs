@@ -142,6 +142,7 @@ namespace PhysicsDrivenMovement.Character
         private RecoveryState _currentRecoveryState;
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
+        private bool? _recoveryTestOverride;
 
         public bool HasCommandFrame { get; private set; }
 
@@ -153,13 +154,16 @@ namespace PhysicsDrivenMovement.Character
         /// defer collapse-triggered Fallen transitions while recovery has a
         /// chance to save the character.
         /// </summary>
-        public bool IsRecoveryActive => _currentRecoveryState.IsActive;
+        public bool IsRecoveryActive => _recoveryTestOverride ?? _currentRecoveryState.IsActive;
 
         internal DesiredInput CurrentDesiredInput => _currentDesiredInput;
 
         internal LocomotionSensorSnapshot CurrentSensorSnapshot => _currentSensorSnapshot;
 
         internal LocomotionObservation CurrentObservation => _currentObservation;
+
+        /// <summary>The active recovery situation the director has classified.</summary>
+        internal RecoverySituation ActiveRecoverySituation => _currentRecoveryState.Situation;
 
         internal BodySupportCommand CurrentBodySupportCommand => _currentBodySupportCommand;
 
@@ -170,6 +174,17 @@ namespace PhysicsDrivenMovement.Character
         internal Vector3 CurrentPredictedDriftDirection => _currentPredictedDriftDirection;
 
         internal string CurrentObservationTelemetryLine => _currentObservationTelemetryLine;
+
+        /// <summary>
+        /// Test seam: forces recovery active/inactive so downstream consumers
+        /// (e.g. ArmAnimator brace) can be verified without full physics recovery triggers.
+        /// The override persists across FixedUpdate calls (not cleared by the pipeline).
+        /// Pass <c>null</c> to restore real classifier behavior.
+        /// </summary>
+        public void SetRecoveryActiveForTest(bool? active)
+        {
+            _recoveryTestOverride = active;
+        }
 
         private void Awake()
         {

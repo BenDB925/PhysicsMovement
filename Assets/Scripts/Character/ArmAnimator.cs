@@ -76,6 +76,22 @@ namespace PhysicsDrivenMovement.Character
                  "in targetRotation space produces frontal-plane abduction.")]
         private float _restAbductionAngle = 12f;
 
+        [Header("Recovery Brace")]
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Arm swing amplitude multiplier during active recovery (stumble, catch-step). " +
+                 "0 = arms freeze, 1 = no dampening. Default 0.2 keeps arms tight while bracing.")]
+        private float _braceSwingDampen = 0.2f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra elbow bend angle (degrees) added during active recovery. " +
+                 "Pulls forearms closer to the body for a visible bracing pose.")]
+        private float _braceElbowBendBoost = 20f;
+
+        [SerializeField, Range(1f, 30f)]
+        [Tooltip("Rate at which the brace blend ramps in and out (units per second). " +
+                 "Higher values produce a snappier transition into the brace pose.")]
+        private float _braceBlendSpeed = 10f;
+
         // DESIGN: _armSwingAxis and _elbowAxis follow the same convention as LegAnimator's
         // _swingAxis/_kneeAxis. With RagdollBuilder defaults (joint.axis = Vector3.right,
         // secondaryAxis = Vector3.forward), ConfigurableJoint.targetRotation maps the primary
@@ -124,6 +140,15 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private PlayerMovement _playerMovement;
 
+        /// <summary>
+        /// Sibling LocomotionDirector, used to read <see cref="LocomotionDirector.IsRecoveryActive"/>
+        /// for arm brace during recovery.
+        /// </summary>
+        private LocomotionDirector _locomotionDirector;
+
+        /// <summary>Smoothed 0–1 blend toward the brace pose. Ramps in/out at <see cref="_braceBlendSpeed"/>.</summary>
+        private float _currentBraceBlend;
+
         /// <summary>Rest abduction rotation cached in Awake for the left upper arm (negative angle).</summary>
         private Quaternion _abductionL;
 
@@ -145,6 +170,10 @@ namespace PhysicsDrivenMovement.Character
             //          blend signal as the rest of locomotion. Missing PlayerMovement falls
             //          back to walk posture instead of warning.
             TryGetComponent(out _playerMovement);
+
+            // STEP 1a2: Cache LocomotionDirector for recovery-brace reads. Missing director
+            //           falls back to no brace (arms swing normally).
+            TryGetComponent(out _locomotionDirector);
 
             // STEP 1b: Cache abduction quaternions.
             // In targetRotation space, Vector3.right (X) maps to rotation around the
@@ -231,6 +260,19 @@ namespace PhysicsDrivenMovement.Character
             float sprintNormalized = GetCurrentSprintNormalized();
             float effectiveArmSwingAngle = GetEffectiveArmSwingAngle(sprintNormalized);
             float effectiveElbowBendAngle = GetEffectiveElbowBendAngle(sprintNormalized);
+
+            // STEP 3c: Arm brace during recovery — dampen swing and tighten elbows when
+            //          LocomotionDirector signals active recovery (stumble, catch-step, etc.).
+            float braceTarget = (_locomotionDirector != null && _locomotionDirector.IsRecoveryActive) ? 1f : 0f;
+            _currentBraceBlend = Mathf.MoveTowards(_currentBraceBlend, braceTarget,
+                _braceBlendSpeed * Time.fixedDeltaTime);
+
+            if (_currentBraceBlend > 0f)
+            {
+                float dampenFactor = Mathf.Lerp(1f, _braceSwingDampen, _currentBraceBlend);
+                effectiveScale *= dampenFactor;
+                effectiveElbowBendAngle += _braceElbowBendBoost * _currentBraceBlend;
+            }
 
             // STEP 4: Read the gait phase from LegAnimator and compute arm phases.
             //         Arms use the OPPOSITE phase from legs:
