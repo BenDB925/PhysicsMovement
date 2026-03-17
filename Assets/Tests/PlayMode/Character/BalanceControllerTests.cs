@@ -191,6 +191,92 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "A kinematic hips body should keep its angular velocity unchanged during fallen-pose updates.");
         }
 
+        [UnityTest]
+        public IEnumerator RampUprightStrength_WhenDurationIsPositive_InterpolatesUntilTarget()
+        {
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
+
+            _balance.RampUprightStrength(0.2f, 0f);
+            Assert.That(_balance.UprightStrengthScale, Is.EqualTo(0.2f).Within(0.0001f),
+                "A zero-duration ramp should snap upright strength immediately.");
+
+            _balance.RampUprightStrength(1f, 0.05f);
+            yield return WaitPhysicsFrames(1);
+
+            Assert.That(_balance.UprightStrengthScale, Is.GreaterThan(0.2f).And.LessThan(1f),
+                "A timed upright ramp should interpolate over FixedUpdate frames instead of snapping.");
+
+            yield return WaitPhysicsFrames(5);
+
+            Assert.That(_balance.UprightStrengthScale, Is.EqualTo(1f).Within(0.0001f),
+                "The upright ramp should finish at the requested target value.");
+        }
+
+        [UnityTest]
+        public IEnumerator ClearSurrender_WhenCalled_RestoresLocalSupportScalesOverConfiguredDuration()
+        {
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
+
+            _balance.TriggerSurrender(0.6f);
+            float clearDuration = GetPrivateFloat("_clearSurrenderRampDuration");
+
+            Assert.That(_balance.IsSurrendered, Is.True);
+            Assert.That(_balance.UprightStrengthScale, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(_balance.HeightMaintenanceScale, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(_balance.StabilizationScale, Is.EqualTo(0f).Within(0.0001f));
+
+            _balance.ClearSurrender();
+
+            Assert.That(_balance.IsSurrendered, Is.False,
+                "ClearSurrender should release the surrender gate immediately so stand-up can resume.");
+            Assert.That(_balance.SurrenderSeverity, Is.EqualTo(0f).Within(0.0001f),
+                "ClearSurrender should clear the cached surrender severity once recovery begins.");
+
+            yield return WaitPhysicsFrames(1);
+
+            Assert.That(_balance.UprightStrengthScale, Is.GreaterThan(0f).And.LessThan(1f));
+            Assert.That(_balance.HeightMaintenanceScale, Is.GreaterThan(0f).And.LessThan(1f));
+            Assert.That(_balance.StabilizationScale, Is.GreaterThan(0f).And.LessThan(1f));
+
+            int completionFrames = Mathf.CeilToInt(clearDuration / Time.fixedDeltaTime) + 1;
+            yield return WaitPhysicsFrames(completionFrames);
+
+            Assert.That(_balance.UprightStrengthScale, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(_balance.HeightMaintenanceScale, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(_balance.StabilizationScale, Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        [UnityTest]
+        public IEnumerator CancelAllRamps_WhenRampIsActive_SnapsEachScaleToItsTarget()
+        {
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
+
+            _balance.RampHeightMaintenance(0.1f, 0f);
+            _balance.RampStabilization(0.2f, 0f);
+
+            _balance.RampHeightMaintenance(0.9f, 0.2f);
+            _balance.RampStabilization(0.8f, 0.2f);
+            yield return WaitPhysicsFrames(1);
+
+            Assert.That(_balance.HeightMaintenanceScale, Is.GreaterThan(0.1f).And.LessThan(0.9f));
+            Assert.That(_balance.StabilizationScale, Is.GreaterThan(0.2f).And.LessThan(0.8f));
+
+            _balance.CancelAllRamps();
+
+            Assert.That(_balance.HeightMaintenanceScale, Is.EqualTo(0.9f).Within(0.0001f),
+                "CancelAllRamps should snap the height-maintenance ramp to its target.");
+            Assert.That(_balance.StabilizationScale, Is.EqualTo(0.8f).Within(0.0001f),
+                "CancelAllRamps should snap the stabilization ramp to its target.");
+
+            yield return WaitPhysicsFrames(2);
+
+            Assert.That(_balance.HeightMaintenanceScale, Is.EqualTo(0.9f).Within(0.0001f));
+            Assert.That(_balance.StabilizationScale, Is.EqualTo(0.8f).Within(0.0001f));
+        }
+
         private void SpawnCharacter(Vector3 position, Quaternion rotation)
         {
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);

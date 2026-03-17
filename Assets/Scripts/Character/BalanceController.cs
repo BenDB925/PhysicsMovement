@@ -127,6 +127,10 @@ namespace PhysicsDrivenMovement.Character
                "angle-plus-momentum threshold to trigger surrender.")]
          private float _surrenderAngularVelocityThreshold = 3f;
 
+          [SerializeField, Range(0f, 1f)]
+          [Tooltip("Duration in seconds used by ClearSurrender() to restore the local support scales.")]
+          private float _clearSurrenderRampDuration = 0.35f;
+
         [Header("Startup Stand Assist")]
         [SerializeField]
         [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
@@ -364,6 +368,9 @@ namespace PhysicsDrivenMovement.Character
 
         private int _surrenderExtremeAngleFrameCount;
         private bool _suppressPelvisExpression;
+    private SupportScaleRamp _uprightStrengthRamp;
+    private SupportScaleRamp _heightMaintenanceRamp;
+    private SupportScaleRamp _stabilizationRamp;
 
         // ─── Public Properties ────────────────────────────────────────────────
 
@@ -479,6 +486,10 @@ namespace PhysicsDrivenMovement.Character
             UpdateTargetFacingRotation(_currentBodySupportCommand.FacingDirection);
         }
 
+        /// <summary>
+        /// Disables the local balance support scales so the character stops resisting an unrecoverable fall.
+        /// </summary>
+        /// <param name="severity">Knockdown severity in the 0–1 range.</param>
         public void TriggerSurrender(float severity)
         {
             float clampedSeverity = Mathf.Clamp01(severity);
@@ -489,6 +500,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            CancelAllRamps();
             IsSurrendered = true;
             UprightStrengthScale = 0f;
             HeightMaintenanceScale = 0f;
@@ -508,20 +520,71 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        /// <summary>
+        /// Clears the surrendered flag and restores the local balance support scales with a deterministic ramp.
+        /// </summary>
         public void ClearSurrender()
         {
             IsSurrendered = false;
             SurrenderSeverity = 0f;
-            UprightStrengthScale = 1f;
-            HeightMaintenanceScale = 1f;
-            StabilizationScale = 1f;
             _suppressPelvisExpression = false;
             _surrenderExtremeAngleFrameCount = 0;
+
+            RampUprightStrength(1f, _clearSurrenderRampDuration);
+            RampHeightMaintenance(1f, _clearSurrenderRampDuration);
+            RampStabilization(1f, _clearSurrenderRampDuration);
 
             if (_ragdollSetup != null)
             {
                 _ragdollSetup.ResetSpringProfile(0f);
             }
+        }
+
+        /// <summary>
+        /// Smoothly changes the local upright-strength multiplier over a fixed-duration ramp.
+        /// </summary>
+        /// <param name="targetScale">Target multiplier applied on top of the support command.</param>
+        /// <param name="duration">Ramp duration in seconds. Zero snaps immediately.</param>
+        public void RampUprightStrength(float targetScale, float duration)
+        {
+            _uprightStrengthRamp = CreateScaleRamp(UprightStrengthScale, targetScale, duration, out float nextValue);
+            UprightStrengthScale = nextValue;
+        }
+
+        /// <summary>
+        /// Smoothly changes the local height-maintenance multiplier over a fixed-duration ramp.
+        /// </summary>
+        /// <param name="targetScale">Target multiplier applied on top of the support command.</param>
+        /// <param name="duration">Ramp duration in seconds. Zero snaps immediately.</param>
+        public void RampHeightMaintenance(float targetScale, float duration)
+        {
+            _heightMaintenanceRamp = CreateScaleRamp(
+                HeightMaintenanceScale,
+                targetScale,
+                duration,
+                out float nextValue);
+            HeightMaintenanceScale = nextValue;
+        }
+
+        /// <summary>
+        /// Smoothly changes the local COM-stabilization multiplier over a fixed-duration ramp.
+        /// </summary>
+        /// <param name="targetScale">Target multiplier applied on top of the support command.</param>
+        /// <param name="duration">Ramp duration in seconds. Zero snaps immediately.</param>
+        public void RampStabilization(float targetScale, float duration)
+        {
+            _stabilizationRamp = CreateScaleRamp(StabilizationScale, targetScale, duration, out float nextValue);
+            StabilizationScale = nextValue;
+        }
+
+        /// <summary>
+        /// Stops all active local support-scale ramps and snaps each scale to its current ramp target.
+        /// </summary>
+        public void CancelAllRamps()
+        {
+            UprightStrengthScale = CancelScaleRamp(UprightStrengthScale, ref _uprightStrengthRamp);
+            HeightMaintenanceScale = CancelScaleRamp(HeightMaintenanceScale, ref _heightMaintenanceRamp);
+            StabilizationScale = CancelScaleRamp(StabilizationScale, ref _stabilizationRamp);
         }
 
         private void UpdateTargetFacingRotation(Vector3 dir)
@@ -652,6 +715,7 @@ namespace PhysicsDrivenMovement.Character
                 0f,
                 _surrenderAngleThreshold);
             _surrenderAngularVelocityThreshold = Mathf.Max(0f, _surrenderAngularVelocityThreshold);
+            _clearSurrenderRampDuration = Mathf.Max(0f, _clearSurrenderRampDuration);
 
             _startupStandAssistDuration = Mathf.Max(0f, _startupStandAssistDuration);
             _startupAssistHeightRange = Mathf.Max(0.05f, _startupAssistHeightRange);
@@ -687,6 +751,8 @@ namespace PhysicsDrivenMovement.Character
                 TryGetComponent(out _characterState);
                 SubscribeToCharacterState();
             }
+
+            UpdateScaleRamps();
 
             if (IsSurrendered &&
                 _characterState != null &&
@@ -1234,6 +1300,69 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void UpdateScaleRamps()
+        {
+            UprightStrengthScale = UpdateScaleRamp(UprightStrengthScale, ref _uprightStrengthRamp);
+            HeightMaintenanceScale = UpdateScaleRamp(HeightMaintenanceScale, ref _heightMaintenanceRamp);
+            StabilizationScale = UpdateScaleRamp(StabilizationScale, ref _stabilizationRamp);
+        }
+
+        private static SupportScaleRamp CreateScaleRamp(
+            float currentValue,
+            float targetValue,
+            float duration,
+            out float nextValue)
+        {
+            float clampedTarget = Mathf.Max(0f, targetValue);
+            float clampedDuration = Mathf.Max(0f, duration);
+            if (clampedDuration <= Mathf.Epsilon || Mathf.Approximately(currentValue, clampedTarget))
+            {
+                nextValue = clampedTarget;
+                return default;
+            }
+
+            nextValue = currentValue;
+            return new SupportScaleRamp
+            {
+                IsActive = true,
+                StartValue = currentValue,
+                TargetValue = clampedTarget,
+                Duration = clampedDuration,
+                Elapsed = 0f,
+            };
+        }
+
+        private static float UpdateScaleRamp(float currentValue, ref SupportScaleRamp ramp)
+        {
+            if (!ramp.IsActive)
+            {
+                return currentValue;
+            }
+
+            ramp.Elapsed += Time.fixedDeltaTime;
+            float progress = Mathf.Clamp01(ramp.Elapsed / ramp.Duration);
+            float nextValue = Mathf.Lerp(ramp.StartValue, ramp.TargetValue, progress);
+            if (progress >= 1f)
+            {
+                nextValue = ramp.TargetValue;
+                ramp = default;
+            }
+
+            return nextValue;
+        }
+
+        private static float CancelScaleRamp(float currentValue, ref SupportScaleRamp ramp)
+        {
+            if (!ramp.IsActive)
+            {
+                return currentValue;
+            }
+
+            float nextValue = ramp.TargetValue;
+            ramp = default;
+            return nextValue;
+        }
+
         // ─── Step-Up Foot Lift Assist ─────────────────────────────────────────
 
         private const float StepUpFootLiftStrength = 400f;
@@ -1333,6 +1462,15 @@ namespace PhysicsDrivenMovement.Character
                 $"heightError={heightError:F3}, assistScale={assistScale:F3}, " +
                 $"startupAssistActive={startupAssistActive}, persistentRecoveryActive={persistentRecoveryActive}, " +
                 $"grounded={IsGrounded}, fallen={IsFallen}, angle={uprightAngle:F1}°");
+        }
+
+        private struct SupportScaleRamp
+        {
+            public bool IsActive;
+            public float StartValue;
+            public float TargetValue;
+            public float Duration;
+            public float Elapsed;
         }
 
     }
