@@ -409,6 +409,87 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Check ArmAnimator idle branch (SmoothedInputMag < 0.01 → SetAllArmTargetsToRest).");
         }
 
+        /// <summary>
+        /// C8.3c PlayMode: When CharacterState enters Airborne, ArmAnimator must blend
+        /// toward a raised-outward pose (increased abduction + forward reach). On landing,
+        /// the airborne blend must decay back toward the normal walk/idle pose within ~0.3 s.
+        ///
+        /// The test verifies:
+        ///   1. After entering Airborne, arm abduction increases visibly beyond rest pose.
+        ///   2. After landing (Airborne → Standing), the airborne blend decays to near zero.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DuringAirborne_ArmsRaiseOutward_AndBlendBackOnLanding()
+        {
+            // Arrange — settle.
+            yield return WaitPhysicsFrames(SettleFrames);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+
+            ArmAnimator armAnimator = _hipsGO.GetComponent<ArmAnimator>();
+            Assert.That(armAnimator, Is.Not.Null, "ArmAnimator must be present on the rig.");
+
+            var airborneBlendField = typeof(ArmAnimator).GetField("_currentAirborneBlend",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+
+            // Measure rest-pose arm angle (both arms at idle abduction).
+            float restAngleL = _upperArmLJoint != null
+                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float restAngleR = _upperArmRJoint != null
+                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float restAngle = Mathf.Max(restAngleL, restAngleR);
+
+            // Act — enter Airborne. Must mark ground state as not-grounded so
+            // CharacterState.FixedUpdate doesn't immediately transition back to Standing.
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
+
+            // Let the airborne blend ramp in fully (at 6 units/s, 1/6 ≈ 0.17 s = 17 frames at 100 Hz).
+            yield return WaitPhysicsFrames(40);
+
+            // Measure airborne arm angle — should be visibly larger than rest.
+            float airAngleL = _upperArmLJoint != null
+                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float airAngleR = _upperArmRJoint != null
+                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float airAngle = Mathf.Max(airAngleL, airAngleR);
+
+            Assert.That(airAngle, Is.GreaterThan(restAngle + 5f),
+                $"During Airborne, arm angle from identity ({airAngle:F2}°) should exceed " +
+                $"rest angle ({restAngle:F2}°) by at least 5° due to abduction boost + forward reach.");
+
+            float airborneBlend = airborneBlendField != null ? (float)airborneBlendField.GetValue(armAnimator) : -1f;
+            Assert.That(airborneBlend, Is.GreaterThanOrEqualTo(0.9f),
+                $"Airborne blend should have ramped to ~1.0. Got {airborneBlend:F3}.");
+
+            // Act — land (Airborne → Standing). Restore grounded state first.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+
+            // Let the blend decay (at 6 units/s, approximately 0.17 s = 17 frames).
+            yield return WaitPhysicsFrames(40);
+
+            float postLandBlend = airborneBlendField != null ? (float)airborneBlendField.GetValue(armAnimator) : 1f;
+            Assert.That(postLandBlend, Is.LessThanOrEqualTo(0.05f),
+                $"After landing, airborne blend should decay to ~0. Got {postLandBlend:F3}.");
+
+            // Confirm arms have returned to near-rest angles.
+            float landAngleL = _upperArmLJoint != null
+                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float landAngleR = _upperArmRJoint != null
+                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                : 0f;
+            float landAngle = Mathf.Max(landAngleL, landAngleR);
+
+            Assert.That(landAngle, Is.LessThan(airAngle - 3f),
+                $"After landing, arm angle ({landAngle:F2}°) should be notably less than " +
+                $"airborne angle ({airAngle:F2}°), confirming the raised pose has blended out.");
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         private static IEnumerator WaitPhysicsFrames(int count)

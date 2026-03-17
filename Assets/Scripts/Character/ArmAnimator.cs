@@ -92,6 +92,27 @@ namespace PhysicsDrivenMovement.Character
                  "Higher values produce a snappier transition into the brace pose.")]
         private float _braceBlendSpeed = 10f;
 
+        [Header("Airborne Arm Raise")]
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Extra abduction angle (degrees) added to each upper arm while airborne, " +
+                 "pushing arms outward for an instinctive balance-seeking pose.")]
+        private float _airborneAbductionBoost = 25f;
+
+        [SerializeField, Range(-30f, 30f)]
+        [Tooltip("Forward reach angle (degrees) applied via the arm swing axis while airborne. " +
+                 "Positive = arms reach forward slightly.")]
+        private float _airborneForwardReach = 10f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Elbow bend angle (degrees) applied to lower arms while airborne. " +
+                 "Slightly straighter than walk bend for an open-arm appearance.")]
+        private float _airborneElbowBend = 8f;
+
+        [SerializeField, Range(1f, 30f)]
+        [Tooltip("Rate at which the airborne arm raise blends in on Airborne entry " +
+                 "and blends out on landing (units per second).")]
+        private float _airborneBlendSpeed = 6f;
+
         // DESIGN: _armSwingAxis and _elbowAxis follow the same convention as LegAnimator's
         // _swingAxis/_kneeAxis. With RagdollBuilder defaults (joint.axis = Vector3.right,
         // secondaryAxis = Vector3.forward), ConfigurableJoint.targetRotation maps the primary
@@ -149,6 +170,15 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Smoothed 0–1 blend toward the brace pose. Ramps in/out at <see cref="_braceBlendSpeed"/>.</summary>
         private float _currentBraceBlend;
 
+        /// <summary>Sibling CharacterState, used for Airborne entry/exit detection.</summary>
+        private CharacterState _characterState;
+
+        /// <summary>True while CharacterState is Airborne. Set by OnCharacterStateChanged.</summary>
+        private bool _isAirborne;
+
+        /// <summary>Smoothed 0–1 blend toward the airborne raised-arm pose.</summary>
+        private float _currentAirborneBlend;
+
         /// <summary>Rest abduction rotation cached in Awake for the left upper arm (negative angle).</summary>
         private Quaternion _abductionL;
 
@@ -174,6 +204,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1a2: Cache LocomotionDirector for recovery-brace reads. Missing director
             //           falls back to no brace (arms swing normally).
             TryGetComponent(out _locomotionDirector);
+
+            // STEP 1a3: Cache CharacterState for airborne arm raise. Missing state means
+            //           no airborne blend (arms use walk/idle pose only).
+            TryGetComponent(out _characterState);
 
             // STEP 1b: Cache abduction quaternions.
             // In targetRotation space, Vector3.right (X) maps to rotation around the
@@ -227,21 +261,44 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void OnEnable()
+        {
+            if (_characterState != null)
+            {
+                _characterState.OnStateChanged += OnCharacterStateChanged;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_characterState != null)
+            {
+                _characterState.OnStateChanged -= OnCharacterStateChanged;
+            }
+        }
+
         private void FixedUpdate()
         {
-            // STEP 1: Gate on missing LegAnimator — reset to identity and bail out.
+            // STEP 0: Ramp airborne blend toward target.
+            float airborneTarget = _isAirborne ? 1f : 0f;
+            _currentAirborneBlend = Mathf.MoveTowards(_currentAirborneBlend, airborneTarget,
+                _airborneBlendSpeed * Time.fixedDeltaTime);
+
+            // STEP 1: Gate on missing LegAnimator — apply airborne pose if blending, else rest.
             if (_legAnimator == null)
             {
-                SetAllArmTargetsToRest();
+                if (_currentAirborneBlend > 0f)
+                    ApplyAirbornePose(_currentAirborneBlend);
+                else
+                    SetAllArmTargetsToRest();
                 return;
             }
 
             float smoothedInputMag = _legAnimator.SmoothedInputMag;
 
-            // STEP 2: When SmoothedInputMag is near zero (character idle or decelerating to stop),
-            //         set arm targets to rest abduction pose and return.
-            //         This keeps arms hanging beside the body without clipping the torso.
-            if (smoothedInputMag < 0.01f)
+            // STEP 2: When SmoothedInputMag is near zero and not airborne,
+            //         set arm targets to rest abduction pose (or airborne blend) and return.
+            if (smoothedInputMag < 0.01f && _currentAirborneBlend <= 0f)
             {
                 SetAllArmTargetsToRest();
                 return;
@@ -294,8 +351,17 @@ namespace PhysicsDrivenMovement.Character
             float rightSwingDeg = sinRight * effectiveArmSwingAngle * effectiveScale;
 
             // STEP 5: Apply upper arm swing rotations using local-space targetRotation.
-            //         Pattern is identical to LegAnimator.ApplyLocalSpaceSwing.
-            ApplyArmSwing(leftSwingDeg, rightSwingDeg, effectiveElbowBendAngle);
+            //         When airborne blend > 0, interpolate between gait swing and the
+            //         raised-outward airborne pose.
+            if (_currentAirborneBlend > 0f)
+            {
+                ApplyArmSwingWithAirborneBlend(leftSwingDeg, rightSwingDeg,
+                    effectiveElbowBendAngle, _currentAirborneBlend);
+            }
+            else
+            {
+                ApplyArmSwing(leftSwingDeg, rightSwingDeg, effectiveElbowBendAngle);
+            }
         }
 
         // ── Private Methods ──────────────────────────────────────────────────
@@ -370,6 +436,90 @@ namespace PhysicsDrivenMovement.Character
         private float GetEffectiveElbowBendAngle(float sprintNormalized)
         {
             return Mathf.Lerp(_elbowBendAngle, _sprintElbowBendAngle, Mathf.Clamp01(sprintNormalized));
+        }
+
+        /// <summary>
+        /// Applies the raised-outward airborne arm pose, blended by <paramref name="blend"/>.
+        /// Called when airborne blend > 0 and there is no active gait swing to interpolate with.
+        /// </summary>
+        private void ApplyAirbornePose(float blend)
+        {
+            float boostedAbdL =  (_restAbductionAngle + _airborneAbductionBoost * blend);
+            float boostedAbdR = -(_restAbductionAngle + _airborneAbductionBoost * blend);
+            float forwardReach = _airborneForwardReach * blend;
+            float elbowDeg = Mathf.Lerp(_elbowBendAngle, _airborneElbowBend, blend);
+
+            if (_upperArmL != null)
+            {
+                _upperArmL.targetRotation = Quaternion.AngleAxis(boostedAbdL, Vector3.right)
+                    * Quaternion.AngleAxis(forwardReach, _armSwingAxis);
+            }
+            if (_upperArmR != null)
+            {
+                _upperArmR.targetRotation = Quaternion.AngleAxis(boostedAbdR, Vector3.right)
+                    * Quaternion.AngleAxis(forwardReach, _armSwingAxis);
+            }
+            if (_lowerArmL != null)
+            {
+                _lowerArmL.targetRotation = Quaternion.AngleAxis(elbowDeg, _elbowAxis);
+            }
+            if (_lowerArmR != null)
+            {
+                _lowerArmR.targetRotation = Quaternion.AngleAxis(elbowDeg, _elbowAxis);
+            }
+        }
+
+        /// <summary>
+        /// Applies gait arm swing interpolated toward the airborne raised-outward pose.
+        /// At blend=0 this is identical to <see cref="ApplyArmSwing"/>; at blend=1 it
+        /// produces the full airborne pose.
+        /// </summary>
+        private void ApplyArmSwingWithAirborneBlend(float leftSwingDeg, float rightSwingDeg,
+            float elbowDeg, float blend)
+        {
+            // Compute airborne upper-arm targets.
+            float boostedAbdL =  (_restAbductionAngle + _airborneAbductionBoost * blend);
+            float boostedAbdR = -(_restAbductionAngle + _airborneAbductionBoost * blend);
+            float forwardReach = _airborneForwardReach * blend;
+
+            // Gait targets (same as ApplyArmSwing).
+            Quaternion gaitL = _abductionL * Quaternion.AngleAxis(leftSwingDeg, _armSwingAxis);
+            Quaternion gaitR = _abductionR * Quaternion.AngleAxis(rightSwingDeg, _armSwingAxis);
+
+            // Airborne targets.
+            Quaternion airL = Quaternion.AngleAxis(boostedAbdL, Vector3.right)
+                * Quaternion.AngleAxis(forwardReach, _armSwingAxis);
+            Quaternion airR = Quaternion.AngleAxis(boostedAbdR, Vector3.right)
+                * Quaternion.AngleAxis(forwardReach, _armSwingAxis);
+
+            if (_upperArmL != null)
+                _upperArmL.targetRotation = Quaternion.Slerp(gaitL, airL, blend);
+            if (_upperArmR != null)
+                _upperArmR.targetRotation = Quaternion.Slerp(gaitR, airR, blend);
+
+            // Elbow: blend between gait elbow bend and airborne elbow bend.
+            float airElbow = Mathf.Lerp(elbowDeg, _airborneElbowBend, blend);
+            Quaternion elbowRot = Quaternion.AngleAxis(airElbow, _elbowAxis);
+            if (_lowerArmL != null)
+                _lowerArmL.targetRotation = elbowRot;
+            if (_lowerArmR != null)
+                _lowerArmR.targetRotation = elbowRot;
+        }
+
+        /// <summary>
+        /// Reacts to CharacterState transitions. Sets <see cref="_isAirborne"/> so
+        /// FixedUpdate ramps the airborne arm blend accordingly.
+        /// </summary>
+        private void OnCharacterStateChanged(CharacterStateType previousState, CharacterStateType newState)
+        {
+            if (newState == CharacterStateType.Airborne)
+            {
+                _isAirborne = true;
+            }
+            else if (previousState == CharacterStateType.Airborne)
+            {
+                _isAirborne = false;
+            }
         }
     }
 }
