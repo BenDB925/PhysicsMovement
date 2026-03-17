@@ -38,7 +38,7 @@ Prevent the unified system from becoming a black box.
 ## Status
 
 - State: In Progress.
-- Current next step: C9.2a.
+- Current next step: C9.2b.
 - Active blockers: None.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
@@ -76,10 +76,11 @@ Define the canonical set of named locomotion scenarios used by every test, basel
 
 Add structured per-event logging to `LocomotionDirector` so recovery decisions are traceable after the fact. Currently, only a throttled one-line observation string is emitted; there is no record of *why* a recovery started, escalated, or ended.
 
-- [ ] **C9.2a Create `Assets/Scripts/Character/Locomotion/RecoveryTelemetryEvent.cs`**
+- [x] **C9.2a Create `Assets/Scripts/Character/Locomotion/RecoveryTelemetryEvent.cs`**
   - Scope: Define a lightweight `readonly struct RecoveryTelemetryEvent` with fields: `int FrameNumber`, `float Time`, `RecoverySituation Situation`, `string Reason` (short tag like `"slip_exceeded"`, `"angle_above_ceiling"`, `"exit_cooldown_elapsed"`), `float UprightAngle`, `float SlipEstimate`, `float SupportQuality`, `float TurnSeverity`. Add a `ToNdjsonLine()` method returning a single JSON string (manual concatenation, no dependency on Newtonsoft).
   - Done when: EditMode test instantiates struct, calls `ToNdjsonLine()`, and asserts the output contains all field names.
   - Verification: EditMode compile + new EditMode test `RecoveryTelemetryEventTests.ToNdjsonLine_ContainsAllFields`.
+  - 2026-03-17: Added `RecoveryTelemetryEvent` under `Assets/Scripts/Character/Locomotion/` as an internal immutable payload with manual NDJSON serialization and JSON-string escaping for the `Situation`/`Reason` tags. Added focused reflection-backed EditMode coverage in `RecoveryTelemetryEventTests`; targeted verification passed `1/1`.
 
 - [ ] **C9.2b Wire `RecoveryTelemetryEvent` emission into `LocomotionDirector`**
   - Scope: In `LocomotionDirector`, add a `[SerializeField] bool _enableRecoveryTelemetry` (default false) and a `List<RecoveryTelemetryEvent>` ring buffer (capacity 256). Emit an event at: (1) recovery entry (with the triggering observation values), (2) recovery situation change (e.g. Stumble→NearFall), (3) recovery exit (with exit reason), (4) surrender trigger. Expose `IReadOnlyList<RecoveryTelemetryEvent> RecoveryTelemetryLog` for test queries.
