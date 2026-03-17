@@ -17,6 +17,7 @@ namespace PhysicsDrivenMovement.Character
     {
         private const float MinimumVectorSqrMagnitude = 0.0001f;
         private const float MinimumMass = 0.0001f;
+        private const float FallenKnockdownThresholdMultiplier = 0.4f;
 
         [Header("Impact Thresholds")]
         [SerializeField, Range(0f, 20f)]
@@ -204,7 +205,17 @@ namespace PhysicsDrivenMovement.Character
         private float GetCurrentKnockdownThreshold()
         {
             float threshold = _impactKnockdownDeltaV;
-            if (_characterState != null && _characterState.CurrentState == CharacterStateType.GettingUp)
+            if (_characterState == null)
+            {
+                return threshold;
+            }
+
+            if (_characterState.CurrentState == CharacterStateType.Fallen)
+            {
+                return threshold * FallenKnockdownThresholdMultiplier;
+            }
+
+            if (_characterState.CurrentState == CharacterStateType.GettingUp)
             {
                 threshold *= _gettingUpThresholdMultiplier;
             }

@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 8 — ImpactKnockdownDetector + BalanceController — Floor Dwell Adjustments
+- Current next step: Step 9 — BalanceController — Smooth Ramp Methods
 - Active blockers: None
 
 ## Quick Resume
@@ -140,7 +140,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Add dazed twitches yet — that's optional flavor, can be a follow-up. Don't change floor dwell timing (that's in CharacterState). |
 | **Design ref** | Ch3 §"Re-knockdown during floor dwell", §"Floor state behavior" |
 | **Done when** | EditMode compile passes. Impact during Fallen at 40% threshold re-triggers knockdown. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 **Post-Ch3 gate:** Run EditMode compile. Run PlayMode `HardSnapRecoveryTests` — may need threshold relaxation if surrender now fires during extreme test scenarios. If tests fail, note which thresholds to update in Step 12.
 
@@ -266,3 +266,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-17: Completed Step 5. Added `ImpactKnockdownDetector.cs` and `KnockdownEvent.cs` to the character runtime. The detector filters self and ground collisions, computes direction-weighted effective delta-v from `Collision.impulse`, lowers the knockdown threshold during `GettingUp`, triggers `BalanceController.TriggerSurrender(...)` for hard hits, applies a stagger torque for medium hits, emits `OnKnockdown`, and tracks a 1.0 s cooldown to suppress retriggers during the same tumble. Focused EditMode compile/import verification passed 8/8 via `LocomotionDirectorEditModeTests`, and repo routing/architecture docs were updated for the new knockdown seam.
 - 2026-03-17: Completed Step 6. Wired `ImpactKnockdownDetector` onto the root hips object for both `Assets/Prefabs/PlayerRagdoll.prefab` and the live runtime asset `Assets/Prefabs/PlayerRagdoll_Skinned.prefab` (the skinned prefab is a fully saved copy, not a variant). Serialized defaults match Chapter 2 and the detector now references the root hips `Rigidbody`, `BalanceController`, and `CharacterState`. Focused verification passed via EditMode `LocomotionDirectorEditModeTests` (8/8) and PlayMode `BalanceControllerTests` (10/10). A direct run of `PlayerRagdollPrefabPlayModeTests` now leaves `PlayerRagdollPrefab_FromBackFall_RecoversToStanding` red because its 95° back-fall setup overlaps the new surrender-era behavior; revisit that assertion during Step 12's test update pass rather than treating it as a Step 6 wiring regression.
 - 2026-03-17: Completed Step 7. `CharacterState` now uses severity-scaled surrendered floor dwell with `_minFloorDwell`, `_maxFloorDwell`, and `_reKnockdownFloorDwellCap`, preserving the legacy non-surrender path while extending dwell on higher-severity re-surrenders up to the configured cap. Added focused PlayMode coverage in `CharacterStateTests` for severity timing, input suppression during floor dwell, and capped re-knockdown extension. Verification passed via `LocomotionDirectorEditModeTests` (8/8), `CharacterStateTests` (21/21), and `HardSnapRecoveryTests` (2/2).
+- 2026-03-17: Completed Step 8. `ImpactKnockdownDetector` now treats `CharacterState.Fallen` as a vulnerable floor state by lowering the re-knockdown threshold to 40% of `_impactKnockdownDeltaV`, and `BalanceController.FixedUpdate` now re-clamps upright, height-maintenance, and COM stabilization scales to zero whenever the character is both `Fallen` and surrendered. Verification passed via `LocomotionDirectorEditModeTests` (8/8) plus PlayMode `HardSnapRecoveryTests` (2/2) after correcting the filter to target the fixture name directly. Chapter 3 is complete.

@@ -682,6 +682,22 @@ namespace PhysicsDrivenMovement.Character
             //  SetFacingDirection() is the legacy test seam that predates the command path;
             //  production code now uses SetBodySupportCommand() exclusively.
 
+            if (_characterState == null)
+            {
+                TryGetComponent(out _characterState);
+                SubscribeToCharacterState();
+            }
+
+            if (IsSurrendered &&
+                _characterState != null &&
+                _characterState.CurrentState == CharacterStateType.Fallen)
+            {
+                UprightStrengthScale = 0f;
+                HeightMaintenanceScale = 0f;
+                StabilizationScale = 0f;
+                _suppressPelvisExpression = true;
+            }
+
             // STEP 1: Update ground state from foot sensors (unless overridden by test seam).
             if (!_overrideGroundState)
             {
