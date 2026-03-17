@@ -768,6 +768,7 @@ GameObject:
   - component: {fileID: 6761110208012158854}
   - component: {fileID: 4632267047828400493}
   - component: {fileID: 7243388157421600041}
+  - component: {fileID: 5847293161038492753}
   m_Layer: 8
   m_Name: PlayerRagdoll_Skinned
   m_TagString: Untagged
@@ -1052,6 +1053,7 @@ MonoBehaviour:
   _reKnockdownFloorDwellCap: 4.5
   _getUpForce: 250
   _getUpTimeout: 3
+  _proceduralStandUp: {fileID: 5847293161038492753}
   _collapseDeferralLimit: 1
 --- !u!114 &2554630042025186111
 MonoBehaviour:
@@ -1166,6 +1168,43 @@ MonoBehaviour:
   _hipsRb: {fileID: 3830808484926529326}
   _balanceController: {fileID: 8927490194607149143}
   _characterState: {fileID: 118470987858688727}
+--- !u!114 &5847293161038492753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801282067977710084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e908b7fea834c440beaf7c65e098f05, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.ProceduralStandUp
+  _orientTorque: 120
+  _orientTimeout: 0.6
+  _proneDotThreshold: 0.5
+  _armPushForce: 180
+  _armPushSpringMultiplier: 1.5
+  _armPushTargetHeight: 0.25
+  _armPushFailHeight: 0.1
+  _armPushTimeout: 0.8
+  _legTuckSpringMultiplier: 1.2
+  _legTuckAssistForce: 80
+  _legTuckTargetHeight: 0.2
+  _legTuckFailHeight: 0.12
+  _legTuckTimeout: 0.7
+  _standSpringMultiplier: 2
+  _standUprightRampDuration: 0.4
+  _standHeightRampDuration: 0.3
+  _standStabilizationRampDuration: 0.3
+  _standStabilizationTarget: 0.8
+  _standTimeout: 0.5
+  _standHeightFraction: 0.9
+  _maxStandUpAttempts: 3
+  _forcedStandImpulse: 350
+  _completionSpringResetDuration: 0.2
+  _balanceController: {fileID: 8927490194607149143}
+  _ragdollSetup: {fileID: 6052766930640939594}
 --- !u!1 &1889336342083505185
 GameObject:
   m_ObjectHideFlags: 0

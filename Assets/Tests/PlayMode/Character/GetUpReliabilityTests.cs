@@ -25,7 +25,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // 80° surrender threshold, adding up to 3.0 s of severity-based floor dwell
         // before GettingUp begins. The budget is now (getUpTimeout * 2.5) ≈ 7.5 s,
         // covering floor dwell + procedural stand-up + margin.
-        private const float GetUpTimeoutScale = 2.5f;
+        // Floor dwell (1.5–3.0 s) + ProceduralStandUp phases (up to 2.6 s per
+        // attempt) extend recovery time beyond the base _getUpTimeout. Scale
+        // generously to allow a full retry cycle.
+        private const float GetUpTimeoutScale = 4f;
         private const float DefaultGetUpTimeout = 3f;
         private const float FallImpulseMagnitude = 400f;
         private const float DestabilizationTiltThreshold = 15f;
