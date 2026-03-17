@@ -102,3 +102,17 @@ Isolated rerun of suspect tests (`SpinRecoveryTests` + `HardSnap90` + `LapCourse
 
 Test-order sensitivity note:
 - Full-suite ordering still causes cross-fixture contamination for spin and hard-snap tests despite per-fixture layer-collision matrix save/restore. The contamination vector is not in the matrix itself (which is properly saved/restored) but likely in residual physics-engine state (cached broadphase pairs or contact caches) that persists across test fixtures when many fixtures run in the same Unity process.
+
+---
+
+## Expected Knockdown Behaviors (Comedic Knockdown Overhaul)
+
+Baseline expectations after the comedic knockdown overhaul (Steps 1–14):
+
+- **Surrender threshold:** Character MAY enter Fallen during extreme tilts (>80°) or when recovery stalls with angle above 50° for more than 0.8 s. Normal locomotion (moderate tilts, standard turning) is unaffected — surrender only fires at extreme angles or prolonged failed recoveries.
+- **External impact knockdown:** Hits delivering >5 m/s effective delta-v (direction-weighted) trigger immediate surrender and Fallen. Hits between 2.5–5 m/s apply stagger torque but do not force Fallen. During GettingUp the knockdown threshold is reduced to 60% (×0.6 multiplier). During Fallen it drops to 40% (×0.4 re-trigger).
+- **Floor dwell:** 1.5–3.0 s scaled by knockdown severity (0–1). Light stumble-surrender → ~1.5 s; full slam → ~3.0 s. Re-knockdown during dwell resets the timer with max(current, new) severity, capped at 1.5× max dwell. Non-surrender falls retain original `_getUpDelay + _knockoutDuration` timing.
+- **Procedural stand-up:** ~1.5–2.5 s via `ProceduralStandUp` (4 phases: OrientProne → ArmPush → LegTuck → Stand). Each phase is physics-gated and can fail, returning to Fallen with a short re-dwell. After 3 failures the safety-net forced stand fires. Only active for surrender-path falls; legacy impulse fallback serves non-surrender falls.
+- **Joint spring profile:** On surrender, all joint drive springs ramp to 25% of baseline over 0.15 s (limp ragdoll). Stand-up phases ramp arm/leg springs independently (arm 150%, leg 120–200%). `ResetSpringProfile` restores baseline on completion.
+- **Upright torque ramp:** `ClearSurrender` restores upright/height/stabilization scales via smooth `Ramp*` methods (0.3–0.4 s), not instant snap, to prevent stand-up pop.
+- **Test coverage:** `SurrenderTests` (4), `ImpactKnockdownTests` (5), `FloorDwellTests` (4), `ProceduralStandUpTests` (6) — all PlayMode under `Assets/Tests/PlayMode/Character/`.

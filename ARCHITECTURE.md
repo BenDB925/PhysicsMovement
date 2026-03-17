@@ -178,6 +178,26 @@
 | **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input + jump gate), `LocomotionCollapseDetector` (watchdog fall signal), `LocomotionDirector` (observation snapshot), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
 | **Phase** | 3C / unified locomotion roadmap C1.5 |
 
+### `Character.KnockdownSeverity` — `Assets/Scripts/Character/KnockdownSeverity.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Static utility class with `ComputeFromSurrender(float uprightAngle, float angularVelocity, float hipsHeight, float standingHeight)` and `ComputeFromImpact(float effectiveDeltaV, float knockdownThreshold)`. Both return a 0–1 severity float. |
+| **Why** | Centralises knockdown severity math so `BalanceController`, `ImpactKnockdownDetector`, and `LocomotionDirector` all produce the same severity scale without duplicating the formula. |
+| **Public Surface** | `ComputeFromSurrender(...)`, `ComputeFromImpact(...)` — pure functions, no state. |
+| **Collaborators** | Called by `BalanceController` (surrender detection), `ImpactKnockdownDetector` (impact classification), and `LocomotionDirector` (recovery timeout). Consumed downstream by `CharacterState.KnockdownSeverityValue`. |
+| **Phase** | Comedic knockdown overhaul Ch1 |
+
+### `Character.KnockdownEvent` — `Assets/Scripts/Character/KnockdownEvent.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Lightweight struct payload carrying `Severity`, `ImpactDirection`, `ImpactPoint`, `EffectiveDeltaV`, and `Source` for a single knockdown event. |
+| **Why** | Gives downstream consumers (future damage, scoring, VFX) a typed snapshot of the impact that caused a knockdown. |
+| **Public Surface** | Read-only fields. Raised via `ImpactKnockdownDetector.OnKnockdown`. |
+| **Collaborators** | Created by `ImpactKnockdownDetector`; consumed by any subscriber to the `OnKnockdown` event. |
+| **Phase** | Comedic knockdown overhaul Ch2 |
+
 ### `Character.ImpactKnockdownDetector` — `Assets/Scripts/Character/ImpactKnockdownDetector.cs`
 
 | Concern | Detail |
