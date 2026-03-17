@@ -38,6 +38,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                     typeof(float),
                     typeof(float),
                     typeof(float),
+                    typeof(float),
+                    typeof(bool),
                 },
                 modifiers: null);
             MethodInfo toNdjsonLineMethod = telemetryEventType?.GetMethod(
@@ -46,7 +48,7 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
 
             // Act
             object telemetryEvent = constructor?.Invoke(
-                new object[] { 123, 4.5f, nearFall, "angle_above_ceiling", 17.25f, 0.35f, 0.72f, 0.81f });
+                new object[] { 123, 4.5f, nearFall, "angle_above_ceiling", 17.25f, 0.35f, 0.72f, 0.81f, 0.9f, true });
             string ndjsonLine = toNdjsonLineMethod?.Invoke(telemetryEvent, null) as string;
 
             // Assert
@@ -68,6 +70,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             Assert.That(ndjsonLine, Does.Contain("\"SlipEstimate\""));
             Assert.That(ndjsonLine, Does.Contain("\"SupportQuality\""));
             Assert.That(ndjsonLine, Does.Contain("\"TurnSeverity\""));
+            Assert.That(ndjsonLine, Does.Contain("\"RecoveryDurationSoFar\""));
+            Assert.That(ndjsonLine, Does.Contain("\"WasSurrender\""));
         }
     }
 }

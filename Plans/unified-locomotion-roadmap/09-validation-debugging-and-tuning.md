@@ -38,7 +38,7 @@ Prevent the unified system from becoming a black box.
 ## Status
 
 - State: In Progress.
-- Current next step: C9.2c.
+- Current next step: C9.3a.
 - Active blockers: None.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
@@ -88,10 +88,11 @@ Add structured per-event logging to `LocomotionDirector` so recovery decisions a
   - Verification: New PlayMode test `LocomotionDirectorTests.RecoveryTelemetry_HardTurnScenario_LogsEntryAndExit` using `ScenarioDefinitions.HardTurn90` waypoints. Existing `LocomotionDirectorTests` still green.
   - 2026-03-17: Wired an opt-in recovery telemetry seam into `LocomotionDirector` with a 256-event in-memory ring buffer, internal `RecoveryTelemetryLog` exposure, and structured event emission on recovery entry, situation change, natural expiry, and surrender-triggered exit. Added focused PlayMode coverage in `LocomotionDirectorTests.RecoveryTelemetry_HardTurnScenario_LogsEntryAndExit` using `ScenarioDefinitions.HardTurn90`; focused verification passed `15/15` for the full `LocomotionDirectorTests` fixture.
 
-- [ ] **C9.2c Add recovery duration and outcome fields**
+- [x] **C9.2c Add recovery duration and outcome fields**
   - Scope: Extend `RecoveryTelemetryEvent` with `float RecoveryDurationSoFar` (time since recovery entry) and `bool WasSurrender` (true only on surrender events). In `LocomotionDirector`, track `_recoveryEntryTime` and populate these fields at exit/surrender. Expose `float LastRecoveryDuration` and `bool LastRecoveryEndedInSurrender` as public read-only properties.
   - Done when: PlayMode test drives a scenario that triggers surrender (angle stuck above 50° for >0.8 s), asserts `LastRecoveryEndedInSurrender == true` and `LastRecoveryDuration > 0.8f`.
   - Verification: New PlayMode test `LocomotionDirectorTests.RecoveryTelemetry_SurrenderScenario_RecordsDurationAndOutcome`. Existing tests still green.
+  - 2026-03-17: Extended `RecoveryTelemetryEvent` with `RecoveryDurationSoFar` and `WasSurrender`, and updated `ToNdjsonLine()` plus the reflection-backed EditMode payload coverage. `LocomotionDirector` now tracks `_recoveryEntryTime`, records `LastRecoveryDuration` / `LastRecoveryEndedInSurrender`, and stamps the final recovery duration/outcome onto natural-expiry and surrender telemetry events. Added focused PlayMode coverage in `LocomotionDirectorTests.RecoveryTelemetry_SurrenderScenario_RecordsDurationAndOutcome` using the existing collapse-detector seam plus a held 55° tilt to force the timeout path without tripping BalanceController's separate extreme-angle surrender. Focused verification passed `1/1` for `RecoveryTelemetryEventTests` and `16/16` for the full `LocomotionDirectorTests` fixture.
 
 ### C9.3 Outcome dashboards
 

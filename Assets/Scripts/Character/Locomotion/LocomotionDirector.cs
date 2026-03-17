@@ -149,12 +149,24 @@ namespace PhysicsDrivenMovement.Character
         private RecoveryState _currentRecoveryState;
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
+        private float _recoveryEntryTime;
+        private bool _hasRecoveryEntryTime;
         private bool? _recoveryTestOverride;
         private readonly List<RecoveryTelemetryEvent> _recoveryTelemetryLog = new List<RecoveryTelemetryEvent>(RecoveryTelemetryCapacity);
 
         public bool HasCommandFrame { get; private set; }
 
         public bool IsPassThroughMode => _passThroughMode;
+
+        /// <summary>
+        /// Duration in seconds of the most recently completed recovery window.
+        /// </summary>
+        public float LastRecoveryDuration { get; private set; }
+
+        /// <summary>
+        /// True when the most recently completed recovery ended by surrender.
+        /// </summary>
+        public bool LastRecoveryEndedInSurrender { get; private set; }
 
         /// <summary>
         /// True when the director is actively running a recovery strategy for
@@ -259,7 +271,11 @@ namespace PhysicsDrivenMovement.Character
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
+            _recoveryEntryTime = 0f;
+            _hasRecoveryEntryTime = false;
             _recoveryTelemetryLog.Clear();
+            LastRecoveryDuration = 0f;
+            LastRecoveryEndedInSurrender = false;
             _transitionGuard = null;
             _supportObservationFilter = null;
             ResetOutputs();
@@ -517,7 +533,9 @@ namespace PhysicsDrivenMovement.Character
                 _currentRecoveryState = _currentRecoveryState.Tick();
                 if (!_currentRecoveryState.IsActive)
                 {
-                    EmitRecoveryTelemetry(situationBeforeTick, "recovery_window_elapsed");
+                    float recoveryDuration = GetRecoveryDurationSoFar();
+                    CompleteRecovery(recoveryDuration, endedInSurrender: false);
+                    EmitRecoveryTelemetry(situationBeforeTick, "recovery_window_elapsed", recoveryDuration);
                     _recoveryAngleStuckTimer = 0f;
                     _transitionGuard.OnRecoveryExpired(situationBeforeTick, _recoveryExitCooldownFrames);
                 }
@@ -559,14 +577,16 @@ namespace PhysicsDrivenMovement.Character
                 angularVelocity,
                 hipsHeight,
                 _balanceController.StandingHipsHeight);
+            float recoveryDuration = GetRecoveryDurationSoFar();
 
             _balanceController.TriggerSurrender(severity);
-            EmitRecoveryTelemetry(situation, "angle_above_ceiling");
+            EmitRecoveryTelemetry(situation, "angle_above_ceiling", recoveryDuration);
 
             _transitionGuard.OnRecoveryExpired(_currentRecoveryState.Situation, _recoveryExitCooldownFrames);
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
-            EmitRecoveryTelemetry(situation, "recovery_surrendered");
+            CompleteRecovery(recoveryDuration, endedInSurrender: true);
+            EmitRecoveryTelemetry(situation, "recovery_surrendered", recoveryDuration, wasSurrender: true);
             return true;
         }
 
@@ -631,6 +651,7 @@ namespace PhysicsDrivenMovement.Character
                     duration,
                     supportRisk,
                     _currentObservation.TurnSeverity);
+                BeginRecoveryTiming();
                 EmitRecoveryTelemetry(_currentRecoveryState.Situation, GetRecoveryEntryReason(_currentRecoveryState.Situation));
             }
         }
@@ -717,7 +738,11 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
-        private void EmitRecoveryTelemetry(RecoverySituation situation, string reason)
+        private void EmitRecoveryTelemetry(
+            RecoverySituation situation,
+            string reason,
+            float recoveryDurationSoFar = -1f,
+            bool wasSurrender = false)
         {
             if (!_enableRecoveryTelemetry)
             {
@@ -737,7 +762,33 @@ namespace PhysicsDrivenMovement.Character
                 _currentObservation.UprightAngleDegrees,
                 _currentObservation.SlipEstimate,
                 _currentObservation.SupportQuality,
-                _currentObservation.TurnSeverity));
+                _currentObservation.TurnSeverity,
+                recoveryDurationSoFar >= 0f ? recoveryDurationSoFar : GetRecoveryDurationSoFar(),
+                wasSurrender));
+        }
+
+        private void BeginRecoveryTiming()
+        {
+            _recoveryEntryTime = Time.time;
+            _hasRecoveryEntryTime = true;
+        }
+
+        private float GetRecoveryDurationSoFar()
+        {
+            if (!_hasRecoveryEntryTime)
+            {
+                return 0f;
+            }
+
+            return Mathf.Max(0f, Time.time - _recoveryEntryTime);
+        }
+
+        private void CompleteRecovery(float recoveryDuration, bool endedInSurrender)
+        {
+            LastRecoveryDuration = Mathf.Max(0f, recoveryDuration);
+            LastRecoveryEndedInSurrender = endedInSurrender;
+            _recoveryEntryTime = 0f;
+            _hasRecoveryEntryTime = false;
         }
 
         private static string GetRecoveryEntryReason(RecoverySituation situation)
@@ -981,6 +1032,10 @@ namespace PhysicsDrivenMovement.Character
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
+            _recoveryEntryTime = 0f;
+            _hasRecoveryEntryTime = false;
+            LastRecoveryDuration = 0f;
+            LastRecoveryEndedInSurrender = false;
             _transitionGuard?.Reset();
             HasCommandFrame = false;
         }

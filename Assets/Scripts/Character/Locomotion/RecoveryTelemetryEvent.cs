@@ -18,7 +18,9 @@ namespace PhysicsDrivenMovement.Character
             float uprightAngle,
             float slipEstimate,
             float supportQuality,
-            float turnSeverity)
+            float turnSeverity,
+            float recoveryDurationSoFar,
+            bool wasSurrender)
         {
             FrameNumber = frameNumber;
             Time = time;
@@ -28,6 +30,8 @@ namespace PhysicsDrivenMovement.Character
             SlipEstimate = slipEstimate;
             SupportQuality = supportQuality;
             TurnSeverity = turnSeverity;
+            RecoveryDurationSoFar = recoveryDurationSoFar < 0f ? 0f : recoveryDurationSoFar;
+            WasSurrender = wasSurrender;
         }
 
         /// <summary>The fixed-update frame index when the event was emitted.</summary>
@@ -54,6 +58,12 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>The current turn-severity observation in the 0..1 band.</summary>
         public float TurnSeverity { get; }
 
+        /// <summary>The elapsed recovery duration in seconds when the event was emitted.</summary>
+        public float RecoveryDurationSoFar { get; }
+
+        /// <summary>True when the event records a recovery ending in surrender.</summary>
+        public bool WasSurrender { get; }
+
         /// <summary>
         /// Serializes the event into a single NDJSON line without taking a JSON dependency.
         /// </summary>
@@ -67,7 +77,9 @@ namespace PhysicsDrivenMovement.Character
                 "\"UprightAngle\":" + UprightAngle.ToString(CultureInfo.InvariantCulture) + "," +
                 "\"SlipEstimate\":" + SlipEstimate.ToString(CultureInfo.InvariantCulture) + "," +
                 "\"SupportQuality\":" + SupportQuality.ToString(CultureInfo.InvariantCulture) + "," +
-                "\"TurnSeverity\":" + TurnSeverity.ToString(CultureInfo.InvariantCulture) +
+                "\"TurnSeverity\":" + TurnSeverity.ToString(CultureInfo.InvariantCulture) + "," +
+                "\"RecoveryDurationSoFar\":" + RecoveryDurationSoFar.ToString(CultureInfo.InvariantCulture) + "," +
+                "\"WasSurrender\":" + (WasSurrender ? "true" : "false") +
                 "}";
         }
 

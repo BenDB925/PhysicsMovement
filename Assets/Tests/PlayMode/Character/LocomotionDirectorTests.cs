@@ -480,6 +480,85 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator RecoveryTelemetry_SurrenderScenario_RecordsDurationAndOutcome()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for Chapter 9 timeout-surrender telemetry coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            LocomotionCollapseDetector collapseDetector = _rig.Instance.GetComponent<LocomotionCollapseDetector>();
+            Assert.That(collapseDetector, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionCollapseDetector so the timeout path can enter a real Stumble recovery.");
+
+            SetPrivateField(_director, "_enableRecoveryTelemetry", true);
+            SetPrivateField(_director, "_recoveryEntryDebounceFrames", 1);
+            SetPrivateField(_director, "_surrenderRecoveryTimeout", 0.82f);
+            SetPrivateField(_director, "_surrenderRecoveryAngleCeiling", 50f);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.CharacterState.enabled = false;
+            collapseDetector.enabled = false;
+            LocomotionCollapseDetectorTestSeams.SetCollapseConfirmed(collapseDetector, true);
+
+            Quaternion stuckTiltRotation = GetTiltedRotationAtCurrentHeading(_rig.Hips, 55f);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+
+            bool enteredTimeoutRecovery = false;
+            bool surrendered = false;
+            IList telemetryLog = null;
+
+            // Act
+            int frameBudget = Mathf.CeilToInt(1.5f / Time.fixedDeltaTime);
+            for (int frame = 0; frame < frameBudget; frame++)
+            {
+                HoldHipsAtTilt(_rig.HipsBody, stuckTiltRotation);
+                yield return new WaitForFixedUpdate();
+
+                string activeSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+                enteredTimeoutRecovery |= activeSituation == "NearFall" || activeSituation == "Stumble";
+                telemetryLog = GetPropertyValue<object>(_director, "RecoveryTelemetryLog") as IList;
+
+                if (_rig.BalanceController.IsSurrendered)
+                {
+                    surrendered = true;
+                    break;
+                }
+            }
+
+            object lastTelemetryEvent = telemetryLog?[telemetryLog.Count - 1];
+            float lastRecoveryDuration = GetPropertyValue<float>(_director, "LastRecoveryDuration");
+            bool lastRecoveryEndedInSurrender = GetPropertyValue<bool>(_director, "LastRecoveryEndedInSurrender");
+            float telemetryDuration = GetPropertyValue<float>(lastTelemetryEvent, "RecoveryDurationSoFar");
+            bool telemetryWasSurrender = GetPropertyValue<bool>(lastTelemetryEvent, "WasSurrender");
+            string telemetryReason = GetPropertyValue<string>(lastTelemetryEvent, "Reason");
+            string telemetrySituation = GetPropertyValue<object>(lastTelemetryEvent, "Situation").ToString();
+
+            // Assert
+            Assert.That(enteredTimeoutRecovery, Is.True,
+                "The timeout telemetry test should enter a NearFall or Stumble recovery before checking the surrender outcome.");
+            Assert.That(surrendered, Is.True,
+                "Holding a real Stumble/NearFall recovery above the 50 degree ceiling for more than 0.8 seconds should force surrender.");
+            Assert.That(telemetryLog, Is.Not.Null,
+                "LocomotionDirector should expose the telemetry ring buffer while the timeout surrender scenario is running.");
+            Assert.That(telemetryLog.Count, Is.GreaterThanOrEqualTo(2),
+                "The timeout surrender path should log at least a recovery entry plus a surrender outcome event.");
+            Assert.That(lastRecoveryEndedInSurrender, Is.True,
+                "LocomotionDirector should remember that the most recent completed recovery ended in surrender.");
+            Assert.That(lastRecoveryDuration, Is.GreaterThan(0.8f),
+                "The cached recovery duration should record the actual time spent in recovery before timeout surrender fired.");
+            Assert.That(telemetryDuration, Is.GreaterThan(0.8f),
+                "The surrender telemetry event should preserve the recovery duration accumulated before the timeout fired.");
+            Assert.That(telemetryWasSurrender, Is.True,
+                "Only the surrender outcome event should be flagged as a surrender in the Chapter 9 telemetry payload.");
+            Assert.That(telemetryReason, Is.EqualTo("recovery_surrendered"),
+                "The final telemetry event should explain that the recovery ended by surrender instead of a natural recovery expiry.");
+            Assert.That(new[] { "NearFall", "Stumble" }, Does.Contain(telemetrySituation),
+                "The timeout surrender event should preserve the unstable recovery situation that failed instead of collapsing the payload to None.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenStandingSupportIsStable_KeepsLowRiskSupportCommandScales()
         {
             // Arrange
@@ -872,6 +951,25 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Expected type '{instance.GetType().FullName}' to expose private field '{fieldName}'.");
 
             field.SetValue(instance, value);
+        }
+
+        private static Quaternion GetTiltedRotationAtCurrentHeading(Transform hips, float tiltDegrees)
+        {
+            Vector3 planarForward = Vector3.ProjectOnPlane(hips.forward, Vector3.up);
+            if (planarForward.sqrMagnitude < 0.0001f)
+            {
+                planarForward = Vector3.forward;
+            }
+
+            Quaternion headingRotation = Quaternion.LookRotation(planarForward.normalized, Vector3.up);
+            return headingRotation * Quaternion.AngleAxis(tiltDegrees, Vector3.forward);
+        }
+
+        private static void HoldHipsAtTilt(Rigidbody hipsBody, Quaternion rotation)
+        {
+            hipsBody.MoveRotation(rotation);
+            hipsBody.linearVelocity = Vector3.zero;
+            hipsBody.angularVelocity = Vector3.zero;
         }
 
         private static float GetMirrorDeviationRadians(float leftPhase, float rightPhase)
