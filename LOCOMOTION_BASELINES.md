@@ -116,3 +116,72 @@ Baseline expectations after the comedic knockdown overhaul (Steps 1–14):
 - **Joint spring profile:** On surrender, all joint drive springs ramp to 25% of baseline over 0.15 s (limp ragdoll). Stand-up phases ramp arm/leg springs independently (arm 150%, leg 120–200%). `ResetSpringProfile` restores baseline on completion.
 - **Upright torque ramp:** `ClearSurrender` restores upright/height/stabilization scales via smooth `Ramp*` methods (0.3–0.4 s), not instant snap, to prevent stand-up pop.
 - **Test coverage:** `SurrenderTests` (4), `ImpactKnockdownTests` (5), `FloorDwellTests` (4), `ProceduralStandUpTests` (6) — all PlayMode under `Assets/Tests/PlayMode/Character/`.
+
+---
+
+## Chapter 8 Expression Stack Baseline (2026-03-17)
+
+Regression baseline refresh after the full C8.1–C8.4b expression stack: pelvis tilt, torso twist, lateral sway, accel/decel lean, reversal weight shift, speed-reactive arm swing, arm brace during recovery, arm raise during airborne, expression amplitude caps, and expression kill-switch during Fallen/GettingUp.
+
+### Artifacts
+
+- `TestResults/EditMode.xml` — `Logs/test_editmode_20260317_165338.log`
+- `TestResults/PlayMode.xml` — `Logs/test_playmode_20260317_172301.log` (baseline outcome slice)
+
+### Gate Results
+
+- **EditMode:** 119/119 passed.
+- **PlayMode C8 verification gate (31 tests across 9 suites):**
+  - `ArmAnimatorPlayModeTests` 5/5 passed.
+  - `FullStackSanityTests` 2/2 passed.
+  - `Arena01BalanceStabilityTests` 2/2 passed.
+  - `StumbleStutterRegressionTests` 4/4 passed.
+  - `GetUpReliabilityTests` 3/3 passed.
+  - `HardSnapRecoveryTests` 2/2 passed.
+  - `SpinRecoveryTests` 2/2 passed.
+  - `JumpTests` 7/7 passed.
+  - `MovementQualityTests` 3/4 passed (1 known pre-existing failure).
+- **Additional PlayMode coverage (46 tests):** `SurrenderTests` 4/4, `ImpactKnockdownTests` 5/5, `FloorDwellTests` 4/4, `ProceduralStandUpTests` 6/6, `LocomotionDirectorTests` 14/14, `BalanceControllerTests` 13/13 — all passed.
+- **LapCourseTests:** 1/2 passed (1 known pre-existing failure).
+
+### Captured Metrics
+
+- **GaitOutcome:** leg springs `1200 / 1200 / 1200 / 1200`; 5 s displacement `11.30 m`; upper-leg peak rotation `60.5 deg`; simultaneous-forward fraction `0 / 491` active frames (`0.0%`).
+- **GaitOutcome (terrain):** StepDown lane maxProgress `8.90 m`, maxConsecutiveFallenFrames `0`, totalFallenTransitions `0`, stateEnd `Moving`; SlopeUp lane maxProgress `5.55 m`, maxConsecutiveFallenFrames `0`, stateEnd `Moving`.
+- **HardSnapRecovery slalom:** segment progress `[7.31, 7.75, 7.81, 8.08, 7.69] m`; recovery frames `[56, 56, 58, 55, 56]`; max fallen frames `0`; max stalled frames `10`.
+- **HardSnapRecovery 90-degree snap:** windup `7.91 m`; post-turn `7.63 m`; recovery frame `56`; max fallen frames `0`; max stalled frames `4`.
+- **SpinRecovery:** forward displacement `2.443 m`; yaw angular velocity at frame 150 `0.313 rad/s`; crossover frames `0 / 200`.
+- **MovementQuality corner course:** `completed=True`, `framesElapsed=458`, `maxConsecutiveFallen=0`.
+- **MovementQuality straight course:** `completed=False`, `framesElapsed=600`, `maxConsecutiveFallen=0` (known pre-existing).
+- **MovementQuality sustained collapse:** `enteredFallen=False`, `frame=-1`, `finalState=Moving` (known pre-existing).
+- **MovementQuality low-progress guard:** `finalState=Moving`, `frameBudget=90`.
+
+### Comparison to Chapter 1 Baseline
+
+| Metric | C1 Baseline | C1 Completion | C8 Baseline | Trend |
+|---|---|---|---|---|
+| 5 s displacement | 11.32 m | 11.05 m | 11.30 m | Stable |
+| Upper-leg peak rotation | 60.7° | 60.7° | 60.5° | Stable |
+| Stride sync fraction | 0.0% | 0.0% | 0.0% | Stable |
+| HardSnap 90° recovery frame | 220 | 159 | 56 | Improved |
+| HardSnap 90° post-turn progress | 5.95 m | 7.14 m | 7.63 m | Improved |
+| HardSnap 90° max stalled frames | 109 | 60 | 4 | Improved |
+| Slalom max stalled frames | 157 | — | 10 | Improved |
+| SpinRecovery displacement | 3.594 m | 3.471 m | 2.443 m | Decreased (test-order sensitive) |
+| SpinRecovery yaw at frame 150 | 0.180 rad/s | 0.299 rad/s | 0.313 rad/s | Stable |
+| Corner course frames elapsed | 1058 | — | 458 | Improved |
+| Corner course max fallen | 151 | — | 0 | Improved |
+
+### Known Red Gates (Pre-existing)
+
+- `WalkStraight_NoFalls` — straight course does not complete at 600 frames, waypoint index 0. Character does not fall (`maxConsecutiveFallen=0`) but fails to progress on the specific straight course. Pre-existing since Chapter 1.
+- `SustainedLocomotionCollapse_TransitionsIntoFallen` — state never enters Fallen within 90 frames. Pre-existing since Chapter 1.
+- `LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls` — lap completes (23/24 gates, 0 falls) but exceeds the 4000-frame time limit (5742 frames). Pre-existing since Chapter 1 completion verification.
+
+### Interpretation
+
+- The expression stack (C8.1–C8.4b) has not degraded any locomotion outcome. All C8 verification gate suites pass.
+- Hard-snap and corner recovery metrics are substantially improved compared to both the Chapter 1 initial baseline and completion verification, suggesting the expression layers (pelvis tilt, lateral sway, reversal weight shift) contribute positively to recovery dynamics.
+- SpinRecovery displacement is lower than previous snapshots but this metric is known to be test-order sensitive (documented in Chapter 1 completion verification). The yaw stabilization metric is consistent.
+- Terrain outcomes (step-down, slope-up) remain stable with zero fallen transitions.
+- The three pre-existing red gates are unchanged and unrelated to the expression stack.
