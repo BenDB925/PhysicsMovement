@@ -46,6 +46,10 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0.1f, 10f)]
         private float _getUpTimeout = 3f;
 
+        [Header("Procedural Stand-Up")]
+        [SerializeField, Tooltip("Optional ProceduralStandUp component. When assigned and the fall was surrender-driven, drives the physics stand-up sequence instead of the legacy impulse.")]
+        private ProceduralStandUp _proceduralStandUp;
+
         [Header("Collapse Deferral")]
         [SerializeField, Range(0f, 3f), Tooltip("Maximum seconds collapse→Fallen can be deferred while director recovery is active.")]
         private float _collapseDeferralLimit = 1f;
@@ -61,6 +65,7 @@ namespace PhysicsDrivenMovement.Character
         private float _activeFloorDwellTargetTime;
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
+        private bool _proceduralStandUpActive;
 
         /// <summary>
         /// Raised when <see cref="CurrentState"/> changes.
@@ -273,9 +278,10 @@ namespace PhysicsDrivenMovement.Character
                     }
                     else if (_gettingUpTimer >= _getUpTimeout)
                     {
+                        CleanUpProceduralStandUp();
                         nextState = CharacterStateType.Standing;
                     }
-                    else if (!isFallen)
+                    else if (!_proceduralStandUpActive && !isFallen)
                     {
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
                     }
@@ -325,7 +331,19 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Run state-entry behavior.
             if (newState == CharacterStateType.GettingUp)
             {
-                ApplyGetUpImpulse();
+                if (WasSurrendered && _proceduralStandUp != null)
+                {
+                    BeginProceduralStandUp();
+                }
+                else
+                {
+                    ApplyGetUpImpulse();
+                }
+            }
+
+            if (previousState == CharacterStateType.GettingUp)
+            {
+                CleanUpProceduralStandUp();
             }
 
             // STEP 4: Raise OnStateChanged event with previous/new values.
@@ -385,6 +403,53 @@ namespace PhysicsDrivenMovement.Character
         private float ComputeFloorDwellDuration(float severity)
         {
             return Mathf.Lerp(_minFloorDwell, _maxFloorDwell, Mathf.Clamp01(severity));
+        }
+
+        // ─── Procedural Stand-Up Wiring ─────────────────────────────────────
+
+        private void BeginProceduralStandUp()
+        {
+            _proceduralStandUpActive = true;
+            _proceduralStandUp.OnCompleted += HandleStandUpCompleted;
+            _proceduralStandUp.OnFailed += HandleStandUpFailed;
+            _proceduralStandUp.Begin(KnockdownSeverityValue);
+        }
+
+        private void CleanUpProceduralStandUp()
+        {
+            if (!_proceduralStandUpActive) return;
+            _proceduralStandUpActive = false;
+            _proceduralStandUp.OnCompleted -= HandleStandUpCompleted;
+            _proceduralStandUp.OnFailed -= HandleStandUpFailed;
+
+            if (_proceduralStandUp.IsActive)
+            {
+                _proceduralStandUp.Abort();
+            }
+        }
+
+        private void HandleStandUpCompleted()
+        {
+            if (CurrentState != CharacterStateType.GettingUp) return;
+            CleanUpProceduralStandUp();
+
+            float moveMagnitude = _playerMovement != null ? _playerMovement.CurrentMoveInput.magnitude : 0f;
+            bool wantsMove = moveMagnitude >= _moveEnterThreshold;
+            ChangeState(wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing);
+        }
+
+        private void HandleStandUpFailed(float failureSeverity)
+        {
+            if (CurrentState != CharacterStateType.GettingUp) return;
+            CleanUpProceduralStandUp();
+
+            // Re-enter Fallen with the failure severity for a short re-dwell.
+            WasSurrendered = true;
+            KnockdownSeverityValue = failureSeverity;
+            _activeFloorDwellTargetTime = ComputeFloorDwellDuration(failureSeverity);
+            _fallenTimer = 0f;
+            _enteredFallenFromCollapse = false;
+            ChangeState(CharacterStateType.Fallen);
         }
     }
 
