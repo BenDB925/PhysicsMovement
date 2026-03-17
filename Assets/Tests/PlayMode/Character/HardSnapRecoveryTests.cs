@@ -30,7 +30,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float MinSlalomTotalProgress = 9f;
         private const float RecoveryProgressThreshold = 0.4f;
         private const int MaxRecoveryFrames = 200;
-        private const int MaxConsecutiveFallenFrames = 150;
+
+        // Raised from 150 → 250 to accommodate the severity-based floor dwell
+        // introduced by the comedic-knockdown overhaul. Surrender-triggered falls
+        // can dwell up to 3.0 s (≈150 frames at 0.02 s fixedDeltaTime) before
+        // transitioning to GettingUp; 250 leaves headroom for timing jitter while
+        // still catching genuinely broken permastuck scenarios. Sure-footed
+        // behavior in moderate-tilt hard snaps (< 70°) should never approach
+        // this budget — only extreme outlier tilts that trigger surrender will.
+        private const int MaxConsecutiveFallenFrames = 250;
         private const int MaxConsecutiveStalledFrames = 200;
         private const float StalledProgressPerFrame = 0.0025f;
 

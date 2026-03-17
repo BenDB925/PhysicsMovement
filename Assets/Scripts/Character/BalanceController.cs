@@ -368,6 +368,7 @@ namespace PhysicsDrivenMovement.Character
 
         private int _surrenderExtremeAngleFrameCount;
         private bool _suppressPelvisExpression;
+        private float _surrenderCooldownTimer;
     private SupportScaleRamp _uprightStrengthRamp;
     private SupportScaleRamp _heightMaintenanceRamp;
     private SupportScaleRamp _stabilizationRamp;
@@ -529,6 +530,10 @@ namespace PhysicsDrivenMovement.Character
             SurrenderSeverity = 0f;
             _suppressPelvisExpression = false;
             _surrenderExtremeAngleFrameCount = 0;
+
+            // Prevent immediate re-trigger while the character transitions through
+            // extreme angles during the stand-up sequence (GettingUp → Airborne → etc.).
+            _surrenderCooldownTimer = 0.5f;
 
             RampUprightStrength(1f, _clearSurrenderRampDuration);
             RampHeightMaintenance(1f, _clearSurrenderRampDuration);
@@ -1198,7 +1203,16 @@ namespace PhysicsDrivenMovement.Character
                 _rb.AddTorque(uprightTorque * uprightMultiplier, ForceMode.Force);
             }
 
-            if (!IsSurrendered)
+            // Suppress surrender detection while the character is actively getting up
+            // or shortly after ClearSurrender was called. Extreme angles are expected
+            // during the stand-up transition; re-triggering surrender here would trap
+            // the character in an endless dwell→impulse→re-surrender loop.
+            if (_surrenderCooldownTimer > 0f)
+            {
+                _surrenderCooldownTimer -= Time.fixedDeltaTime;
+                _surrenderExtremeAngleFrameCount = 0;
+            }
+            else if (!IsSurrendered)
             {
                 if (uprightAngle > _surrenderAngleThreshold)
                 {

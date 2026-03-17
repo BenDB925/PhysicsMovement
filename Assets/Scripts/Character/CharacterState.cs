@@ -179,8 +179,11 @@ namespace PhysicsDrivenMovement.Character
 
             bool collapseTriggersfall = isLocomotionCollapsed && !isRecoveryDeferringCollapse;
 
-            // STEP 1: Track fallen timer only while grounded and in Fallen.
-            if (CurrentState == CharacterStateType.Fallen && isGrounded)
+            // STEP 1: Track fallen timer while in Fallen.
+            // During surrender the character may lie flat on its back with feet off the
+            // ground, so foot-sensor grounding is unreliable. Keep counting the floor
+            // dwell timer regardless of isGrounded when WasSurrendered is true.
+            if (CurrentState == CharacterStateType.Fallen && (isGrounded || WasSurrendered))
             {
                 _fallenTimer += Time.fixedDeltaTime;
             }
@@ -246,7 +249,7 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.Fallen:
-                    if (!isGrounded)
+                    if (!isGrounded && !WasSurrendered)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -272,7 +275,10 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.GettingUp:
-                    if (!isGrounded)
+                    // During surrender recovery, suppress the Airborne transition so
+                    // the balance ramp and get-up impulse have time to right the character.
+                    // The _getUpTimeout safety net catches genuinely stuck cases.
+                    if (!isGrounded && !WasSurrendered)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -320,7 +326,10 @@ namespace PhysicsDrivenMovement.Character
             CharacterStateType previousState = CurrentState;
             CurrentState = newState;
 
-            if (newState != CharacterStateType.Fallen)
+            // Clear Fallen-specific state when leaving Fallen for anything other than
+            // GettingUp. GettingUp inherits WasSurrendered and KnockdownSeverityValue so
+            // it can choose the ProceduralStandUp path and gate its Airborne transition.
+            if (newState != CharacterStateType.Fallen && newState != CharacterStateType.GettingUp)
             {
                 _enteredFallenFromCollapse = false;
                 WasSurrendered = false;
@@ -334,6 +343,14 @@ namespace PhysicsDrivenMovement.Character
                 if (WasSurrendered && _proceduralStandUp != null)
                 {
                     BeginProceduralStandUp();
+                }
+                else if (WasSurrendered && _balanceController != null && _balanceController.IsSurrendered)
+                {
+                    // Surrender fallback: restore balance torques and joint springs but
+                    // skip the legacy get-up impulse. At extreme surrender angles (>80°)
+                    // a vertical impulse overshoots violently; letting the restored
+                    // upright torque gradually right the character is more stable.
+                    _balanceController.ClearSurrender();
                 }
                 else
                 {

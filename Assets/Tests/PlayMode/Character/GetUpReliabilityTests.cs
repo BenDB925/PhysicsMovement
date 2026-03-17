@@ -19,7 +19,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const int SettleFrames = 220;
         private const int WaitForDestabilizationFrames = 500;
-        private const float GetUpTimeoutScale = 1.5f;
+
+        // Raised from 1.5 → 2.5 to accommodate the surrender floor dwell added by
+        // the comedic-knockdown overhaul. Large impulses push the character past the
+        // 80° surrender threshold, adding up to 3.0 s of severity-based floor dwell
+        // before GettingUp begins. The budget is now (getUpTimeout * 2.5) ≈ 7.5 s,
+        // covering floor dwell + procedural stand-up + margin.
+        private const float GetUpTimeoutScale = 2.5f;
         private const float DefaultGetUpTimeout = 3f;
         private const float FallImpulseMagnitude = 400f;
         private const float DestabilizationTiltThreshold = 15f;

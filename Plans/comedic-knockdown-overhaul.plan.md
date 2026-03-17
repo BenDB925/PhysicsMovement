@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 12 — Update Existing Tests
+- Current next step: Step 13 — Surrender + Impact Tests
 - Active blockers: None
 
 ## Quick Resume
@@ -199,7 +199,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **What to do** | 1) In `HardSnapRecoveryTests`: increase `maxConsecutiveFallenFrames` from 150 to 250–300 to accommodate floor dwell. Keep "max 200 stalled frames" and "pre/post turn progress" assertions (sure-footedness must hold for moderate scenarios). Add a comment explaining why the threshold is higher. 2) In any test that asserts "character never enters Fallen during recovery": narrow the assertion to moderate-tilt scenarios (< 70°) or add a note that extreme tilts may now surrender. 3) Do NOT weaken assertions about sure-footed behavior in normal conditions. |
 | **Design ref** | Ch5 §"Existing test updates" |
 | **Done when** | EditMode compile passes. PlayMode run of updated tests passes. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 #### Step 13: Surrender + Impact Tests
 | | |
@@ -269,3 +269,10 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-17: Completed Step 8. `ImpactKnockdownDetector` now treats `CharacterState.Fallen` as a vulnerable floor state by lowering the re-knockdown threshold to 40% of `_impactKnockdownDeltaV`, and `BalanceController.FixedUpdate` now re-clamps upright, height-maintenance, and COM stabilization scales to zero whenever the character is both `Fallen` and surrendered. Verification passed via `LocomotionDirectorEditModeTests` (8/8) plus PlayMode `HardSnapRecoveryTests` (2/2) after correcting the filter to target the fixture name directly. Chapter 3 is complete.
 - 2026-03-17: Completed Step 9. `BalanceController` now exposes deterministic FixedUpdate-driven `RampUprightStrength`, `RampHeightMaintenance`, and `RampStabilization` APIs plus `CancelAllRamps()`, and `ClearSurrender()` now restores local support scales through a configurable ramp instead of snapping instantly. Added focused PlayMode coverage in `BalanceControllerTests` for timed interpolation, `ClearSurrender()` scale restoration, and ramp cancellation. Verification recorded a clean compile, EditMode `LocomotionDirectorEditModeTests` (8/8), PlayMode `BalanceControllerTests` (13/13), and batch-run `HardSnapRecoveryTests` (2/2). Chapter 4 is now ready for Step 10.
 - 2026-03-17: Completed Step 10. Created `ProceduralStandUp.cs` (~320 lines): 4-phase MonoBehaviour state machine (OrientProne → ArmPush → LegTuck → Stand) with per-phase physics forces, spring profile transitions, success/failure gates, and a forced-stand safety net after `_maxStandUpAttempts` (3). Public API: `Begin(float)`, `Abort()`, `IsActive`, `CurrentPhase`, `OnPhaseCompleted`/`OnFailed`/`OnCompleted` events. Added `ProceduralStandUp` and `StandUpPhase` entries to `ARCHITECTURE.md`. EditMode compile verified 8/8 via `LocomotionDirectorEditModeTests`.
+- 2026-03-17: Completed Step 12. Updated existing tests and fixed runtime interactions exposed by the test pass:
+  - `HardSnapRecoveryTests`: raised `MaxConsecutiveFallenFrames` 150→250 to accommodate severity-based floor dwell (up to 3.0 s = 150 frames at 0.02 s, plus jitter margin).
+  - `GetUpReliabilityTests`: raised `GetUpTimeoutScale` 1.5→2.5 to cover floor dwell + stand-up recovery.
+  - **Runtime fixes required by test failures:**
+    - `CharacterState`: fallen timer now accumulates during surrender even when `isGrounded` is false (foot sensors unreliable while lying flat). Suppressed Fallen→Airborne and GettingUp→Airborne transitions when `WasSurrendered` is true (the character is on the floor, not truly airborne). Fixed `WasSurrendered` being cleared before GettingUp entry by excluding GettingUp from the Fallen-exit cleanup. Surrender fallback now calls `ClearSurrender()` without the legacy get-up impulse (upward impulse at 88° causes violent overshoot; restored balance torques right the character gradually).
+    - `BalanceController`: added 0.5 s post-`ClearSurrender` cooldown to prevent immediate surrender re-triggering during the stand-up transition.
+  - EditMode 8/8, PlayMode 32/32 green (HardSnapRecovery + BalanceController + GetUpReliability + LocomotionDirector). Chapter 5 Step 12 complete.
