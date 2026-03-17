@@ -5,7 +5,7 @@
 
 ## Quick Load
 
-- Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label and `LocomotionCollapseDetector` as a watchdog input.
+- Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label, `LocomotionCollapseDetector` as a watchdog input, and `ImpactKnockdownDetector` as the external-force entry point into the surrender/knockdown path.
 - The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
 - `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity`; both now share `TerrainScenarioBuilder` for Chapter 7 terrain galleries.
 - The `Environment` assembly now carries both room metadata (`ArenaRoom`) and terrain scenario metadata (`TerrainScenarioMarker`, `TerrainScenarioType`) so generated scenes expose stable query surfaces at runtime.
@@ -44,6 +44,7 @@
 │  LocomotionDirector     ─── desired input + observations →        │
 │                           support / leg command frames            │
 │  CharacterState         ─── FSM (Standing/Moving/Airborne/...)    │
+│  ImpactKnockdownDetector ─ external hit → surrender / stagger     │
 │  LocomotionCollapseDetector ─ root stalled-collapse fall trigger   │
 │  LegAnimator            ─── explicit leg-command executor         │
 │  ArmAnimator            ─── counter-swing arm gait                │
@@ -133,8 +134,8 @@
 |---------|--------|
 | **What** | MonoBehaviour on the Hips; pure executor that applies PD torque every FixedUpdate to carry out the current `BodySupportCommand` — upright, yaw, height maintenance, and COM lean alignment. |
 | **Why** | Active ragdolls need continuous corrective torque to counteract gravity and perturbations. All locomotion-specific support intent now comes exclusively from `LocomotionDirector` via `BodySupportCommand`; the controller no longer introduces independent locomotion heuristics. |
-| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `StandingHipsHeight: float`, `SetFacingDirection(Vector3)` [Obsolete — kept for test compatibility]. The runtime support-command path is consumed internally from `LocomotionDirector`. |
-| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector` (upright/yaw/stabilization strength, height maintenance scale, desired lean degrees); uses `CharacterState` only for fallen/get-up yaw suppression; feeds diagnostics through fallen/grounded state. |
+| **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `UprightAngle: float`, `IsSurrendered: bool`, `SurrenderSeverity: float`, `StandingHipsHeight: float`, `TriggerSurrender(float)`, `ClearSurrender()`, `SetFacingDirection(Vector3)` [Obsolete — kept for test compatibility]. The runtime support-command path is consumed internally from `LocomotionDirector`. |
+| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector` (upright/yaw/stabilization strength, height maintenance scale, desired lean degrees); uses `CharacterState` for fallen/get-up yaw suppression and downstream knockdown state timing; feeds diagnostics through fallen/grounded state. |
 | **Phase** | Unified locomotion roadmap C5 |
 
 ### `Character.PlayerMovement` — `Assets/Scripts/Character/PlayerMovement.cs`
@@ -173,9 +174,19 @@
 |---------|--------|
 | **What** | MonoBehaviour on Hips; FSM with states `Standing / Moving / Airborne / Fallen / GettingUp`. |
 | **Why** | Centralises high-level state labels so LegAnimator, ArmAnimator, BalanceController, and PlayerMovement can all read a single authoritative safety state without deriving gait strategy locally. |
-| **Public Surface** | `CurrentState: CharacterStateType`, `OnStateChanged` event, `SetStateForTest(CharacterStateType)` — test seam. |
+| **Public Surface** | `CurrentState: CharacterStateType`, `WasSurrendered: bool`, `KnockdownSeverityValue: float`, `OnStateChanged` event, `SetStateForTest(CharacterStateType)` — test seam. |
 | **Collaborators** | `BalanceController` (IsGrounded, IsFallen), `PlayerMovement` (move input + jump gate), `LocomotionCollapseDetector` (watchdog fall signal), `LocomotionDirector` (observation snapshot), `LegAnimator` / `ArmAnimator` (subscribe to OnStateChanged). |
 | **Phase** | 3C / unified locomotion roadmap C1.5 |
+
+### `Character.ImpactKnockdownDetector` — `Assets/Scripts/Character/ImpactKnockdownDetector.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour on the Hips or another central body part; filters collision impulses, converts them into a direction-weighted effective delta-v, and either triggers immediate surrender or applies a smaller stagger torque. |
+| **Why** | Gives external world hits a clean path into the knockdown system even when the balance controller could otherwise muscle through the impact. |
+| **Public Surface** | `OnKnockdown` event carrying `KnockdownEvent` (`Severity`, `ImpactDirection`, `ImpactPoint`, `EffectiveDeltaV`, `Source`). Uses `KnockdownSeverity.ComputeFromImpact(...)` to map weighted impact strength into the shared 0–1 severity scale. |
+| **Collaborators** | Reads `CharacterState.CurrentState` for getting-up vulnerability, calls `BalanceController.TriggerSurrender(float)` for instant knockdowns, uses the local `Rigidbody` for impact math, and intentionally ignores self and ground contacts. |
+| **Phase** | Comedic knockdown overhaul Ch2 |
 
 ### `Character.LocomotionCollapseDetector` — `Assets/Scripts/Character/LocomotionCollapseDetector.cs`
 
