@@ -490,6 +490,98 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"airborne angle ({airAngle:F2}°), confirming the raised pose has blended out.");
         }
 
+        /// <summary>
+        /// C8.5c PlayMode: During the jump wind-up phase, arms must pull back visibly
+        /// (shoulder extension). During the launch phase, arms must thrust forward.
+        /// The direction of the arm swing axis Z-delta should reverse between the two
+        /// phases, confirming the pull-back → thrust-forward sequence.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DuringJump_ArmsPullBackInWindUp_AndThrustForwardOnLaunch()
+        {
+            // Arrange — settle, standing and grounded.
+            yield return WaitPhysicsFrames(SettleFrames);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+
+            ArmAnimator armAnimator = _hipsGO.GetComponent<ArmAnimator>();
+            Assert.That(armAnimator, Is.Not.Null, "ArmAnimator must be present.");
+
+            var windUpBlendField = typeof(ArmAnimator).GetField("_jumpWindUpBlend",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var launchBlendField = typeof(ArmAnimator).GetField("_jumpLaunchBlend",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+
+            // Use a small jump force so the character doesn't fly far.
+            typeof(PlayerMovement).GetField("_jumpForce",
+                BindingFlags.NonPublic | BindingFlags.Instance)
+                .SetValue(_movement, 5f);
+
+            // Measure rest arm rotations for comparison.
+            Quaternion restL = _upperArmLJoint.targetRotation;
+            Quaternion restR = _upperArmRJoint.targetRotation;
+
+            // Act — trigger jump.
+            _movement.SetJumpInputForTest(true);
+
+            // Wait for wind-up blend to ramp up.
+            // At _jumpArmBlendSpeed 12 and fixedDeltaTime 0.01: 12 frames → 1.44 (clamped to 1).
+            yield return WaitPhysicsFrames(12);
+
+            float windUpBlend = windUpBlendField != null
+                ? (float)windUpBlendField.GetValue(armAnimator) : -1f;
+            Assert.That(windUpBlend, Is.GreaterThanOrEqualTo(0.8f),
+                $"Wind-up arm blend should be near 1.0 after 12 frames. Got {windUpBlend:F3}.");
+
+            // Measure wind-up arm displacement from rest — should show visible pull-back.
+            Quaternion windUpL = _upperArmLJoint.targetRotation;
+            Quaternion windUpR = _upperArmRJoint.targetRotation;
+            float windUpAngle = Mathf.Max(
+                Quaternion.Angle(windUpL, restL),
+                Quaternion.Angle(windUpR, restR));
+
+            Assert.That(windUpAngle, Is.GreaterThan(5f),
+                $"During wind-up, arms should pull back visibly from rest. " +
+                $"Max angle from rest = {windUpAngle:F2}°.");
+
+            // Record signed Z-delta for direction check (negative = arm pulled backward).
+            float windUpZDelta = (Mathf.DeltaAngle(0f, windUpL.eulerAngles.z)
+                                - Mathf.DeltaAngle(0f, restL.eulerAngles.z)
+                                + Mathf.DeltaAngle(0f, windUpR.eulerAngles.z)
+                                - Mathf.DeltaAngle(0f, restR.eulerAngles.z)) * 0.5f;
+
+            // Wait for launch phase. Wind-up is 0.2 s = 20 frames total; 12 used,
+            // so 8 more to reach launch start, then 8 more for launch blend to ramp.
+            yield return WaitPhysicsFrames(16);
+
+            float launchBlend = launchBlendField != null
+                ? (float)launchBlendField.GetValue(armAnimator) : -1f;
+            Assert.That(launchBlend, Is.GreaterThanOrEqualTo(0.5f),
+                $"Launch arm blend should be ramping toward 1.0. Got {launchBlend:F3}.");
+
+            // Measure launch arm displacement from rest — should exceed wind-up.
+            Quaternion launchL = _upperArmLJoint.targetRotation;
+            Quaternion launchR = _upperArmRJoint.targetRotation;
+            float launchAngle = Mathf.Max(
+                Quaternion.Angle(launchL, restL),
+                Quaternion.Angle(launchR, restR));
+
+            Assert.That(launchAngle, Is.GreaterThan(windUpAngle),
+                $"During launch, arm displacement ({launchAngle:F2}°) should exceed " +
+                $"wind-up displacement ({windUpAngle:F2}°) due to larger thrust angle.");
+
+            // Confirm direction reversal: wind-up Z-delta and launch Z-delta should
+            // have opposite signs (pull-back vs thrust-forward).
+            float launchZDelta = (Mathf.DeltaAngle(0f, launchL.eulerAngles.z)
+                                - Mathf.DeltaAngle(0f, restL.eulerAngles.z)
+                                + Mathf.DeltaAngle(0f, launchR.eulerAngles.z)
+                                - Mathf.DeltaAngle(0f, restR.eulerAngles.z)) * 0.5f;
+
+            Assert.That(Mathf.Sign(windUpZDelta), Is.Not.EqualTo(Mathf.Sign(launchZDelta)),
+                $"Wind-up Z-delta ({windUpZDelta:F2}°) and launch Z-delta ({launchZDelta:F2}°) " +
+                "should have opposite signs, confirming pull-back then thrust-forward.");
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         private static IEnumerator WaitPhysicsFrames(int count)

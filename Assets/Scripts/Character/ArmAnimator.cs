@@ -113,6 +113,32 @@ namespace PhysicsDrivenMovement.Character
                  "and blends out on landing (units per second).")]
         private float _airborneBlendSpeed = 6f;
 
+        [Header("Jump Arm Coordination (C8.5c)")]
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Degrees both arms pull backward (shoulder extension) during jump wind-up. " +
+                 "Creates a visible crouch-and-load pose before the spring.")]
+        private float _jumpWindUpPullBackDeg = 15f;
+
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra elbow bend (degrees) added during jump wind-up. " +
+                 "Tightens forearms for a braced crouch appearance.")]
+        private float _jumpWindUpElbowBoost = 10f;
+
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Degrees both arms thrust forward during jump launch phase. " +
+                 "Amplifies the visual spring-upward motion.")]
+        private float _jumpLaunchThrustDeg = 30f;
+
+        [SerializeField, Range(0f, 30f)]
+        [Tooltip("Reduction in elbow bend (degrees) during launch. " +
+                 "Straightens forearms as arms thrust upward.")]
+        private float _jumpLaunchElbowStraighten = 10f;
+
+        [SerializeField, Range(1f, 30f)]
+        [Tooltip("Rate at which jump arm blends ramp in during wind-up and launch, " +
+                 "and decay after the phase ends (units per second).")]
+        private float _jumpArmBlendSpeed = 12f;
+
         [Header("Expression Amplitude Caps")]
         [SerializeField, Range(0f, 90f)]
         [Tooltip("Hard cap (degrees) on the final upper-arm swing angle after all " +
@@ -201,6 +227,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Smoothed 0–1 blend toward the airborne raised-arm pose.</summary>
         private float _currentAirborneBlend;
+
+        /// <summary>C8.5c: 0–1 blend toward the jump wind-up arm pose (pulled back).</summary>
+        private float _jumpWindUpBlend;
+
+        /// <summary>C8.5c: 0–1 blend toward the jump launch arm pose (thrust forward).</summary>
+        private float _jumpLaunchBlend;
 
         /// <summary>Rest abduction rotation cached in Awake for the left upper arm (negative angle).</summary>
         private Quaternion _abductionL;
@@ -307,6 +339,8 @@ namespace PhysicsDrivenMovement.Character
             {
                 _currentAirborneBlend = 0f;
                 _currentBraceBlend = 0f;
+                _jumpWindUpBlend = 0f;
+                _jumpLaunchBlend = 0f;
                 SetAllArmTargetsToRest();
                 return;
             }
@@ -315,6 +349,19 @@ namespace PhysicsDrivenMovement.Character
             float airborneTarget = _isAirborne ? 1f : 0f;
             _currentAirborneBlend = Mathf.MoveTowards(_currentAirborneBlend, airborneTarget,
                 _airborneBlendSpeed * Time.fixedDeltaTime);
+
+            // STEP 0b: Track jump arm phase from PlayerMovement (C8.5c).
+            JumpPhase jumpPhase = _playerMovement != null
+                ? _playerMovement.CurrentJumpPhase
+                : JumpPhase.None;
+            float windUpTarget = jumpPhase == JumpPhase.WindUp ? 1f : 0f;
+            float launchTarget = jumpPhase == JumpPhase.Launch ? 1f : 0f;
+            _jumpWindUpBlend = Mathf.MoveTowards(_jumpWindUpBlend, windUpTarget,
+                _jumpArmBlendSpeed * Time.fixedDeltaTime);
+            _jumpLaunchBlend = Mathf.MoveTowards(_jumpLaunchBlend, launchTarget,
+                _jumpArmBlendSpeed * Time.fixedDeltaTime);
+
+            bool jumpArmActive = _jumpWindUpBlend > 0.01f || _jumpLaunchBlend > 0.01f;
 
             // STEP 1: Gate on missing LegAnimator — apply airborne pose if blending, else rest.
             if (_legAnimator == null)
@@ -328,9 +375,9 @@ namespace PhysicsDrivenMovement.Character
 
             float smoothedInputMag = _legAnimator.SmoothedInputMag;
 
-            // STEP 2: When SmoothedInputMag is near zero and not airborne,
-            //         set arm targets to rest abduction pose (or airborne blend) and return.
-            if (smoothedInputMag < 0.01f && _currentAirborneBlend <= 0f)
+            // STEP 2: When SmoothedInputMag is near zero, not airborne, and no jump
+            //         arm blend is active, set arm targets to rest pose and return.
+            if (smoothedInputMag < 0.01f && _currentAirborneBlend <= 0f && !jumpArmActive)
             {
                 SetAllArmTargetsToRest();
                 return;
@@ -388,6 +435,33 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4b: Clamp swing angles to the hard cap.
             leftSwingDeg  = Mathf.Clamp(leftSwingDeg,  -_maxSwingAngleDeg, _maxSwingAngleDeg);
             rightSwingDeg = Mathf.Clamp(rightSwingDeg, -_maxSwingAngleDeg, _maxSwingAngleDeg);
+
+            // STEP 4c: Jump arm coordination (C8.5c).
+            // During wind-up both arms pull back; during launch both arms thrust forward.
+            // Blends are composed additively so the transition from launch → airborne
+            // (handled by existing STEP 5) is seamless.
+            float totalJumpBlend = Mathf.Clamp01(_jumpWindUpBlend + _jumpLaunchBlend);
+            if (totalJumpBlend > 0f)
+            {
+                float windUpDeg = -_jumpWindUpPullBackDeg;
+                float launchDeg = _jumpLaunchThrustDeg;
+
+                float blendSum = _jumpWindUpBlend + _jumpLaunchBlend;
+                float launchWeight = blendSum > 0f ? _jumpLaunchBlend / blendSum : 0f;
+                float jumpSwingDeg = Mathf.Lerp(windUpDeg, launchDeg, launchWeight);
+
+                leftSwingDeg  = Mathf.Lerp(leftSwingDeg,  jumpSwingDeg, totalJumpBlend);
+                rightSwingDeg = Mathf.Lerp(rightSwingDeg, jumpSwingDeg, totalJumpBlend);
+
+                leftSwingDeg  = Mathf.Clamp(leftSwingDeg,  -_maxSwingAngleDeg, _maxSwingAngleDeg);
+                rightSwingDeg = Mathf.Clamp(rightSwingDeg, -_maxSwingAngleDeg, _maxSwingAngleDeg);
+
+                float jumpElbowOffset = Mathf.Lerp(
+                    _jumpWindUpElbowBoost, -_jumpLaunchElbowStraighten, launchWeight);
+                effectiveElbowBendAngle = Mathf.Clamp(
+                    effectiveElbowBendAngle + jumpElbowOffset * totalJumpBlend,
+                    0f, _maxElbowAngleDeg);
+            }
 
             // STEP 5: Apply upper arm swing rotations using local-space targetRotation.
             //         When airborne blend > 0, interpolate between gait swing and the
