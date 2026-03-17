@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 13 — Surrender + Impact Tests
+- Current next step: Step 14 — Floor Dwell + Stand-Up Tests
 - Active blockers: None
 
 ## Quick Resume
@@ -211,7 +211,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Create new test utilities unless absolutely needed — prefer using existing `PlayerPrefabTestRig` and `GhostDriver`. |
 | **Design ref** | Ch5 §"Surrender tests", §"External impact tests" |
 | **Done when** | EditMode compile passes. PlayMode run of new tests passes. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 #### Step 14: Floor Dwell + Stand-Up Tests
 | | |
@@ -276,3 +276,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
     - `CharacterState`: fallen timer now accumulates during surrender even when `isGrounded` is false (foot sensors unreliable while lying flat). Suppressed Fallen→Airborne and GettingUp→Airborne transitions when `WasSurrendered` is true (the character is on the floor, not truly airborne). Fixed `WasSurrendered` being cleared before GettingUp entry by excluding GettingUp from the Fallen-exit cleanup. Surrender fallback now calls `ClearSurrender()` without the legacy get-up impulse (upward impulse at 88° causes violent overshoot; restored balance torques right the character gradually).
     - `BalanceController`: added 0.5 s post-`ClearSurrender` cooldown to prevent immediate surrender re-triggering during the stand-up transition.
   - EditMode 8/8, PlayMode 32/32 green (HardSnapRecovery + BalanceController + GetUpReliability + LocomotionDirector). Chapter 5 Step 12 complete.
+- 2026-03-17: Completed Step 13. Created `SurrenderTests.cs` (4 tests: extreme angle, recovery timeout, moderate-tilt no-fire, joint spring ramp-down) and `ImpactKnockdownTests.cs` (5 tests: high-velocity knockdown, medium-velocity stagger, self-collision filtering, re-knockdown during GettingUp, cooldown deduplication). All 9 tests green. Test-discovered runtime bug: GettingUp had no transition path back to Fallen when an external impact re-triggered surrender while IsSurrendered was still true. Fixed by adding `SurrenderTriggerCount` (monotonic counter on BalanceController) and a re-knockdown check in CharacterState's GettingUp case. Projectile tests use `Physics.IgnoreCollision` to phase through child body-part colliders, ensuring OnCollisionEnter fires on the hips BoxCollider where ImpactKnockdownDetector lives. EditMode 119/119, PlayMode 245/272 (8 pre-existing reds unchanged).
