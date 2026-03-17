@@ -303,6 +303,122 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenSurrenderedFallen_UsesSeverityScaledFloorDwellBeforeGettingUp()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_characterState, "_minFloorDwell", 0.2f);
+            SetPrivateField(_characterState, "_maxFloorDwell", 0.4f);
+            SetPrivateField(_characterState, "_reKnockdownFloorDwellCap", 0.6f);
+            bool transitionedToGettingUp = false;
+            _characterState.OnStateChanged += (_, next) =>
+            {
+                if (next == CharacterStateType.GettingUp)
+                {
+                    transitionedToGettingUp = true;
+                }
+            };
+
+            _balance.TriggerSurrender(0.5f);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            yield return new WaitForFixedUpdate();
+            bool wasSurrenderedAtFallenEntry = _characterState.WasSurrendered;
+            float capturedSeverity = _characterState.KnockdownSeverityValue;
+
+            // Act
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            float floorDwellTarget = (float)GetPrivateField(_characterState, "_activeFloorDwellTargetTime");
+
+            yield return WaitForPhysicsFrames(25);
+            CharacterStateType stateBeforeDwellExpiry = _characterState.CurrentState;
+
+            yield return WaitForPhysicsFrames(10);
+
+            // Assert
+            Assert.That(wasSurrenderedAtFallenEntry, Is.True,
+                "Surrendered falls must stay on the severity-driven floor-dwell path.");
+            Assert.That(capturedSeverity, Is.EqualTo(0.5f).Within(0.001f),
+                "CharacterState must capture surrender severity at Fallen entry.");
+            Assert.That(floorDwellTarget, Is.EqualTo(0.3f).Within(0.001f),
+                "Severity 0.5 should map to the midpoint between min and max floor dwell.");
+            Assert.That(stateBeforeDwellExpiry, Is.EqualTo(CharacterStateType.Fallen),
+                "Character should remain Fallen until the configured floor dwell expires.");
+            Assert.That(transitionedToGettingUp, Is.True,
+                "Character should enter GettingUp once the surrendered floor dwell duration expires.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenSurrenderedFallenAndMoveInputHeld_DoesNotExitFloorDwellEarly()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_characterState, "_minFloorDwell", 0.25f);
+            SetPrivateField(_characterState, "_maxFloorDwell", 0.25f);
+            SetPrivateField(_characterState, "_reKnockdownFloorDwellCap", 0.5f);
+
+            _movement.SetMoveInputForTest(new Vector2(1f, 0f));
+            _balance.TriggerSurrender(0.6f);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            yield return new WaitForFixedUpdate();
+
+            // Act
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitForPhysicsFrames(12);
+
+            // Assert
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Fallen),
+                "Move input must not bypass surrendered floor dwell before the timer expires.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenReSurrenderedDuringFloorDwell_ExtendsExpiryUpToConfiguredCap()
+        {
+            // Arrange
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_characterState, "_minFloorDwell", 0.2f);
+            SetPrivateField(_characterState, "_maxFloorDwell", 0.4f);
+            SetPrivateField(_characterState, "_reKnockdownFloorDwellCap", 0.55f);
+            bool transitionedToGettingUp = false;
+            _characterState.OnStateChanged += (_, next) =>
+            {
+                if (next == CharacterStateType.GettingUp)
+                {
+                    transitionedToGettingUp = true;
+                }
+            };
+
+            _balance.TriggerSurrender(0.2f);
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            yield return new WaitForFixedUpdate();
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return WaitForPhysicsFrames(15);
+
+            // Act
+            _balance.TriggerSurrender(1f);
+            yield return new WaitForFixedUpdate();
+            float capturedSeverityAfterReSurrender = _characterState.KnockdownSeverityValue;
+            float floorDwellTarget = (float)GetPrivateField(_characterState, "_activeFloorDwellTargetTime");
+
+            yield return WaitForPhysicsFrames(24);
+            CharacterStateType stateBeforeCapExpiry = _characterState.CurrentState;
+
+            yield return WaitForPhysicsFrames(18);
+
+            // Assert
+            Assert.That(capturedSeverityAfterReSurrender, Is.EqualTo(1f).Within(0.001f),
+                "Re-knockdown should preserve the highest seen surrender severity.");
+            Assert.That(floorDwellTarget, Is.EqualTo(0.55f).Within(0.001f),
+                "Re-knockdown should extend the active floor dwell, capped at the configured maximum total time.");
+            Assert.That(stateBeforeCapExpiry, Is.EqualTo(CharacterStateType.Fallen),
+                "Character should remain Fallen until the capped re-knockdown dwell expires.");
+            Assert.That(transitionedToGettingUp, Is.True,
+                "Character should resume GettingUp after the capped re-knockdown dwell expires.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenGettingUpExceedsTimeout_TransitionsToStanding()
         {
             yield return WaitForPhysicsFrames(SettleFrames);

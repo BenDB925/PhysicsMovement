@@ -17,6 +17,8 @@ namespace PhysicsDrivenMovement.Character
     [RequireComponent(typeof(BalanceController))]
     public class CharacterState : MonoBehaviour
     {
+        private const float SurrenderSeverityEpsilon = 0.0001f;
+
         [SerializeField, Range(0f, 1f)]
         private float _moveEnterThreshold = 0.1f;
 
@@ -28,6 +30,15 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0f, 10f)]
         private float _knockoutDuration = 1.5f;
+
+        [SerializeField, Range(0f, 10f)]
+        private float _minFloorDwell = 1.5f;
+
+        [SerializeField, Range(0f, 10f)]
+        private float _maxFloorDwell = 3f;
+
+        [SerializeField, Range(0f, 15f)]
+        private float _reKnockdownFloorDwellCap = 4.5f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _getUpForce = 250f;
@@ -47,6 +58,7 @@ namespace PhysicsDrivenMovement.Character
         private float _fallenTimer;
         private float _gettingUpTimer;
         private float _collapseDeferralTimer;
+        private float _activeFloorDwellTargetTime;
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
 
@@ -233,6 +245,17 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Airborne;
                     }
+                    else if (TryRefreshSurrenderFloorDwell())
+                    {
+                        nextState = CharacterStateType.Fallen;
+                    }
+                    else if (WasSurrendered)
+                    {
+                        if (_fallenTimer >= _activeFloorDwellTargetTime)
+                        {
+                            nextState = CharacterStateType.GettingUp;
+                        }
+                    }
                     else if (_enteredFallenFromCollapse && !isFallen && !isLocomotionCollapsed)
                     {
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
@@ -261,18 +284,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (nextState != CurrentState && nextState == CharacterStateType.Fallen)
             {
-                _enteredFallenFromCollapse = !isFallen && isLocomotionCollapsed;
-
-                if (_balanceController.IsSurrendered)
-                {
-                    WasSurrendered = true;
-                    KnockdownSeverityValue = _balanceController.SurrenderSeverity;
-                }
-                else
-                {
-                    WasSurrendered = false;
-                    KnockdownSeverityValue = 0f;
-                }
+                CaptureFallenEntryState(isFallen, isLocomotionCollapsed);
             }
 
             ChangeState(nextState);
@@ -307,6 +319,7 @@ namespace PhysicsDrivenMovement.Character
                 _enteredFallenFromCollapse = false;
                 WasSurrendered = false;
                 KnockdownSeverityValue = 0f;
+                _activeFloorDwellTargetTime = 0f;
             }
 
             // STEP 3: Run state-entry behavior.
@@ -328,6 +341,50 @@ namespace PhysicsDrivenMovement.Character
 
             _rb.AddForce(Vector3.up * _getUpForce, ForceMode.Impulse);
             _getUpImpulseAppliedCount++;
+        }
+
+        private void CaptureFallenEntryState(bool isFallen, bool isLocomotionCollapsed)
+        {
+            _enteredFallenFromCollapse = !isFallen && isLocomotionCollapsed;
+            _activeFloorDwellTargetTime = 0f;
+
+            if (_balanceController != null && _balanceController.IsSurrendered)
+            {
+                WasSurrendered = true;
+                KnockdownSeverityValue = _balanceController.SurrenderSeverity;
+                _activeFloorDwellTargetTime = ComputeFloorDwellDuration(KnockdownSeverityValue);
+                return;
+            }
+
+            WasSurrendered = false;
+            KnockdownSeverityValue = 0f;
+        }
+
+        private bool TryRefreshSurrenderFloorDwell()
+        {
+            if (_balanceController == null || !_balanceController.IsSurrendered)
+            {
+                return false;
+            }
+
+            float observedSeverity = Mathf.Max(KnockdownSeverityValue, _balanceController.SurrenderSeverity);
+            bool isNewSurrender = !WasSurrendered;
+            bool severityIncreased = observedSeverity > KnockdownSeverityValue + SurrenderSeverityEpsilon;
+            if (!isNewSurrender && !severityIncreased)
+            {
+                return false;
+            }
+
+            WasSurrendered = true;
+            KnockdownSeverityValue = observedSeverity;
+            float refreshedFloorDwell = _fallenTimer + ComputeFloorDwellDuration(observedSeverity);
+            _activeFloorDwellTargetTime = Mathf.Min(refreshedFloorDwell, _reKnockdownFloorDwellCap);
+            return true;
+        }
+
+        private float ComputeFloorDwellDuration(float severity)
+        {
+            return Mathf.Lerp(_minFloorDwell, _maxFloorDwell, Mathf.Clamp01(severity));
         }
     }
 
