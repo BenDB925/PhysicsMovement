@@ -406,6 +406,14 @@ namespace PhysicsDrivenMovement.Character
         public float SurrenderSeverity { get; private set; }
 
         /// <summary>
+        /// Monotonically increasing counter incremented on every
+        /// <see cref="TriggerSurrender"/> call, even when already surrendered.
+        /// Allows observers to detect re-knockdown while <see cref="IsSurrendered"/>
+        /// is still true (e.g. an impact during GettingUp).
+        /// </summary>
+        public int SurrenderTriggerCount { get; private set; }
+
+        /// <summary>
         /// Local multiplier layered on top of <see cref="BodySupportCommand.UprightStrengthScale"/>.
         /// </summary>
         public float UprightStrengthScale { get; private set; } = 1f;
@@ -495,6 +503,7 @@ namespace PhysicsDrivenMovement.Character
         {
             float clampedSeverity = Mathf.Clamp01(severity);
             SurrenderSeverity = Mathf.Max(SurrenderSeverity, clampedSeverity);
+            SurrenderTriggerCount++;
 
             if (IsSurrendered)
             {

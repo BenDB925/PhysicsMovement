@@ -66,6 +66,7 @@ namespace PhysicsDrivenMovement.Character
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
         private bool _proceduralStandUpActive;
+        private int _surrenderCountAtGettingUpEntry;
 
         /// <summary>
         /// Raised when <see cref="CurrentState"/> changes.
@@ -275,10 +276,19 @@ namespace PhysicsDrivenMovement.Character
                     break;
 
                 case CharacterStateType.GettingUp:
+                    // Re-knockdown: an external impact called TriggerSurrender while
+                    // already surrendered. The counter increment signals a new hit that
+                    // should abort getting up and re-enter Fallen.
+                    if (_balanceController != null &&
+                        _balanceController.SurrenderTriggerCount > _surrenderCountAtGettingUpEntry)
+                    {
+                        CleanUpProceduralStandUp();
+                        nextState = CharacterStateType.Fallen;
+                    }
                     // During surrender recovery, suppress the Airborne transition so
                     // the balance ramp and get-up impulse have time to right the character.
                     // The _getUpTimeout safety net catches genuinely stuck cases.
-                    if (!isGrounded && !WasSurrendered)
+                    else if (!isGrounded && !WasSurrendered)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -340,6 +350,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3: Run state-entry behavior.
             if (newState == CharacterStateType.GettingUp)
             {
+                _surrenderCountAtGettingUpEntry = _balanceController != null
+                    ? _balanceController.SurrenderTriggerCount
+                    : 0;
+
                 if (WasSurrendered && _proceduralStandUp != null)
                 {
                     BeginProceduralStandUp();
