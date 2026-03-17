@@ -74,6 +74,15 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum extra forward lean angle (degrees) requested at full sprint. Scales with SprintNormalized so sprint posture ramps through the same blend window as sprint speed.")]
         private float _maxSprintLeanDegrees = 8f;
 
+        [Header("Surrender Recovery Timeout")]
+        [SerializeField, Range(0.2f, 3f)]
+        [Tooltip("Seconds a Stumble/NearFall recovery may run with angle above the ceiling before the director forces surrender.")]
+        private float _surrenderRecoveryTimeout = 0.8f;
+
+        [SerializeField, Range(20f, 80f)]
+        [Tooltip("Upright angle (degrees) the character must stay above for the recovery timeout to accumulate. Dropping below resets the timer.")]
+        private float _surrenderRecoveryAngleCeiling = 50f;
+
         [Header("Recovery Transition Hysteresis")]
         [SerializeField, Range(1, 10)]
         [Tooltip("Minimum consecutive frames a recovery situation must persist before entering recovery. NearFall and Stumble use half this value.")]
@@ -132,6 +141,7 @@ namespace PhysicsDrivenMovement.Character
         private float _nextObservationTelemetryTime;
         private RecoveryState _currentRecoveryState;
         private RecoveryTransitionGuard _transitionGuard;
+        private float _recoveryAngleStuckTimer;
 
         public bool HasCommandFrame { get; private set; }
 
@@ -223,6 +233,7 @@ namespace PhysicsDrivenMovement.Character
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
+            _recoveryAngleStuckTimer = 0f;
             _transitionGuard = null;
             _supportObservationFilter = null;
             ResetOutputs();
@@ -469,13 +480,65 @@ namespace PhysicsDrivenMovement.Character
             if (_currentRecoveryState.IsActive)
             {
                 _transitionGuard.TickRampIn();
+
+                // STEP 5a: Check for surrender recovery timeout on high-priority situations.
+                if (CheckRecoveryTimeoutSurrender())
+                {
+                    return;
+                }
+
                 RecoverySituation situationBeforeTick = _currentRecoveryState.Situation;
                 _currentRecoveryState = _currentRecoveryState.Tick();
                 if (!_currentRecoveryState.IsActive)
                 {
+                    _recoveryAngleStuckTimer = 0f;
                     _transitionGuard.OnRecoveryExpired(situationBeforeTick, _recoveryExitCooldownFrames);
                 }
             }
+        }
+
+        /// <summary>
+        /// Checks whether the current Stumble/NearFall recovery has timed out with the
+        /// upright angle stuck above <see cref="_surrenderRecoveryAngleCeiling"/>. When the
+        /// timeout fires, forces surrender and exits recovery.
+        /// </summary>
+        /// <returns>True if surrender was triggered and recovery was terminated.</returns>
+        private bool CheckRecoveryTimeoutSurrender()
+        {
+            RecoverySituation situation = _currentRecoveryState.Situation;
+            if (situation != RecoverySituation.Stumble && situation != RecoverySituation.NearFall)
+            {
+                _recoveryAngleStuckTimer = 0f;
+                return false;
+            }
+
+            float uprightAngle = _balanceController.UprightAngle;
+            if (uprightAngle < _surrenderRecoveryAngleCeiling)
+            {
+                _recoveryAngleStuckTimer = 0f;
+                return false;
+            }
+
+            _recoveryAngleStuckTimer += Time.fixedDeltaTime;
+            if (_recoveryAngleStuckTimer < _surrenderRecoveryTimeout)
+            {
+                return false;
+            }
+
+            float angularVelocity = _currentSensorSnapshot.HipsAngularVelocity.magnitude;
+            float hipsHeight = _hipsBody.position.y;
+            float severity = KnockdownSeverity.ComputeFromSurrender(
+                uprightAngle,
+                angularVelocity,
+                hipsHeight,
+                _balanceController.StandingHipsHeight);
+
+            _balanceController.TriggerSurrender(severity);
+
+            _transitionGuard.OnRecoveryExpired(_currentRecoveryState.Situation, _recoveryExitCooldownFrames);
+            _currentRecoveryState = RecoveryState.Inactive;
+            _recoveryAngleStuckTimer = 0f;
+            return true;
         }
 
         private void UpdateObservationRecoveryState(float supportRisk)
@@ -809,6 +872,7 @@ namespace PhysicsDrivenMovement.Character
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
+            _recoveryAngleStuckTimer = 0f;
             _transitionGuard?.Reset();
             HasCommandFrame = false;
         }
