@@ -213,6 +213,222 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_hipsBody.linearVelocity.y, Is.LessThan(0.5f));
         }
 
+        // ── C8.5e: Full jump lifecycle tests ────────────────────────────
+
+        [UnityTest]
+        public IEnumerator WindUp_LowersHipsDuringCrouch()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            float standingY = _hipsBody.position.y;
+
+            _movement.SetJumpInputForTest(true);
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.None),
+                "Jump should not start until FixedUpdate processes the input.");
+
+            // Wait for most of the wind-up so the height-maintenance spring
+            // has time to push the hips toward the lowered target.
+            int nearEndWindUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime * 0.9f);
+            yield return WaitForPhysicsFrames(nearEndWindUpFrames);
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "Should still be in WindUp phase near the end.");
+            Assert.That(_hipsBody.position.y, Is.LessThan(standingY),
+                "Hips should be measurably lower during the wind-up crouch.");
+        }
+
+        [UnityTest]
+        public IEnumerator Launch_ProducesUpwardVelocity_OnlyAfterWindUpCompletes()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            _hipsBody.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true);
+
+            // Sample velocity each frame through wind-up. Upward velocity should
+            // stay near zero (the crouch actually pushes down slightly).
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime);
+            float maxUpwardDuringWindUp = float.NegativeInfinity;
+            for (int i = 0; i < windUpFrames - 1; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (_hipsBody.linearVelocity.y > maxUpwardDuringWindUp)
+                {
+                    maxUpwardDuringWindUp = _hipsBody.linearVelocity.y;
+                }
+            }
+
+            Assert.That(maxUpwardDuringWindUp, Is.LessThan(1.0f),
+                "No significant upward velocity should occur during wind-up.");
+
+            // Wait 2 more frames for the impulse to fire at wind-up expiry.
+            yield return WaitForPhysicsFrames(2);
+
+            Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f),
+                "Upward velocity should appear only after wind-up completes and impulse fires.");
+        }
+
+        [UnityTest]
+        public IEnumerator WindUp_CommitsToJump_EvenIfInputReleased()
+        {
+            // Policy: once wind-up starts the jump always commits.
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            _hipsBody.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "Wind-up should have started.");
+
+            // Release the jump input during wind-up.
+            _movement.SetJumpInputForTest(false);
+
+            // Wait for the full wind-up + 1 frame for impulse.
+            int remainingWindUp = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime);
+            yield return WaitForPhysicsFrames(remainingWindUp);
+
+            Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f),
+                "Impulse should fire even though jump input was released during wind-up.");
+        }
+
+        [UnityTest]
+        public IEnumerator WindUp_AbortsIfCharacterFallsDuringPreparation()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            _hipsBody.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "Wind-up should have started.");
+
+            // Force a fall during wind-up.
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            yield return WaitForPhysicsFrames(2);
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.None),
+                "Wind-up should abort when the character falls.");
+
+            // Wait past original wind-up expiry — no impulse should fire.
+            int fullWindUp = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime);
+            _hipsBody.linearVelocity = Vector3.zero;
+            yield return WaitForPhysicsFrames(fullWindUp);
+
+            Assert.That(_hipsBody.linearVelocity.y, Is.LessThan(0.5f),
+                "No upward impulse should fire after a wind-up abort.");
+        }
+
+        [UnityTest]
+        public IEnumerator LandingAbsorption_LowersHipsBriefly_AfterAirborneToStanding()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            // Use a strong jump force and clear the ground-state override so that
+            // natural GroundSensor detection drives the Airborne transition.
+            SetPrivateField(_movement, "_jumpForce", 40f);
+            SetPrivateField(_balance, "_overrideGroundState", false);
+
+            float standingY = _hipsBody.position.y;
+
+            // Jump and wait through wind-up + impulse.
+            _movement.SetJumpInputForTest(true);
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) + 2;
+            yield return WaitForPhysicsFrames(windUpFrames);
+
+            // Wait for the character to go airborne and land (up to ~5 s budget).
+            float budget = 5f;
+            float elapsed = 0f;
+            bool wasAirborne = false;
+            bool landed = false;
+            while (elapsed < budget)
+            {
+                yield return new WaitForFixedUpdate();
+                elapsed += Time.fixedDeltaTime;
+
+                CharacterStateType state = _characterState.CurrentState;
+                if (state == CharacterStateType.Airborne)
+                {
+                    wasAirborne = true;
+                }
+                if (wasAirborne && (state == CharacterStateType.Standing || state == CharacterStateType.Moving))
+                {
+                    landed = true;
+                    break;
+                }
+                // Abort if fallen.
+                if (state == CharacterStateType.Fallen)
+                {
+                    break;
+                }
+            }
+
+            Assert.That(wasAirborne, Is.True, "Character should have entered Airborne.");
+            Assert.That(landed, Is.True, "Character should have landed (Standing or Moving).");
+
+            // Immediately after landing, sample hips height for the absorption window.
+            // The absorption hold phase is 0.15 s = 15 physics frames at 0.01 s dt.
+            float lowestY = _hipsBody.position.y;
+            int absorptionSampleFrames = 20;
+            for (int i = 0; i < absorptionSampleFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (_hipsBody.position.y < lowestY)
+                {
+                    lowestY = _hipsBody.position.y;
+                }
+            }
+
+            Assert.That(lowestY, Is.LessThan(standingY),
+                "Hips should dip below standing height during landing absorption.");
+
+            // Wait for blend-out to finish and verify recovery toward standing.
+            yield return WaitForPhysicsFrames(60);
+            Assert.That(_hipsBody.position.y, Is.GreaterThan(standingY - 0.05f),
+                "Hips should recover close to standing height after absorption blend-out.");
+        }
+
+        [UnityTest]
+        public IEnumerator JumpLifecycle_PhaseSequence_NoneToWindUpToLaunchToNone()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.None),
+                "Should start in None phase.");
+
+            _movement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "Should transition to WindUp after jump input.");
+
+            // Tick through wind-up.
+            int windUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime);
+            yield return WaitForPhysicsFrames(windUpFrames);
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.Launch),
+                "Should transition to Launch after wind-up completes.");
+
+            // Tick through launch. Default _jumpLaunchDuration is 0.1 s = 10 frames.
+            int launchFrames = Mathf.CeilToInt(0.1f / Time.fixedDeltaTime) + 1;
+            yield return WaitForPhysicsFrames(launchFrames);
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.None),
+                "Should return to None after launch timer expires.");
+        }
+
         private IEnumerator PrepareStandingBaseline()
         {
             _movement.SetMoveInputForTest(Vector2.zero);
