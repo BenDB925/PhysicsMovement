@@ -45,6 +45,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private ConfigurableJoint _upperArmLJoint;
         private ConfigurableJoint _upperArmRJoint;
 
+        /// <summary>Rest abduction quaternion for left arm, matching ArmAnimator default (12°).</summary>
+        private Quaternion _abductionL;
+        /// <summary>Rest abduction quaternion for right arm, matching ArmAnimator default (12°).</summary>
+        private Quaternion _abductionR;
+
         private float _savedFixedDeltaTime;
         private int   _savedSolverIterations;
         private int   _savedSolverVelocityIterations;
@@ -73,6 +78,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Freeze hips rotation so the physics rig never accumulates yaw angular
             // velocity during the settle phase. Without this, collision bounces on the
             // dynamic Rigidbody can push angVelY above the spin-gate threshold
+
+            // Cache rest abduction quaternions matching ArmAnimator defaults (12° abduction).
+            _abductionL = Quaternion.AngleAxis( 12f, Vector3.right);
+            _abductionR = Quaternion.AngleAxis(-12f, Vector3.right);
             // (threshold × 0.5 = 4 rad/s), repeatedly resetting the hysteresis counter
             // inside LegAnimator and preventing gait from ever engaging during the tests.
             _hipsRb.constraints = RigidbodyConstraints.FreezeRotation;
@@ -158,6 +167,76 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Arms should swing in opposite directions ≥ 60% of walk frames. " +
                 $"Got {oppositeFrames}/{sampleFrames} = {oppositeRatio * 100f:F0}%. " +
                 "Check ArmAnimator phase offset (left arm should use phase+π, right arm phase).");
+        }
+
+        /// <summary>
+        /// C8.3a PlayMode: Arm swing amplitude must scale non-linearly with speed —
+        /// slow walking (input mag 0.25) produces significantly smaller swing than
+        /// full-speed walking (input mag 1.0). The ratio of slow-to-fast peak angles
+        /// must be below 0.35, confirming the response curve suppresses amplitude at
+        /// low speeds more aggressively than a linear ramp.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator SlowWalk_ProducesRestrainedArmSwing_ComparedToFullSpeed()
+        {
+            // Arrange — settle.
+            yield return WaitPhysicsFrames(SettleFrames);
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+
+            // Phase 1: Walk at slow input magnitude (0.25).
+            _movement.SetMoveInputForTest(new Vector2(0f, 0.25f));
+            float slowPeakAngle = 0f;
+
+            for (int frame = 0; frame < WalkFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (frame < 60) continue; // skip ramp-up
+
+                float leftAngle = _upperArmLJoint != null
+                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, _abductionL)
+                    : 0f;
+                float rightAngle = _upperArmRJoint != null
+                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, _abductionR)
+                    : 0f;
+
+                slowPeakAngle = Mathf.Max(slowPeakAngle, leftAngle, rightAngle);
+            }
+
+            // Phase 2: Walk at full input magnitude (1.0).
+            _movement.SetMoveInputForTest(new Vector2(0f, 1f));
+            float fastPeakAngle = 0f;
+
+            for (int frame = 0; frame < WalkFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (frame < 60) continue; // skip ramp-up
+
+                float leftAngle = _upperArmLJoint != null
+                    ? Quaternion.Angle(_upperArmLJoint.targetRotation, _abductionL)
+                    : 0f;
+                float rightAngle = _upperArmRJoint != null
+                    ? Quaternion.Angle(_upperArmRJoint.targetRotation, _abductionR)
+                    : 0f;
+
+                fastPeakAngle = Mathf.Max(fastPeakAngle, leftAngle, rightAngle);
+            }
+
+            // Assert: slow walk produces visible but restrained swing.
+            Assert.That(slowPeakAngle, Is.GreaterThan(0.5f),
+                $"Slow walk should still produce some arm swing. Peak = {slowPeakAngle:F2}°.");
+
+            // Assert: full speed produces larger swing.
+            Assert.That(fastPeakAngle, Is.GreaterThan(slowPeakAngle),
+                $"Full-speed arm swing ({fastPeakAngle:F2}°) must exceed slow walk ({slowPeakAngle:F2}°).");
+
+            // Assert: the amplitude ratio confirms non-linear scaling — slow peak must be
+            // well below proportional share of full peak (0.25 linearly → ratio 0.25;
+            // with EaseInOut → ratio ~0.10). Threshold 0.35 is conservative enough to
+            // tolerate physics noise while excluding a purely linear ramp.
+            float ratio = slowPeakAngle / fastPeakAngle;
+            Assert.That(ratio, Is.LessThan(0.35f),
+                $"Slow-to-fast amplitude ratio ({ratio:F3}) should be < 0.35, confirming " +
+                $"non-linear response. Slow peak = {slowPeakAngle:F2}°, fast peak = {fastPeakAngle:F2}°.");
         }
 
         /// <summary>

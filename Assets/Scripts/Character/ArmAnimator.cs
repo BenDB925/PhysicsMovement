@@ -63,6 +63,12 @@ namespace PhysicsDrivenMovement.Character
                  "1 = full swing (default). Use for blending or disabling arms at runtime.")]
         private float _armSwingScale = 1f;
 
+        [SerializeField]
+        [Tooltip("Non-linear response curve mapping SmoothedInputMag (0–1) to arm swing " +
+                 "amplitude factor (0–1). Default ease-in-out keeps arms restrained at slow " +
+                 "walk and assertive at higher speeds. X = input magnitude, Y = amplitude.")]
+        private AnimationCurve _swingAmplitudeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
         [SerializeField, Range(0f, 45f)]
         [Tooltip("Rest abduction angle (degrees) that pushes each arm outward from the body. " +
                  "Applied at idle and during swing so arms never clip through the torso. " +
@@ -212,9 +218,13 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 3: Compute effective amplitude with _armSwingScale multiplier.
-            //         Both are in [0, 1] range; multiplying gives the final blend factor.
-            float effectiveScale = smoothedInputMag * _armSwingScale;
+            // STEP 3: Compute effective amplitude with non-linear response curve and
+            //         _armSwingScale multiplier. The curve remaps SmoothedInputMag so that low
+            //         speeds produce restrained arm swing while higher speeds feel assertive.
+            float curvedMag = _swingAmplitudeCurve != null
+                ? Mathf.Clamp01(_swingAmplitudeCurve.Evaluate(smoothedInputMag))
+                : smoothedInputMag;
+            float effectiveScale = curvedMag * _armSwingScale;
 
             // STEP 3b: Read the locomotion sprint blend so upper-arm swing widens and
             //          elbow bend tightens as sprint ramps in.
