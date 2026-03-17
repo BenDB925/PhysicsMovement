@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 10 — Create ProceduralStandUp Component
+- Current next step: Step 11 — Wire GettingUp to ProceduralStandUp
 - Active blockers: None
 
 ## Quick Resume
@@ -170,7 +170,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Modify any existing file. Don't manage gait suppression (LegAnimator handles that via CharacterState). Don't handle external impact interruption here (CharacterState will re-enter Fallen, which calls `OnFailed` implicitly). |
 | **Design ref** | Ch4 full spec |
 | **Done when** | EditMode compile passes. Component can be added to a GameObject. `Begin(0.5f)` starts the phase sequence. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 #### Step 11: CharacterState — Wire GettingUp to ProceduralStandUp
 | | |
@@ -268,3 +268,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-17: Completed Step 7. `CharacterState` now uses severity-scaled surrendered floor dwell with `_minFloorDwell`, `_maxFloorDwell`, and `_reKnockdownFloorDwellCap`, preserving the legacy non-surrender path while extending dwell on higher-severity re-surrenders up to the configured cap. Added focused PlayMode coverage in `CharacterStateTests` for severity timing, input suppression during floor dwell, and capped re-knockdown extension. Verification passed via `LocomotionDirectorEditModeTests` (8/8), `CharacterStateTests` (21/21), and `HardSnapRecoveryTests` (2/2).
 - 2026-03-17: Completed Step 8. `ImpactKnockdownDetector` now treats `CharacterState.Fallen` as a vulnerable floor state by lowering the re-knockdown threshold to 40% of `_impactKnockdownDeltaV`, and `BalanceController.FixedUpdate` now re-clamps upright, height-maintenance, and COM stabilization scales to zero whenever the character is both `Fallen` and surrendered. Verification passed via `LocomotionDirectorEditModeTests` (8/8) plus PlayMode `HardSnapRecoveryTests` (2/2) after correcting the filter to target the fixture name directly. Chapter 3 is complete.
 - 2026-03-17: Completed Step 9. `BalanceController` now exposes deterministic FixedUpdate-driven `RampUprightStrength`, `RampHeightMaintenance`, and `RampStabilization` APIs plus `CancelAllRamps()`, and `ClearSurrender()` now restores local support scales through a configurable ramp instead of snapping instantly. Added focused PlayMode coverage in `BalanceControllerTests` for timed interpolation, `ClearSurrender()` scale restoration, and ramp cancellation. Verification recorded a clean compile, EditMode `LocomotionDirectorEditModeTests` (8/8), PlayMode `BalanceControllerTests` (13/13), and batch-run `HardSnapRecoveryTests` (2/2). Chapter 4 is now ready for Step 10.
+- 2026-03-17: Completed Step 10. Created `ProceduralStandUp.cs` (~320 lines): 4-phase MonoBehaviour state machine (OrientProne → ArmPush → LegTuck → Stand) with per-phase physics forces, spring profile transitions, success/failure gates, and a forced-stand safety net after `_maxStandUpAttempts` (3). Public API: `Begin(float)`, `Abort()`, `IsActive`, `CurrentPhase`, `OnPhaseCompleted`/`OnFailed`/`OnCompleted` events. Added `ProceduralStandUp` and `StandUpPhase` entries to `ARCHITECTURE.md`. EditMode compile verified 8/8 via `LocomotionDirectorEditModeTests`.

@@ -188,6 +188,16 @@
 | **Collaborators** | Reads `CharacterState.CurrentState` for getting-up vulnerability, calls `BalanceController.TriggerSurrender(float)` for instant knockdowns, uses the local `Rigidbody` for impact math, and intentionally ignores self and ground contacts. |
 | **Phase** | Comedic knockdown overhaul Ch2 |
 
+### `Character.ProceduralStandUp` — `Assets/Scripts/Character/ProceduralStandUp.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | MonoBehaviour driving a 4-phase physics-based stand-up sequence (OrientProne → ArmPush → LegTuck → Stand) when the character enters GettingUp after a surrender knockdown. |
+| **Why** | Replaces the single magic impulse with a staged push-up-from-belly sequence that looks physically plausible and can fail (re-entering Fallen for comedy). |
+| **Public Surface** | `Begin(float severity)`, `Abort()`, `IsActive`, `CurrentPhase: StandUpPhase`, `OnPhaseCompleted` event, `OnFailed` event (float severity), `OnCompleted` event. |
+| **Collaborators** | Calls `BalanceController.ClearSurrender()` and `RampUprightStrength/HeightMaintenance/Stabilization` during the Stand phase, `RagdollSetup.SetSpringProfile/ResetSpringProfile` for per-phase joint stiffness, reads `BalanceController.IsGrounded/IsFallen/StandingHipsHeight`. After `_maxStandUpAttempts` (3) failures, applies a forced impulse safety net. |
+| **Phase** | Comedic knockdown overhaul Ch4 |
+
 ### `Character.LocomotionCollapseDetector` — `Assets/Scripts/Character/LocomotionCollapseDetector.cs`
 
 | Concern | Detail |
