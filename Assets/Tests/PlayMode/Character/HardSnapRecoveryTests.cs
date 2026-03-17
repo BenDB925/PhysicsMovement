@@ -43,6 +43,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float StalledProgressPerFrame = 0.0025f;
 
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 8000f);
+        private static readonly Vector2[] StartStopInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.StartStop);
+        private static readonly Vector2[] HardTurnInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.HardTurn90);
+        private static readonly Vector2[] SlalomInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.Slalom5);
 
         private PlayerPrefabTestRig _rig;
 
@@ -93,7 +96,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
 
             TurnOutcome outcome = new TurnOutcome();
-            yield return RunTurnScenario(Vector2.up, Vector2.right, SnapFrames, outcome);
+            yield return RunTurnScenario(HardTurnInputs[0], HardTurnInputs[1], SnapFrames, outcome);
 
             string summary = BuildTurnSummary(outcome);
             Debug.Log($"[HardSnap90] {summary}");
@@ -128,19 +131,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             for (int frame = 0; frame < WindupFrames; frame++)
             {
-                _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+                _rig.PlayerMovement.SetMoveInputForTest(StartStopInputs[0]);
                 yield return new WaitForFixedUpdate();
             }
 
             SlalomOutcome outcome = new SlalomOutcome();
-            Vector2[] inputs =
-            {
-                new Vector2(1f, 0f),
-                new Vector2(0f, -1f),
-                new Vector2(-1f, 0f),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 0f),
-            };
+            Vector2[] inputs = SlalomInputs;
 
             int fallenFrames = 0;
             int stalledFrames = 0;

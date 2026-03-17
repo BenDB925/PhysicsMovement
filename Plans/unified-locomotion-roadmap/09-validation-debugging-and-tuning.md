@@ -38,7 +38,7 @@ Prevent the unified system from becoming a black box.
 ## Status
 
 - State: In Progress.
-- Current next step: C9.1b.
+- Current next step: C9.2a.
 - Active blockers: None.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
@@ -66,10 +66,11 @@ Define the canonical set of named locomotion scenarios used by every test, basel
   - Verification: EditMode compile + new EditMode test `ScenarioDefinitionsTests.AllScenariosAreValid`.
   - 2026-03-17: Added `ScenarioDefinitions` under `Assets/Tests/PlayMode/Utilities/` with all 9 canonical entries, terrain lane anchors derived from the current `Arena_01` terrain-gallery geometry, and `LapCircuit` sourced directly from `LapDemoRunner.CourseWaypoints` via reflection. Added reflection-backed EditMode coverage in `ScenarioDefinitionsTests`; focused verification passed `1/1`.
 
-- [ ] **C9.1b Migrate existing tests to use `ScenarioDefinitions`**
+- [x] **C9.1b Migrate existing tests to use `ScenarioDefinitions`**
   - Scope: In `HardSnapRecoveryTests`, `MovementQualityTests`, `StumbleStutterRegressionTests`, and `GaitOutcomeTests`, replace inline waypoint arrays with references to the corresponding `ScenarioDefinitions` entry. Keep assertion thresholds unchanged.
   - Done when: All migrated tests still pass with identical waypoints sourced from `ScenarioDefinitions`.
   - Verification: PlayMode focused filter `HardSnapRecoveryTests;MovementQualityTests;StumbleStutterRegressionTests;GaitOutcomeTests` — all existing green tests stay green.
+  - 2026-03-17: Added `ScenarioPathUtility` under `Assets/Tests/PlayMode/Utilities/` so scenario-driven suites can derive shared planar directions and `PlayerMovement` test inputs from the canonical Chapter 9 scenario catalog. `HardSnapRecoveryTests` now source hard-turn/slalom directions from `HardTurn90`, `Slalom5`, and `StartStop`; `MovementQualityTests` now build their straight/corner courses from `StartStop` and `HardTurn90` geometry; `StumbleStutterRegressionTests` now source sustained-forward, hard-turn, and reversal inputs from `StartStop`, `HardTurn90`, and `Reversal`; and `GaitOutcomeTests` now source flat-ground motion plus the step-up/slope lane anchors from `StartStop`, `TerrainStepUp`, and `TerrainSlope`. Focused verification passed `16/18`, with only the two known pre-existing `MovementQualityTests` reds remaining (`WalkStraight_NoFalls`, `SustainedLocomotionCollapse_TransitionsIntoFallen`).
 
 ### C9.2 Decision telemetry
 

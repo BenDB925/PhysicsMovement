@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Reflection;
 using NUnit.Framework;
@@ -23,6 +24,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private const int MaxConsecutiveFallenStraight = 30;
         private const int MaxConsecutiveFallenCorner = 160;
+        private const float StraightCourseDistance = 20f;
+
+        private static readonly Vector3[] StraightCourseWaypoints = BuildStraightCourseWaypoints();
+        private static readonly Vector3[] CornerCourseWaypoints = BuildCornerCourseWaypoints();
 
         private GameObject _ground;
         private GameObject _player;
@@ -58,17 +63,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             if (_courseRunnerGO != null)
             {
-                Object.Destroy(_courseRunnerGO);
+                UnityEngine.Object.Destroy(_courseRunnerGO);
             }
 
             if (_player != null)
             {
-                Object.Destroy(_player);
+                UnityEngine.Object.Destroy(_player);
             }
 
             if (_ground != null)
             {
-                Object.Destroy(_ground);
+                UnityEngine.Object.Destroy(_ground);
             }
 
             RestoreLayerCollisionMatrix(_savedLayerCollisionMatrix);
@@ -81,10 +86,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator WalkStraight_NoFalls()
         {
-            yield return SpawnAndConfigureCourse(new[]
-            {
-                new Vector3(0f, 0f, 20f)
-            });
+            yield return SpawnAndConfigureCourse(StraightCourseWaypoints);
 
             int maxConsecutiveFallen = 0;
             int consecutiveFallen = 0;
@@ -114,12 +116,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [UnityTest]
         public IEnumerator TurnAndWalk_CornerRecovery()
         {
-            yield return SpawnAndConfigureCourse(new[]
-            {
-                new Vector3(10f, 0f, 0f),
-                new Vector3(10f, 0f, 10f),
-                new Vector3(0f, 0f, 10f)
-            });
+            yield return SpawnAndConfigureCourse(CornerCourseWaypoints);
 
             int maxConsecutiveFallen = 0;
             int consecutiveFallen = 0;
@@ -268,7 +265,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"PlayerRagdoll prefab was not found at '{PlayerRagdollPrefabPath}'.");
 
             // Spawn high enough to avoid starting interpenetrated with the floor.
-            _player = Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), Quaternion.identity);
+            _player = UnityEngine.Object.Instantiate(prefab, new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             Assert.That(_player, Is.Not.Null, "Failed to instantiate PlayerRagdoll prefab.");
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
@@ -341,6 +338,33 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             balanceController.SetGroundStateForTest(grounded, isFallen: false);
         }
 
+        private static Vector3[] BuildStraightCourseWaypoints()
+        {
+            Vector3[] startStopDirections = ScenarioPathUtility.GetTravelDirections(ScenarioDefinitions.StartStop);
+            return new[]
+            {
+                startStopDirections[0] * StraightCourseDistance,
+            };
+        }
+
+        private static Vector3[] BuildCornerCourseWaypoints()
+        {
+            Vector3[] hardTurnWaypoints = ScenarioDefinitions.HardTurn90.Waypoints;
+            if (hardTurnWaypoints == null || hardTurnWaypoints.Length < 2)
+            {
+                throw new InvalidOperationException("ScenarioDefinitions.HardTurn90 must expose at least two waypoints.");
+            }
+
+            Vector3 firstWaypoint = SwapXZ(hardTurnWaypoints[0]);
+            Vector3 secondWaypoint = SwapXZ(hardTurnWaypoints[1]);
+            return new[]
+            {
+                firstWaypoint,
+                secondWaypoint,
+                secondWaypoint - firstWaypoint,
+            };
+        }
+
         private void TrackFallenFrames(ref int consecutiveFallen, ref int maxConsecutiveFallen)
         {
             if (_characterState.CurrentState == CharacterStateType.Fallen)
@@ -352,6 +376,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 consecutiveFallen = 0;
             }
+        }
+
+        private static Vector3 SwapXZ(Vector3 waypoint)
+        {
+            return new Vector3(waypoint.z, waypoint.y, waypoint.x);
         }
 
         private static void SetPrivateFloat(object target, string fieldName, float value)

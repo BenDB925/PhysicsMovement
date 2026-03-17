@@ -26,6 +26,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int PostTurnFrames = 300;
 
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 12000f);
+        private static readonly Vector2[] StartStopInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.StartStop);
+        private static readonly Vector2[] HardTurnInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.HardTurn90);
+        private static readonly Vector2[] ReversalInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.Reversal);
 
         private PlayerPrefabTestRig _rig;
 
@@ -63,7 +66,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             CharacterStateType previousState = _rig.CharacterState.CurrentState;
             float peakUprightAngle = 0f;
 
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetMoveInputForTest(StartStopInputs[0]);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -105,7 +108,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
 
             // Build forward speed
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetMoveInputForTest(HardTurnInputs[0]);
             for (int i = 0; i < TurnWindupFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -116,7 +119,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             CharacterStateType previousState = _rig.CharacterState.CurrentState;
             float peakUprightAngle = 0f;
 
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.right);
+            _rig.PlayerMovement.SetMoveInputForTest(HardTurnInputs[1]);
             for (int i = 0; i < PostTurnFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -157,7 +160,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
 
             // Build forward speed
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetMoveInputForTest(ReversalInputs[0]);
             for (int i = 0; i < TurnWindupFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -168,7 +171,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             CharacterStateType previousState = _rig.CharacterState.CurrentState;
             float peakUprightAngle = 0f;
 
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.down);
+            _rig.PlayerMovement.SetMoveInputForTest(ReversalInputs[1]);
             for (int i = 0; i < PostTurnFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -211,7 +214,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float minHeight = float.MaxValue;
             int sampleCount = 0;
 
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetMoveInputForTest(StartStopInputs[0]);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -253,7 +256,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             int fallenTransitions = 0;
             CharacterStateType previousState = _rig.CharacterState.CurrentState;
 
-            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetMoveInputForTest(StartStopInputs[0]);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();

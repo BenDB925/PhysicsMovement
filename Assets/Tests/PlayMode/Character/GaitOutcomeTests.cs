@@ -78,6 +78,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float StepDownMinForwardProgress = 1.35f;
         private const int MaxStepDownConsecutiveFallenFrames = 80;
 
+        private static readonly Vector2 FlatGroundMoveInput = ScenarioPathUtility.ToMoveInput(
+            ScenarioPathUtility.RotatePlanarDirection(
+                ScenarioPathUtility.GetTravelDirections(ScenarioDefinitions.StartStop)[0],
+                90f));
+
         // ─── Scene Setup ──────────────────────────────────────────────────────
 
         [UnityTest]
@@ -153,7 +158,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Vector3 startPos = hipsRb.position;
 
             // Apply rightward input for WalkFrames
-            movement.SetMoveInputForTest(Vector2.right);
+            movement.SetMoveInputForTest(FlatGroundMoveInput);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -198,7 +203,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             float peakRotation = 0f;
 
-            movement.SetMoveInputForTest(Vector2.right);
+            movement.SetMoveInputForTest(FlatGroundMoveInput);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -254,7 +259,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             int activeFrames = 0;
             const float syncDetectionThreshold = 10f;
 
-            movement.SetMoveInputForTest(Vector2.right);
+            movement.SetMoveInputForTest(FlatGroundMoveInput);
             for (int i = 0; i < WalkFrames; i++)
             {
                 yield return new WaitForFixedUpdate();
@@ -315,7 +320,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found on the Arena_01 character.");
             Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found on the Arena_01 character.");
 
-            ResolveAscendingLaneProfile(
+            ResolveAscendingScenarioPath(
+                ScenarioDefinitions.TerrainStepUp,
                 stepUpLane,
                 out Vector3 travelDirection,
                 out Vector3 lowSidePoint,
@@ -474,7 +480,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found on the Arena_01 character.");
             Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found on the Arena_01 character.");
 
-            ResolveAscendingLaneProfile(
+            ResolveAscendingScenarioPath(
+                ScenarioDefinitions.TerrainSlope,
                 slopeLane,
                 out Vector3 travelDirection,
                 out Vector3 lowSidePoint,
@@ -924,6 +931,29 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 lowSidePoint = negativeEndPoint;
                 highSideHeight = positiveQuarterHeight;
             }
+        }
+
+        private static void ResolveAscendingScenarioPath(
+            ScenarioDefinition scenario,
+            TerrainScenarioMarker marker,
+            out Vector3 travelDirection,
+            out Vector3 lowSidePoint,
+            out Vector3 highSidePoint,
+            out float highSideHeight)
+        {
+            Assert.That(scenario.Waypoints, Is.Not.Null,
+                $"Scenario '{scenario.Name}' should expose terrain lane anchors.");
+            Assert.That(scenario.Waypoints.Length, Is.GreaterThanOrEqualTo(2),
+                $"Scenario '{scenario.Name}' should provide low/high lane endpoints.");
+
+            lowSidePoint = scenario.Waypoints[0];
+            highSidePoint = scenario.Waypoints[1];
+            travelDirection = Vector3.ProjectOnPlane(highSidePoint - lowSidePoint, Vector3.up).normalized;
+
+            Assert.That(travelDirection.sqrMagnitude, Is.GreaterThan(0.0001f),
+                $"Scenario '{scenario.Name}' should define a non-zero planar traversal direction.");
+
+            highSideHeight = SampleEnvironmentHeight(highSidePoint, marker.ScenarioBounds.max.y + 2f);
         }
 
         private static void ResolveAscendingLaneProfile(
