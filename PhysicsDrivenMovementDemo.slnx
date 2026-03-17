@@ -22,6 +22,7 @@
   <Project Path="Unity.Netcode.Editor.csproj" />
   <Project Path="Unity.Burst.Editor.csproj" />
   <Project Path="PhysicsDrivenMovement.Core.csproj" />
+  <Project Path="McpUnity.Editor.Tests.csproj" />
   <Project Path="PhysicsDrivenMovement.Input.csproj" />
   <Project Path="Unity.Networking.Editor.csproj" />
   <Project Path="Unity.InputSystem.DocCodeSamples.csproj" />

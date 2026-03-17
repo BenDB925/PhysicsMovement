@@ -4,10 +4,8 @@
 
 ## Quick Load
 
-- Prefer Unity MCP when the task depends on live Unity editor state: console inspection, script recompiles, menu-item execution, scene or prefab changes, component wiring, material edits, or quick smoke tests inside the open editor.
-- Prefer normal file edits for C# source, markdown, instructions, plans, and other deterministic text changes.
-- **Prefer Unity MCP `run_tests` as the primary test runner** when Unity is open and MCP is connected. This keeps the editor live so other MCP tools (console logs, recompile, scene inspection) remain available throughout the edit-compile-test loop.
-- Fall back to `Tools/Run-UnityTests.ps1` for CI-like runs when MCP is unavailable, when you need authoritative `TestResults/*.xml` artifacts, or when Unity is not open.
+- This repo vendors `com.gamelovers.mcp-unity` as an embedded package under `Packages/com.gamelovers.mcp-unity`; treat that folder as the canonical source for MCP Unity changes, not `Library/PackageCache`.
+- The embedded package intentionally ignores `Server~/node_modules/` and `Server~/build/`; Unity rebuilds them on demand via the package's install step.
 - Do not hand-edit `.unity`, `.prefab`, or `.mat` YAML when an MCP editor operation can make the change safely through Unity serialization.
 
 ## Transport
