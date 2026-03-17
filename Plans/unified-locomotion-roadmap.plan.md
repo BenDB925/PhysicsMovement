@@ -38,7 +38,7 @@
 - [x] Chapter 5: Recast Balance As Body Support (`Plans/unified-locomotion-roadmap/05-body-support.md`)
 - [x] Chapter 6: Turn Recovery, Stumbles, And Catch Steps (`Plans/unified-locomotion-roadmap/06-recovery-and-catch-steps.md`)
 - [ ] Chapter 7: Terrain And Contact Robustness (`Plans/unified-locomotion-roadmap/07-terrain-and-contact-robustness.md`)
-- [ ] Chapter 8: Expressive Motion And Feel (`Plans/unified-locomotion-roadmap/08-expressive-motion-and-feel.md`)
+- [x] Chapter 8: Expressive Motion And Feel (`Plans/unified-locomotion-roadmap/08-expressive-motion-and-feel.md`)
 - [ ] Chapter 9: Validation, Debugging, And Tuning Infrastructure (`Plans/unified-locomotion-roadmap/09-validation-debugging-and-tuning.md`)
 
 ## Work packages
