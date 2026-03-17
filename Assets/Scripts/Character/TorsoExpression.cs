@@ -46,6 +46,15 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Smoothed twist angle in degrees applied this frame.</summary>
         private float _smoothedTwistDeg;
 
+        /// <summary>Sibling CharacterState for Fallen/GettingUp kill-switch (C8.4b).</summary>
+        private CharacterState _characterState;
+
+        /// <summary>
+        /// C8.4b: True while CharacterState is Fallen or GettingUp. Suppresses torso twist
+        /// so it never fights recovery torques.
+        /// </summary>
+        private bool _suppressTwist;
+
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
@@ -74,6 +83,21 @@ namespace PhysicsDrivenMovement.Character
                 Debug.LogWarning("[TorsoExpression] 'Torso' ConfigurableJoint not found in children. " +
                                  "Torso twist will have no effect.", this);
             }
+
+            // STEP 3: Cache CharacterState for Fallen/GettingUp kill-switch (C8.4b).
+            TryGetComponent(out _characterState);
+        }
+
+        private void OnEnable()
+        {
+            if (_characterState != null)
+                _characterState.OnStateChanged += OnCharacterStateChanged;
+        }
+
+        private void OnDisable()
+        {
+            if (_characterState != null)
+                _characterState.OnStateChanged -= OnCharacterStateChanged;
         }
 
         private void FixedUpdate()
@@ -85,6 +109,17 @@ namespace PhysicsDrivenMovement.Character
                 {
                     _torsoJoint.targetRotation = Quaternion.identity;
                 }
+                return;
+            }
+
+            // C8.4b: Kill-switch — decay twist to zero during Fallen/GettingUp.
+            if (_suppressTwist)
+            {
+                _smoothedTwistDeg = Mathf.Lerp(_smoothedTwistDeg, 0f,
+                    Time.fixedDeltaTime * _twistSmoothing);
+                if (Mathf.Abs(_smoothedTwistDeg) < 0.01f)
+                    _smoothedTwistDeg = 0f;
+                _torsoJoint.targetRotation = Quaternion.Euler(0f, _smoothedTwistDeg, 0f);
                 return;
             }
 
@@ -120,6 +155,24 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 5: Apply as a Y-axis rotation in joint-local space.
             _torsoJoint.targetRotation = Quaternion.Euler(0f, _smoothedTwistDeg, 0f);
+        }
+
+        // ── Private Methods ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// C8.4b: Reacts to CharacterState transitions. Suppresses torso twist during
+        /// Fallen/GettingUp and re-enables on Standing/Moving.
+        /// </summary>
+        private void OnCharacterStateChanged(CharacterStateType previousState, CharacterStateType newState)
+        {
+            if (newState == CharacterStateType.Fallen || newState == CharacterStateType.GettingUp)
+            {
+                _suppressTwist = true;
+            }
+            else if (newState == CharacterStateType.Standing || newState == CharacterStateType.Moving)
+            {
+                _suppressTwist = false;
+            }
         }
     }
 }

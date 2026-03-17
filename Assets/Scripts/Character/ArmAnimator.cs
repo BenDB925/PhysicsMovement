@@ -193,6 +193,12 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True while CharacterState is Airborne. Set by OnCharacterStateChanged.</summary>
         private bool _isAirborne;
 
+        /// <summary>
+        /// C8.4b: True while CharacterState is Fallen or GettingUp. Suppresses all arm
+        /// expression so it never fights recovery torques.
+        /// </summary>
+        private bool _suppressExpression;
+
         /// <summary>Smoothed 0–1 blend toward the airborne raised-arm pose.</summary>
         private float _currentAirborneBlend;
 
@@ -296,6 +302,15 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
+            // C8.4b: Kill-switch — zero all arm expression during Fallen/GettingUp.
+            if (_suppressExpression)
+            {
+                _currentAirborneBlend = 0f;
+                _currentBraceBlend = 0f;
+                SetAllArmTargetsToRest();
+                return;
+            }
+
             // STEP 0: Ramp airborne blend toward target.
             float airborneTarget = _isAirborne ? 1f : 0f;
             _currentAirborneBlend = Mathf.MoveTowards(_currentAirborneBlend, airborneTarget,
@@ -540,6 +555,17 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private void OnCharacterStateChanged(CharacterStateType previousState, CharacterStateType newState)
         {
+            // C8.4b: Kill-switch — suppress arm expression during Fallen/GettingUp.
+            if (newState == CharacterStateType.Fallen || newState == CharacterStateType.GettingUp)
+            {
+                _suppressExpression = true;
+                _isAirborne = false;
+            }
+            else if (newState == CharacterStateType.Standing || newState == CharacterStateType.Moving)
+            {
+                _suppressExpression = false;
+            }
+
             if (newState == CharacterStateType.Airborne)
             {
                 _isAirborne = true;

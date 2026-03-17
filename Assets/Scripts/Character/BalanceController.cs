@@ -756,6 +756,24 @@ namespace PhysicsDrivenMovement.Character
 
         private void OnCharacterStateChanged(CharacterStateType previous, CharacterStateType next)
         {
+            // C8.4b: Kill-switch — suppress all pelvis expression during Fallen/GettingUp
+            // so expressive offsets never fight recovery torques.
+            if (next == CharacterStateType.Fallen || next == CharacterStateType.GettingUp)
+            {
+                _suppressPelvisExpression = true;
+                _smoothedPelvisTiltDeg = 0f;
+                _smoothedPelvisSwayOffset = Vector3.zero;
+                _transientLeanDeg = 0f;
+                _transientLeanTimer = 0f;
+                _transientLeanDecay = 0f;
+                _reversalWeightShiftTimer = 0f;
+                _reversalWeightShiftDirection = Vector3.zero;
+            }
+            else if (next == CharacterStateType.Standing || next == CharacterStateType.Moving)
+            {
+                _suppressPelvisExpression = false;
+            }
+
             if (previous == CharacterStateType.Standing && next == CharacterStateType.Moving)
             {
                 _transientLeanDeg = _accelStartLeanDeg;
