@@ -38,7 +38,7 @@ Prevent the unified system from becoming a black box.
 ## Status
 
 - State: In Progress.
-- Current next step: C9.2b.
+- Current next step: C9.2c.
 - Active blockers: None.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
@@ -82,10 +82,11 @@ Add structured per-event logging to `LocomotionDirector` so recovery decisions a
   - Verification: EditMode compile + new EditMode test `RecoveryTelemetryEventTests.ToNdjsonLine_ContainsAllFields`.
   - 2026-03-17: Added `RecoveryTelemetryEvent` under `Assets/Scripts/Character/Locomotion/` as an internal immutable payload with manual NDJSON serialization and JSON-string escaping for the `Situation`/`Reason` tags. Added focused reflection-backed EditMode coverage in `RecoveryTelemetryEventTests`; targeted verification passed `1/1`.
 
-- [ ] **C9.2b Wire `RecoveryTelemetryEvent` emission into `LocomotionDirector`**
+- [x] **C9.2b Wire `RecoveryTelemetryEvent` emission into `LocomotionDirector`**
   - Scope: In `LocomotionDirector`, add a `[SerializeField] bool _enableRecoveryTelemetry` (default false) and a `List<RecoveryTelemetryEvent>` ring buffer (capacity 256). Emit an event at: (1) recovery entry (with the triggering observation values), (2) recovery situation change (e.g. Stumble→NearFall), (3) recovery exit (with exit reason), (4) surrender trigger. Expose `IReadOnlyList<RecoveryTelemetryEvent> RecoveryTelemetryLog` for test queries.
   - Done when: Enabling `_enableRecoveryTelemetry` in a PlayMode test that drives through a hard turn produces ≥2 logged events (entry + exit).
   - Verification: New PlayMode test `LocomotionDirectorTests.RecoveryTelemetry_HardTurnScenario_LogsEntryAndExit` using `ScenarioDefinitions.HardTurn90` waypoints. Existing `LocomotionDirectorTests` still green.
+  - 2026-03-17: Wired an opt-in recovery telemetry seam into `LocomotionDirector` with a 256-event in-memory ring buffer, internal `RecoveryTelemetryLog` exposure, and structured event emission on recovery entry, situation change, natural expiry, and surrender-triggered exit. Added focused PlayMode coverage in `LocomotionDirectorTests.RecoveryTelemetry_HardTurnScenario_LogsEntryAndExit` using `ScenarioDefinitions.HardTurn90`; focused verification passed `15/15` for the full `LocomotionDirectorTests` fixture.
 
 - [ ] **C9.2c Add recovery duration and outcome fields**
   - Scope: Extend `RecoveryTelemetryEvent` with `float RecoveryDurationSoFar` (time since recovery entry) and `bool WasSurrender` (true only on surrender events). In `LocomotionDirector`, track `_recoveryEntryTime` and populate these fields at exit/surrender. Expose `float LastRecoveryDuration` and `bool LastRecoveryEndedInSurrender` as public read-only properties.

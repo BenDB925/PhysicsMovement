@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PhysicsDrivenMovement.Character
@@ -15,6 +16,7 @@ namespace PhysicsDrivenMovement.Character
     public class LocomotionDirector : MonoBehaviour
     {
         private const float CommandEpsilon = 0.0001f;
+        private const int RecoveryTelemetryCapacity = 256;
 
         [SerializeField]
         [Tooltip("Keeps the director on the legacy pass-through path while ownership is migrated.")]
@@ -96,6 +98,11 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Frames over which recovery blend ramps from 0 to its natural value, preventing snap-on of support adjustments.")]
         private int _recoveryRampInFrames = 8;
 
+        [Header("Recovery Telemetry")]
+        [SerializeField]
+        [Tooltip("Records structured recovery entry/change/exit events into an in-memory ring buffer for tests and post-run debugging.")]
+        private bool _enableRecoveryTelemetry = false;
+
         [Header("Debug Visibility")]
         [SerializeField]
         [Tooltip("Draws the current support geometry, COM offset, and predicted drift direction in the Scene view while the game is running.")]
@@ -143,6 +150,7 @@ namespace PhysicsDrivenMovement.Character
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
         private bool? _recoveryTestOverride;
+        private readonly List<RecoveryTelemetryEvent> _recoveryTelemetryLog = new List<RecoveryTelemetryEvent>(RecoveryTelemetryCapacity);
 
         public bool HasCommandFrame { get; private set; }
 
@@ -174,6 +182,8 @@ namespace PhysicsDrivenMovement.Character
         internal Vector3 CurrentPredictedDriftDirection => _currentPredictedDriftDirection;
 
         internal string CurrentObservationTelemetryLine => _currentObservationTelemetryLine;
+
+        internal IReadOnlyList<RecoveryTelemetryEvent> RecoveryTelemetryLog => _recoveryTelemetryLog;
 
         /// <summary>
         /// Test seam: forces recovery active/inactive so downstream consumers
@@ -249,6 +259,7 @@ namespace PhysicsDrivenMovement.Character
             _nextObservationTelemetryTime = 0f;
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
+            _recoveryTelemetryLog.Clear();
             _transitionGuard = null;
             _supportObservationFilter = null;
             ResetOutputs();
@@ -506,6 +517,7 @@ namespace PhysicsDrivenMovement.Character
                 _currentRecoveryState = _currentRecoveryState.Tick();
                 if (!_currentRecoveryState.IsActive)
                 {
+                    EmitRecoveryTelemetry(situationBeforeTick, "recovery_window_elapsed");
                     _recoveryAngleStuckTimer = 0f;
                     _transitionGuard.OnRecoveryExpired(situationBeforeTick, _recoveryExitCooldownFrames);
                 }
@@ -549,10 +561,12 @@ namespace PhysicsDrivenMovement.Character
                 _balanceController.StandingHipsHeight);
 
             _balanceController.TriggerSurrender(severity);
+            EmitRecoveryTelemetry(situation, "angle_above_ceiling");
 
             _transitionGuard.OnRecoveryExpired(_currentRecoveryState.Situation, _recoveryExitCooldownFrames);
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
+            EmitRecoveryTelemetry(situation, "recovery_surrendered");
             return true;
         }
 
@@ -579,14 +593,24 @@ namespace PhysicsDrivenMovement.Character
             // debounce count carries over into the next idle→recovery transition.
             if (_currentRecoveryState.IsActive)
             {
+                RecoverySituation previousSituation = _currentRecoveryState.Situation;
                 if (situation != RecoverySituation.None)
                 {
                     int duration = GetRecoveryDuration(situation);
-                    _currentRecoveryState = _currentRecoveryState.Enter(
+                    RecoveryState nextRecoveryState = _currentRecoveryState.Enter(
                         situation,
                         duration,
                         supportRisk,
                         _currentObservation.TurnSeverity);
+
+                    if (nextRecoveryState.Situation != previousSituation)
+                    {
+                        EmitRecoveryTelemetry(
+                            nextRecoveryState.Situation,
+                            GetRecoverySituationChangeReason(previousSituation, nextRecoveryState.Situation));
+                    }
+
+                    _currentRecoveryState = nextRecoveryState;
                 }
 
                 _transitionGuard.ShouldEnter(RecoverySituation.None, _recoveryEntryDebounceFrames, _recoveryExitCooldownFrames);
@@ -607,6 +631,7 @@ namespace PhysicsDrivenMovement.Character
                     duration,
                     supportRisk,
                     _currentObservation.TurnSeverity);
+                EmitRecoveryTelemetry(_currentRecoveryState.Situation, GetRecoveryEntryReason(_currentRecoveryState.Situation));
             }
         }
 
@@ -689,6 +714,74 @@ namespace PhysicsDrivenMovement.Character
                     return Mathf.RoundToInt(baseFrames * 1.5f);
                 default:
                     return baseFrames;
+            }
+        }
+
+        private void EmitRecoveryTelemetry(RecoverySituation situation, string reason)
+        {
+            if (!_enableRecoveryTelemetry)
+            {
+                return;
+            }
+
+            if (_recoveryTelemetryLog.Count >= RecoveryTelemetryCapacity)
+            {
+                _recoveryTelemetryLog.RemoveAt(0);
+            }
+
+            _recoveryTelemetryLog.Add(new RecoveryTelemetryEvent(
+                Time.frameCount,
+                Time.time,
+                situation,
+                reason,
+                _currentObservation.UprightAngleDegrees,
+                _currentObservation.SlipEstimate,
+                _currentObservation.SupportQuality,
+                _currentObservation.TurnSeverity));
+        }
+
+        private static string GetRecoveryEntryReason(RecoverySituation situation)
+        {
+            switch (situation)
+            {
+                case RecoverySituation.HardTurn:
+                    return "hard_turn_threshold_exceeded";
+                case RecoverySituation.Reversal:
+                    return "reversal_threshold_exceeded";
+                case RecoverySituation.Slip:
+                    return "slip_exceeded";
+                case RecoverySituation.NearFall:
+                    return "near_fall_support_loss";
+                case RecoverySituation.Stumble:
+                    return "collapse_confirmed";
+                default:
+                    return "recovery_entered";
+            }
+        }
+
+        private static string GetRecoverySituationChangeReason(
+            RecoverySituation previousSituation,
+            RecoverySituation nextSituation)
+        {
+            return GetRecoverySituationTag(previousSituation) + "_to_" + GetRecoverySituationTag(nextSituation);
+        }
+
+        private static string GetRecoverySituationTag(RecoverySituation situation)
+        {
+            switch (situation)
+            {
+                case RecoverySituation.HardTurn:
+                    return "hard_turn";
+                case RecoverySituation.Reversal:
+                    return "reversal";
+                case RecoverySituation.Slip:
+                    return "slip";
+                case RecoverySituation.NearFall:
+                    return "near_fall";
+                case RecoverySituation.Stumble:
+                    return "stumble";
+                default:
+                    return "none";
             }
         }
 

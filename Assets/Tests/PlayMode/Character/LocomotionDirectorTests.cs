@@ -17,6 +17,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SettleFrames = 100;
 
         private static readonly Vector3 TestOrigin = new Vector3(2500f, 0f, 2500f);
+        private static readonly Vector2[] HardTurnScenarioInputs = ScenarioPathUtility.GetMoveInputs(ScenarioDefinitions.HardTurn90);
 
         private PlayerPrefabTestRig _rig;
         private LocomotionDirector _director;
@@ -394,6 +395,88 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "Risky support observations should boost stabilization strength instead of leaving the body command at neutral pass-through values.");
             Assert.That(Vector3.Dot(moveWorldDirection.normalized, travelDirection.normalized), Is.GreaterThan(0.95f),
                 "The support command should keep traveling in the requested move direction while observation-driven recovery is active.");
+        }
+
+        [UnityTest]
+        public IEnumerator RecoveryTelemetry_HardTurnScenario_LogsEntryAndExit()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for Chapter 9 recovery telemetry coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            SetPrivateField(_director, "_enableRecoveryTelemetry", true);
+            SetPrivateField(_director, "_recoveryEntryDebounceFrames", 1);
+            SetPrivateField(_rig.BalanceController, "_snapRecoveryDurationFrames", 24);
+            SetPrivateField(_rig.BalanceController, "_snapRecoveryKdDurationFrames", 12);
+
+            _rig.PlayerMovement.SetMoveInputForTest(HardTurnScenarioInputs[0]);
+            for (int frame = 0; frame < 120; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            IList telemetryLog = null;
+
+            // Act: drive the second HardTurn90 segment under real movement load until the
+            // director classifies a hard-turn recovery from the natural scenario.
+            _rig.PlayerMovement.SetMoveInputForTest(HardTurnScenarioInputs[1]);
+            for (int frame = 0; frame < 40; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                telemetryLog = GetPropertyValue<object>(_director, "RecoveryTelemetryLog") as IList;
+                if (telemetryLog != null && telemetryLog.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            Assert.That(telemetryLog, Is.Not.Null,
+                "LocomotionDirector should expose the recovery telemetry ring buffer once Chapter 9 telemetry is wired.");
+            Assert.That(telemetryLog.Count, Is.GreaterThanOrEqualTo(1),
+                "A hard-turn recovery should log an entry event once telemetry is enabled.");
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+
+            int recoveryDurationFrames = GetPropertyValue<int>(_rig.BalanceController, "SnapRecoveryDurationFrames");
+            for (int frame = 0; frame < recoveryDurationFrames + 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                telemetryLog = GetPropertyValue<object>(_director, "RecoveryTelemetryLog") as IList;
+                if (telemetryLog != null && telemetryLog.Count >= 2)
+                {
+                    break;
+                }
+            }
+
+            object entryEvent = telemetryLog[0];
+            object exitEvent = telemetryLog[telemetryLog.Count - 1];
+
+            string entrySituation = GetPropertyValue<object>(entryEvent, "Situation").ToString();
+            string entryReason = GetPropertyValue<string>(entryEvent, "Reason");
+            float entryTurnSeverity = GetPropertyValue<float>(entryEvent, "TurnSeverity");
+            string exitSituation = GetPropertyValue<object>(exitEvent, "Situation").ToString();
+            string exitReason = GetPropertyValue<string>(exitEvent, "Reason");
+            string finalSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+
+            // Assert
+            Assert.That(telemetryLog.Count, Is.GreaterThanOrEqualTo(2),
+                "A completed hard-turn recovery should leave at least entry and exit events in the telemetry log.");
+            Assert.That(entrySituation, Is.Not.EqualTo("None"),
+                "The first telemetry event should record a real recovery situation once the HardTurn90 scenario destabilizes the director.");
+            Assert.That(entryReason, Is.Not.Empty,
+                "The recovery entry event should include a non-empty reason tag for Chapter 9 telemetry triage.");
+            Assert.That(entryTurnSeverity, Is.GreaterThan(0f),
+                "The logged entry event should preserve non-zero turn severity from the HardTurn90 scenario instead of collapsing the turn context to zero.");
+            Assert.That(exitSituation, Is.Not.EqualTo("None"),
+                "The exit event should identify the recovery situation that finished so triage can correlate the end of the logged recovery window.");
+            Assert.That(exitReason, Is.EqualTo("recovery_window_elapsed"),
+                "The hard-turn exit event should explain that recovery ended by natural expiry once move intent was released.");
+            Assert.That(finalSituation, Is.EqualTo("None"),
+                "After the exit event is logged, the director should no longer report an active recovery situation.");
         }
 
         [UnityTest]
