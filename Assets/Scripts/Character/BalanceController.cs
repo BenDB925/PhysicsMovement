@@ -280,6 +280,19 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration in seconds for the stop-walk backward lean to decay back to zero.")]
         private float _decelStopLeanDecay = 0.2f;
 
+        // ─── Reversal Weight Shift ──────────────────────────────────────────
+
+        [Header("Reversal Weight Shift")]
+        [SerializeField, Range(0f, 0.1f)]
+        [Tooltip("Max lateral COM offset in meters toward the plant foot when a HardTurn " +
+                 "or Reversal is detected. Creates a visible weight transfer before " +
+                 "re-acceleration. Decays linearly over the configured decay duration.")]
+        private float _reversalWeightShiftMaxOffset = 0.035f;
+
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("Duration in seconds for the reversal weight shift to decay back to zero.")]
+        private float _reversalWeightShiftDecay = 0.35f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -364,6 +377,15 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Total decay duration for the current transient lean impulse.</summary>
         private float _transientLeanDecay;
+
+        /// <summary>Remaining decay time for the reversal weight shift transient.</summary>
+        private float _reversalWeightShiftTimer;
+
+        /// <summary>World-space horizontal direction of the reversal weight shift offset.</summary>
+        private Vector3 _reversalWeightShiftDirection;
+
+        /// <summary>Recovery situation from the previous FixedUpdate, for rising-edge detection.</summary>
+        private RecoverySituation _previousRecoverySituation;
 
         /// <summary>True once we have subscribed to <see cref="CharacterState.OnStateChanged"/>.</summary>
         private bool _subscribedToCharacterState;
@@ -532,6 +554,8 @@ namespace PhysicsDrivenMovement.Character
             _transientLeanDeg = 0f;
             _transientLeanTimer = 0f;
             _transientLeanDecay = 0f;
+            _reversalWeightShiftTimer = 0f;
+            _reversalWeightShiftDirection = Vector3.zero;
 
             if (_ragdollSetup != null)
             {
@@ -994,6 +1018,61 @@ namespace PhysicsDrivenMovement.Character
                         _smoothedPelvisSwayOffset, swayTarget,
                         Time.fixedDeltaTime * _pelvisSwaySmoothing);
                     feetCenter += _smoothedPelvisSwayOffset;
+                }
+
+                // STEP 3.6d: Reversal weight shift.
+                // On HardTurn or Reversal entry, fire a transient lateral COM offset
+                // toward the current stance foot to create visible weight transfer
+                // before the character re-accelerates in the new direction.
+                {
+                    var currentSituation = _currentBodySupportCommand.RecoverySituation;
+                    bool isReversalOrHardTurn = currentSituation == RecoverySituation.HardTurn
+                                               || currentSituation == RecoverySituation.Reversal;
+                    bool wasReversalOrHardTurn = _previousRecoverySituation == RecoverySituation.HardTurn
+                                                || _previousRecoverySituation == RecoverySituation.Reversal;
+
+                    if (isReversalOrHardTurn && !wasReversalOrHardTurn
+                        && !IsFallen && !_suppressPelvisExpression
+                        && _reversalWeightShiftMaxOffset > 0f)
+                    {
+                        Vector3 shiftDir = Vector3.zero;
+                        bool leftDown = _footL.IsGrounded;
+                        bool rightDown = _footR.IsGrounded;
+                        if (leftDown != rightDown)
+                        {
+                            // Single support: shift toward the stance foot.
+                            Vector3 stancePos = leftDown
+                                ? _footL.transform.position
+                                : _footR.transform.position;
+                            Vector3 toStance = stancePos - feetCenter;
+                            toStance.y = 0f;
+                            if (toStance.sqrMagnitude > 0.0001f)
+                                shiftDir = toStance.normalized;
+                        }
+                        else
+                        {
+                            // Both feet down: shift backward from travel direction.
+                            Vector3 backFromTravel = -_currentBodySupportCommand.TravelDirection;
+                            backFromTravel.y = 0f;
+                            if (backFromTravel.sqrMagnitude > 0.0001f)
+                                shiftDir = backFromTravel.normalized;
+                        }
+
+                        if (shiftDir.sqrMagnitude > 0.0001f)
+                        {
+                            _reversalWeightShiftDirection = shiftDir;
+                            _reversalWeightShiftTimer = _reversalWeightShiftDecay;
+                        }
+                    }
+                    _previousRecoverySituation = currentSituation;
+
+                    if (_reversalWeightShiftTimer > 0f)
+                    {
+                        _reversalWeightShiftTimer -= Time.fixedDeltaTime;
+                        float t = Mathf.Clamp01(
+                            _reversalWeightShiftTimer / Mathf.Max(0.001f, _reversalWeightShiftDecay));
+                        feetCenter += _reversalWeightShiftDirection * (_reversalWeightShiftMaxOffset * t);
+                    }
                 }
 
                 Vector3 hipsPos = _rb.position;
