@@ -280,6 +280,27 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration in seconds for the stop-walk backward lean to decay back to zero.")]
         private float _decelStopLeanDecay = 0.2f;
 
+        // ─── Landing Absorption ────────────────────────────────────────────
+
+        [Header("Landing Absorption")]
+        [SerializeField, Range(0f, 0.15f)]
+        [Tooltip("Metres to lower the hips height-maintenance target during landing " +
+                 "absorption. Creates a visible squat on contact.")]
+        private float _landingAbsorbHeightOffset = 0.05f;
+
+        [SerializeField, Range(0f, 10f)]
+        [Tooltip("Forward lean impulse in degrees applied on landing to simulate " +
+                 "impact absorption through the pelvis.")]
+        private float _landingAbsorbLeanDeg = 3f;
+
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Duration in seconds of the full landing squat hold before blend-out starts.")]
+        private float _landingAbsorbDuration = 0.15f;
+
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Duration in seconds for the landing squat to blend back to normal posture.")]
+        private float _landingAbsorbBlendOutDuration = 0.2f;
+
         // ─── Reversal Weight Shift ──────────────────────────────────────────
 
         [Header("Reversal Weight Shift")]
@@ -398,6 +419,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>World-space horizontal direction of the reversal weight shift offset.</summary>
         private Vector3 _reversalWeightShiftDirection;
+
+        /// <summary>Remaining landing absorption time (hold + blend-out) in seconds.</summary>
+        private float _landingAbsorbTimer;
+
+        /// <summary>Cached total duration (hold + blend-out) for landing absorption phase computation.</summary>
+        private float _landingAbsorbTotalDuration;
 
         /// <summary>Recovery situation from the previous FixedUpdate, for rising-edge detection.</summary>
         private RecoverySituation _previousRecoverySituation;
@@ -586,6 +613,7 @@ namespace PhysicsDrivenMovement.Character
             _reversalWeightShiftTimer = 0f;
             _reversalWeightShiftDirection = Vector3.zero;
             _jumpCrouchHeightOffset = 0f;
+            _landingAbsorbTimer = 0f;
 
             if (_ragdollSetup != null)
             {
@@ -783,10 +811,19 @@ namespace PhysicsDrivenMovement.Character
                 _transientLeanDecay = 0f;
                 _reversalWeightShiftTimer = 0f;
                 _reversalWeightShiftDirection = Vector3.zero;
+                _landingAbsorbTimer = 0f;
             }
             else if (next == CharacterStateType.Standing || next == CharacterStateType.Moving)
             {
                 _suppressPelvisExpression = false;
+            }
+
+            // C8.5d: Landing absorption — brief squat + forward lean on Airborne exit.
+            if (previous == CharacterStateType.Airborne &&
+                (next == CharacterStateType.Standing || next == CharacterStateType.Moving))
+            {
+                _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
+                _landingAbsorbTimer = _landingAbsorbTotalDuration;
             }
 
             if (previous == CharacterStateType.Standing && next == CharacterStateType.Moving)
@@ -1160,6 +1197,25 @@ namespace PhysicsDrivenMovement.Character
                 _rb.AddForce(comForce, ForceMode.Force);
             }
 
+            // ─── STEP 3.6f: Landing absorption tick ─────────────────────────
+            // Decays the landing-squat timer started by OnCharacterStateChanged on
+            // Airborne → Standing/Moving. The blend drives both height offset (STEP 3.7)
+            // and forward lean (STEP 4a).
+            float landingAbsorbBlend = 0f;
+            if (_landingAbsorbTimer > 0f)
+            {
+                _landingAbsorbTimer -= Time.fixedDeltaTime;
+                float remaining = Mathf.Max(0f, _landingAbsorbTimer);
+                if (remaining > _landingAbsorbBlendOutDuration)
+                {
+                    landingAbsorbBlend = 1f;
+                }
+                else
+                {
+                    landingAbsorbBlend = remaining / Mathf.Max(0.001f, _landingAbsorbBlendOutDuration);
+                }
+            }
+
             // STEP 3.7: Height maintenance.
             // When near ground, pushes hips up toward standing height to prevent the
             // character from settling into a seated basin-of-attraction.
@@ -1185,7 +1241,9 @@ namespace PhysicsDrivenMovement.Character
                 if (_footR != null && _footR.HasForwardObstruction)
                     anticipatedStepHeight = Mathf.Max(anticipatedStepHeight, _footR.EstimatedStepHeight);
 
-                float hipsHeightError = (_standingHipsHeight + _jumpCrouchHeightOffset + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
+                // C8.5d: Landing absorption lowers the height target during the squat.
+                float landingHeightOffset = _landingAbsorbHeightOffset * landingAbsorbBlend;
+                float hipsHeightError = (_standingHipsHeight + _jumpCrouchHeightOffset - landingHeightOffset + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
                 if (hipsHeightError > 0f)
                 {
                     float heightScale = commandHeightScale;
@@ -1317,8 +1375,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4a: Layer the director-owned lean command on top of the local
             // expressive pelvis tilt so sprint/turn posture and local expression stack
             // additively instead of overriding one another.
+            // C8.5d: Landing absorption forward lean blends in during the squat.
             float totalPelvisTilt = _smoothedPelvisTiltDeg
                                     + transientLeanDeg
+                                    + _landingAbsorbLeanDeg * landingAbsorbBlend
                                     + _currentBodySupportCommand.DesiredLeanDegrees;
             totalPelvisTilt = Mathf.Clamp(totalPelvisTilt, -_totalPelvisTiltCapDeg, _totalPelvisTiltCapDeg);
             Vector3 uprightTarget = Vector3.up;

@@ -289,6 +289,30 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True while PlayerMovement is in the jump launch leg-extension phase.</summary>
         private bool _isJumpLaunch;
 
+        // ── Landing Absorption (C8.5d) ────────────────────────────────────
+
+        /// <summary>Extra knee-bend degrees applied to both legs during landing absorption.</summary>
+        [SerializeField, Range(0f, 45f)]
+        [Tooltip("Extra knee-bend degrees applied to both legs during the landing " +
+                 "absorption squat. Decays over the blend-out duration.")]
+        private float _landingAbsorbKneeBendBoost = 15f;
+
+        /// <summary>Duration in seconds of the full landing squat hold before blend-out starts.</summary>
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Duration of the full knee-bend hold phase after landing.")]
+        private float _landingAbsorbDuration = 0.15f;
+
+        /// <summary>Duration in seconds for the landing knee-bend to blend back to normal.</summary>
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Duration for the landing knee-bend boost to decay back to zero.")]
+        private float _landingAbsorbBlendOutDuration = 0.2f;
+
+        /// <summary>Remaining landing absorption time (hold + blend-out) in seconds.</summary>
+        private float _landingAbsorbTimer;
+
+        /// <summary>Cached total duration (hold + blend-out) for phase computation.</summary>
+        private float _landingAbsorbTotalDuration;
+
         // ── Angular Velocity Gait Gate — Hysteresis (Phase 3T — GAP-2 fix) ─
 
         /// <summary>
@@ -563,6 +587,12 @@ namespace PhysicsDrivenMovement.Character
             }
 
             _suppressIncomingCommandFrame = false;
+
+            // C8.5d: Tick landing absorption timer.
+            if (_landingAbsorbTimer > 0f)
+            {
+                _landingAbsorbTimer -= Time.fixedDeltaTime;
+            }
 
             if (!_hasCommandFrame)
             {
@@ -1202,6 +1232,24 @@ namespace PhysicsDrivenMovement.Character
                 effectiveKneeAngle,
                 ref leftKneeBendDeg);
 
+            // C8.5d: Landing absorption adds transient knee-bend boost to both legs.
+            if (_landingAbsorbTimer > 0f)
+            {
+                float remaining = Mathf.Max(0f, _landingAbsorbTimer);
+                float absorbBlend;
+                if (remaining > _landingAbsorbBlendOutDuration)
+                {
+                    absorbBlend = 1f;
+                }
+                else
+                {
+                    absorbBlend = remaining / Mathf.Max(0.001f, _landingAbsorbBlendOutDuration);
+                }
+                float kneeBendBoost = _landingAbsorbKneeBendBoost * absorbBlend;
+                leftKneeBendDeg += kneeBendBoost;
+                rightKneeBendDeg += kneeBendBoost;
+            }
+
             _jointDriver.ApplySwingTargets(leftSwingDeg, rightSwingDeg, leftKneeBendDeg, rightKneeBendDeg, _useWorldSpaceSwing, _commandDesiredInput, _commandObservation);
 
             // STEP 8: Temporarily bypass foot-Environment collision during clearance-tagged swing
@@ -1794,6 +1842,13 @@ namespace PhysicsDrivenMovement.Character
                 // restore full spring stiffness.
                 _isAirborne = false;
                 _jointDriver.SetSpringMultiplier(1f);
+
+                // C8.5d: Start landing absorption knee-bend boost on clean landings.
+                if (newState == CharacterStateType.Standing || newState == CharacterStateType.Moving)
+                {
+                    _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
+                    _landingAbsorbTimer = _landingAbsorbTotalDuration;
+                }
             }
 
             if (newState == CharacterStateType.Fallen)
@@ -1801,6 +1856,7 @@ namespace PhysicsDrivenMovement.Character
                 _isJumpWindUp = false;
                 _jumpWindUpKneeBendBoost = 0f;
                 _isJumpLaunch = false;
+                _landingAbsorbTimer = 0f;
             }
         }
     }
