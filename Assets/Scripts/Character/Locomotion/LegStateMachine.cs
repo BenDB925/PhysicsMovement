@@ -130,6 +130,15 @@ namespace PhysicsDrivenMovement.Character
             float nextPhase = Mathf.Min(CyclePhase + Mathf.Max(0f, phaseAdvance), Mathf.PI - PhaseEpsilon);
             CyclePhase = nextPhase;
 
+            if (!footObservation.IsGrounded &&
+                TransitionReason == LegStateTransitionReason.StumbleRecovery &&
+                nextPhase >= Mathf.PI - PhaseEpsilon)
+            {
+                CurrentState = LegStateType.CatchStep;
+                CyclePhase = 0f;
+                return;
+            }
+
             if (footObservation.IsGrounded && nextPhase >= MinimumTouchdownPhase)
             {
                 CurrentState = LegStateType.Plant;
@@ -138,6 +147,14 @@ namespace PhysicsDrivenMovement.Character
 
         private void AdvancePlant(FootContactObservation footObservation, float phaseAdvance)
         {
+            if (!footObservation.IsGrounded &&
+                TransitionReason == LegStateTransitionReason.StumbleRecovery)
+            {
+                CurrentState = LegStateType.CatchStep;
+                CyclePhase = 0f;
+                return;
+            }
+
             // STEP 1: Keep the leg near touchdown when contact has not been re-established yet.
             if (!footObservation.IsGrounded && CyclePhase >= Mathf.PI - 0.05f)
             {
@@ -252,8 +269,10 @@ namespace PhysicsDrivenMovement.Character
             switch (transitionReason)
             {
                 case LegStateTransitionReason.SpeedUp:
-                case LegStateTransitionReason.StumbleRecovery:
                     return 1.1f;
+
+                case LegStateTransitionReason.StumbleRecovery:
+                    return 1.15f;
 
                 case LegStateTransitionReason.Braking:
                     return 0.85f;

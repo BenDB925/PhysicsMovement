@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 4 — LocomotionDirector — Recovery Timeout → Surrender
+- Current next step: Step 5 — KnockdownEvent Struct + ImpactKnockdownDetector
 - Active blockers: None
 
 ## Quick Resume
@@ -82,7 +82,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Change recovery classification thresholds (Stumble, NearFall, etc.). Don't change response profiles. Don't touch LocomotionCollapseDetector — it already feeds the director. |
 | **Design ref** | Ch1 §"Surrender trigger conditions" condition 2 (Recovery timeout) |
 | **Done when** | EditMode compile passes. A Stumble recovery running 0.8+ s with angle stuck above 50° triggers surrender. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 **Post-Ch1 gate:** Run EditMode compile. Run PlayMode test filter `HardSnapRecoveryTests;BalanceControllerTests;LocomotionDirectorTests` — existing tests should still pass (surrender only fires at extreme angles that tests don't hit).
 
@@ -262,3 +262,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-16: Verified Step 1 was already implemented in `RagdollSetup` on `master` and marked it complete after a fresh EditMode pass.
 - 2026-03-16: Completed Step 2 in `BalanceController` with surrender thresholds, severity capture, `TriggerSurrender`/`ClearSurrender`, and local balance-scale gating. EditMode passed. `HardSnapRecoveryTests` + `BalanceControllerTests` passed in PlayMode. `LocomotionDirectorTests.FixedUpdate_WhenOneFootLosesContact_BreaksStrictHalfCyclePhaseMirror` and `...ConfidenceDrops_ConvergesTowardMirroredFallbackWithoutOneFrameSnap` remain red in the Chapter 1 slice and appear unrelated to the surrender seam.
 - 2026-03-17: Completed Step 3. Created `KnockdownSeverity.cs` (static utility with `ComputeFromSurrender` and `ComputeFromImpact`). Modified `CharacterState.cs`: added `WasSurrendered` and `KnockdownSeverityValue` properties, populated on Fallen entry from `BalanceController.IsSurrendered`/`SurrenderSeverity`, cleared on exit from Fallen. EditMode compile passed. All 12 `HardSnapRecoveryTests` + `BalanceControllerTests` green.
+- 2026-03-17: Completed Step 4. Added `_surrenderRecoveryTimeout` (0.8 s) and `_surrenderRecoveryAngleCeiling` (50°) to `LocomotionDirector`. During active Stumble/NearFall recoveries, tracks how long the upright angle stays above the ceiling; when the timer exceeds the timeout, computes severity via `KnockdownSeverity.ComputeFromSurrender` and calls `BalanceController.TriggerSurrender`. 26/26 PlayMode tests green (HardSnapRecoveryTests + BalanceControllerTests + LocomotionDirectorTests). Chapter 1 complete.

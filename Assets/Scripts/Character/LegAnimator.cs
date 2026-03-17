@@ -800,8 +800,11 @@ namespace PhysicsDrivenMovement.Character
 
                 // STEP 2: Chapter 3.4 gives sharp turns and recovery explicit per-leg ownership
                 //         instead of pushing one body-level reason through both legs.
+                LocomotionLeg weakSupportLeg = LocomotionLeg.Left;
+                bool promoteWeakSupportRecovery = desiredInput.HasMoveIntent &&
+                    TryGetWeakSupportRecoveryLeg(observation, out weakSupportLeg);
                 bool promoteRecoveryOverride = desiredInput.HasMoveIntent &&
-                    (observation.IsLocomotionCollapsed || bothFeetFarBehind);
+                    (observation.IsLocomotionCollapsed || bothFeetFarBehind || promoteWeakSupportRecovery);
                 bool forceCatchStep = desiredInput.HasMoveIntent &&
                     (observation.IsLocomotionCollapsed || bothFeetFarBehind);
                 bool hasTurnAsymmetry = TryGetTurnLegRoles(
@@ -809,7 +812,10 @@ namespace PhysicsDrivenMovement.Character
                     observation,
                     out LocomotionLeg outsideLeg,
                     out LocomotionLeg insideLeg);
-                LocomotionLeg recoveryLeg = SelectRecoveryLeg(gaitReferenceDirection, observation);
+                LocomotionLeg recoveryLeg = promoteWeakSupportRecovery
+                    ? weakSupportLeg
+                    : SelectRecoveryLeg(gaitReferenceDirection, observation);
+
                 LegStateTransitionReason leftTransitionReason = DetermineLegTransitionReason(
                     LocomotionLeg.Left,
                     cadenceReason,
@@ -1171,6 +1177,39 @@ namespace PhysicsDrivenMovement.Character
             return SelectLegByPhaseBias();
         }
 
+        private bool TryGetWeakSupportRecoveryLeg(
+            LocomotionObservation observation,
+            out LocomotionLeg recoveryLeg)
+        {
+            recoveryLeg = LocomotionLeg.Left;
+
+            bool leftUnexpectedWeakSupport = IsUnexpectedWeakSupport(
+                _leftLegStateMachine,
+                observation.LeftFoot);
+            bool rightUnexpectedWeakSupport = IsUnexpectedWeakSupport(
+                _rightLegStateMachine,
+                observation.RightFoot);
+
+            if (leftUnexpectedWeakSupport == rightUnexpectedWeakSupport)
+            {
+                return false;
+            }
+
+            if (leftUnexpectedWeakSupport)
+            {
+                recoveryLeg = LocomotionLeg.Left;
+                return true;
+            }
+
+            if (rightUnexpectedWeakSupport)
+            {
+                recoveryLeg = LocomotionLeg.Right;
+                return true;
+            }
+
+            return false;
+        }
+
         private float BuildRecoveryLegScore(
             Transform footTransform,
             FootContactObservation footObservation,
@@ -1200,6 +1239,34 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return recoveryScore;
+        }
+
+        private static bool IsUnexpectedWeakSupport(
+            LegStateMachine stateMachine,
+            FootContactObservation footObservation)
+        {
+            switch (stateMachine.CurrentState)
+            {
+                case LegStateType.CatchStep:
+                case LegStateType.RecoveryStep:
+                    return false;
+
+                case LegStateType.Swing:
+                    return !footObservation.IsGrounded &&
+                        stateMachine.CyclePhase >= Mathf.PI - 0.08f;
+
+                case LegStateType.Plant:
+                    return !footObservation.IsGrounded;
+            }
+
+            if (!footObservation.IsGrounded)
+            {
+                return true;
+            }
+
+            return !footObservation.IsPlanted &&
+                (footObservation.PlantedConfidence <= 0.2f ||
+                 footObservation.ContactConfidence <= 0.25f);
         }
 
         private LocomotionLeg SelectLegByPhaseBias()

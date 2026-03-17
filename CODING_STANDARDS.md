@@ -114,6 +114,8 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 
 **Output format for the self-review:** Present a table of F1–F10 with PASS/FAIL and a brief note. If any FAIL, describe the fix applied. The user should see the review results before they're committed.
 
+**Commit-per-subtask rule:** When working inside a plan's chapter, run the full Phase F self-review and commit after **each completed subtask** — not once at the end. Each commit should cover exactly one subtask's scope. Update the parent plan or chapter status immediately after the commit so the record stays current.
+
 ---
 
 ## 2 — Testing Standards
@@ -122,7 +124,7 @@ Before presenting work as ready, run **every item** in this checklist. If any it
 
 ### Framework
 
-- **Always use script to run tests** Use `Tools/Run-UnityTests.ps1` (defaults to unattended hidden execution; use `-Unattended:$false` only when you explicitly want visible child windows) so EditMode + PlayMode execute sequentially without stale lock issues.
+- **Prefer MCP for test runs** When Unity is open, use the Unity MCP `run_tests` tool as the primary test runner — it keeps the editor live so other MCP tools (console logs, recompile, scene inspection) remain available. Fall back to `Tools/Run-UnityTests.ps1` when MCP is unavailable, when you need CI-like XML artifacts, or when Unity is not open.
 - **Unity Test Framework** (NUnit-based).
 - **EditMode tests** for pure logic, data transforms, state machines, utility functions — anything that doesn't need a scene or MonoBehaviour lifecycle.
 - **PlayMode tests** for physics interactions, coroutine/async flows, component integration, NetworkBehaviour, and anything requiring `Awake`/`Start`/`Update`.
@@ -401,6 +403,7 @@ These rules govern agent behaviour directly.
 |------|--------|
 | **Read before write** | Always read the target file and its class-level docs before editing. Check related tests. |
 | **One concern per commit** | Each commit should address exactly one bug, feature, or refactor. |
+| **Commit per subtask** | When executing a plan chapter, run Phase F self-review and commit after each completed subtask. Update the parent plan status immediately after each commit. |
 | **Never delete tests** | Tests may be updated if behaviour intentionally changes, but never silently removed. |
 | **Explain trade-offs** | If multiple approaches exist, briefly state alternatives and why the chosen approach was selected. |
 | **Flag uncertainty** | If unsure whether a change is safe, say so explicitly. Suggest how to verify. |
@@ -441,6 +444,10 @@ TASK RECEIVED
           ▼ YES
  ┌─────────────────────┐
  │  F. Self-Review      │  Run F1–F10 checklist. Fix failures.
+ └────────┬────────────┘
+          ▼
+ ┌─────────────────────┐
+ │  G. Commit Subtask   │  git add + commit. Update plan status.
  └────────┬────────────┘
           ▼
      PRESENT TO USER
