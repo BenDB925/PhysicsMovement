@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 6 — Wire ImpactKnockdownDetector to Prefab
+- Current next step: Step 7 — CharacterState — Severity-Based Floor Dwell
 - Active blockers: None
 
 ## Quick Resume
@@ -110,7 +110,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **What to do** | Add `ImpactKnockdownDetector` component to the Hips bone on the PlayerRagdoll prefab. Wire the `BalanceController` and `CharacterState` references. Set default parameter values per Ch2 spec. |
 | **Note** | This is a Unity Editor task — agent should open the prefab and add the component, or do it via script if MCP Unity is available. If not automatable, leave as a manual checklist item. |
 | **Done when** | Prefab has the component with correct references. PlayMode tests still pass. |
-| **Status** | [ ] |
+| **Status** | [x] |
 
 **Post-Ch2 gate:** Run EditMode compile.
 
@@ -264,3 +264,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-17: Completed Step 3. Created `KnockdownSeverity.cs` (static utility with `ComputeFromSurrender` and `ComputeFromImpact`). Modified `CharacterState.cs`: added `WasSurrendered` and `KnockdownSeverityValue` properties, populated on Fallen entry from `BalanceController.IsSurrendered`/`SurrenderSeverity`, cleared on exit from Fallen. EditMode compile passed. All 12 `HardSnapRecoveryTests` + `BalanceControllerTests` green.
 - 2026-03-17: Completed Step 4. Added `_surrenderRecoveryTimeout` (0.8 s) and `_surrenderRecoveryAngleCeiling` (50°) to `LocomotionDirector`. During active Stumble/NearFall recoveries, tracks how long the upright angle stays above the ceiling; when the timer exceeds the timeout, computes severity via `KnockdownSeverity.ComputeFromSurrender` and calls `BalanceController.TriggerSurrender`. 26/26 PlayMode tests green (HardSnapRecoveryTests + BalanceControllerTests + LocomotionDirectorTests). Chapter 1 complete.
 - 2026-03-17: Completed Step 5. Added `ImpactKnockdownDetector.cs` and `KnockdownEvent.cs` to the character runtime. The detector filters self and ground collisions, computes direction-weighted effective delta-v from `Collision.impulse`, lowers the knockdown threshold during `GettingUp`, triggers `BalanceController.TriggerSurrender(...)` for hard hits, applies a stagger torque for medium hits, emits `OnKnockdown`, and tracks a 1.0 s cooldown to suppress retriggers during the same tumble. Focused EditMode compile/import verification passed 8/8 via `LocomotionDirectorEditModeTests`, and repo routing/architecture docs were updated for the new knockdown seam.
+- 2026-03-17: Completed Step 6. Wired `ImpactKnockdownDetector` onto the root hips object for both `Assets/Prefabs/PlayerRagdoll.prefab` and the live runtime asset `Assets/Prefabs/PlayerRagdoll_Skinned.prefab` (the skinned prefab is a fully saved copy, not a variant). Serialized defaults match Chapter 2 and the detector now references the root hips `Rigidbody`, `BalanceController`, and `CharacterState`. Focused verification passed via EditMode `LocomotionDirectorEditModeTests` (8/8) and PlayMode `BalanceControllerTests` (10/10). A direct run of `PlayerRagdollPrefabPlayModeTests` now leaves `PlayerRagdollPrefab_FromBackFall_RecoversToStanding` red because its 95° back-fall setup overlaps the new surrender-era behavior; revisit that assertion during Step 12's test update pass rather than treating it as a Step 6 wiring regression.

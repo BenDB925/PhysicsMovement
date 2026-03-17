@@ -767,6 +767,7 @@ GameObject:
   - component: {fileID: 1692663064900285257}
   - component: {fileID: 6761110208012158854}
   - component: {fileID: 4632267047828400493}
+  - component: {fileID: 7243388157421600041}
   m_Layer: 8
   m_Name: PlayerRagdoll_Skinned
   m_TagString: Untagged
@@ -1124,6 +1125,29 @@ MonoBehaviour:
   _modelRoot: {fileID: 905753918366034626}
   _verticalOffset: 0
   _debugMapping: 0
+--- !u!114 &7243388157421600041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801282067977710084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 220d1fbfdd0c14948b0562db8998029c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.ImpactKnockdownDetector
+  _impactKnockdownDeltaV: 5
+  _impactStaggerDeltaV: 2.5
+  _impactCooldown: 1
+  _impactDirectionWeight: 0.7
+  _gettingUpThresholdMultiplier: 0.6
+  _groundLayers:
+    serializedVersion: 2
+    m_Bits: 4096
+  _hipsRb: {fileID: 3830808484926529326}
+  _balanceController: {fileID: 8927490194607149143}
+  _characterState: {fileID: 118470987858688727}
 --- !u!1 &1889336342083505185
 GameObject:
   m_ObjectHideFlags: 0
