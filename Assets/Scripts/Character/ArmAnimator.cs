@@ -113,6 +113,23 @@ namespace PhysicsDrivenMovement.Character
                  "and blends out on landing (units per second).")]
         private float _airborneBlendSpeed = 6f;
 
+        [Header("Expression Amplitude Caps")]
+        [SerializeField, Range(0f, 90f)]
+        [Tooltip("Hard cap (degrees) on the final upper-arm swing angle after all " +
+                 "expression layers (amplitude curve, sprint blend, brace dampen) are composed. " +
+                 "Prevents extreme inspector values from exceeding safe joint bounds.")]
+        private float _maxSwingAngleDeg = 60f;
+
+        [SerializeField, Range(0f, 90f)]
+        [Tooltip("Hard cap (degrees) on the composed elbow bend angle after brace boost " +
+                 "is added. Prevents over-bend that could clip through the torso.")]
+        private float _maxElbowAngleDeg = 55f;
+
+        [SerializeField, Range(0f, 60f)]
+        [Tooltip("Hard cap (degrees) on the total upper-arm abduction angle during the " +
+                 "airborne arm raise. Prevents arms from exceeding a natural range.")]
+        private float _maxAbductionAngleDeg = 45f;
+
         // DESIGN: _armSwingAxis and _elbowAxis follow the same convention as LegAnimator's
         // _swingAxis/_kneeAxis. With RagdollBuilder defaults (joint.axis = Vector3.right,
         // secondaryAxis = Vector3.forward), ConfigurableJoint.targetRotation maps the primary
@@ -331,6 +348,9 @@ namespace PhysicsDrivenMovement.Character
                 effectiveElbowBendAngle += _braceElbowBendBoost * _currentBraceBlend;
             }
 
+            // STEP 3d: Clamp composed elbow bend to the hard cap.
+            effectiveElbowBendAngle = Mathf.Clamp(effectiveElbowBendAngle, 0f, _maxElbowAngleDeg);
+
             // STEP 4: Read the gait phase from LegAnimator and compute arm phases.
             //         Arms use the OPPOSITE phase from legs:
             //           Left arm uses  (phase + π) → opposite of left leg (phase)
@@ -349,6 +369,10 @@ namespace PhysicsDrivenMovement.Character
 
             float leftSwingDeg  = sinLeft  * effectiveArmSwingAngle * effectiveScale;
             float rightSwingDeg = sinRight * effectiveArmSwingAngle * effectiveScale;
+
+            // STEP 4b: Clamp swing angles to the hard cap.
+            leftSwingDeg  = Mathf.Clamp(leftSwingDeg,  -_maxSwingAngleDeg, _maxSwingAngleDeg);
+            rightSwingDeg = Mathf.Clamp(rightSwingDeg, -_maxSwingAngleDeg, _maxSwingAngleDeg);
 
             // STEP 5: Apply upper arm swing rotations using local-space targetRotation.
             //         When airborne blend > 0, interpolate between gait swing and the
@@ -444,8 +468,10 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private void ApplyAirbornePose(float blend)
         {
-            float boostedAbdL =  (_restAbductionAngle + _airborneAbductionBoost * blend);
-            float boostedAbdR = -(_restAbductionAngle + _airborneAbductionBoost * blend);
+            float boostedAbdL =  Mathf.Clamp(_restAbductionAngle + _airborneAbductionBoost * blend,
+                                              -_maxAbductionAngleDeg, _maxAbductionAngleDeg);
+            float boostedAbdR = -Mathf.Clamp(_restAbductionAngle + _airborneAbductionBoost * blend,
+                                              -_maxAbductionAngleDeg, _maxAbductionAngleDeg);
             float forwardReach = _airborneForwardReach * blend;
             float elbowDeg = Mathf.Lerp(_elbowBendAngle, _airborneElbowBend, blend);
 
@@ -478,8 +504,10 @@ namespace PhysicsDrivenMovement.Character
             float elbowDeg, float blend)
         {
             // Compute airborne upper-arm targets.
-            float boostedAbdL =  (_restAbductionAngle + _airborneAbductionBoost * blend);
-            float boostedAbdR = -(_restAbductionAngle + _airborneAbductionBoost * blend);
+            float boostedAbdL =  Mathf.Clamp(_restAbductionAngle + _airborneAbductionBoost * blend,
+                                              -_maxAbductionAngleDeg, _maxAbductionAngleDeg);
+            float boostedAbdR = -Mathf.Clamp(_restAbductionAngle + _airborneAbductionBoost * blend,
+                                              -_maxAbductionAngleDeg, _maxAbductionAngleDeg);
             float forwardReach = _airborneForwardReach * blend;
 
             // Gait targets (same as ApplyArmSwing).

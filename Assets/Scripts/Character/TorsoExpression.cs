@@ -115,6 +115,9 @@ namespace PhysicsDrivenMovement.Character
             _smoothedTwistDeg = Mathf.Lerp(_smoothedTwistDeg, twistTarget,
                 Time.fixedDeltaTime * _twistSmoothing);
 
+            // STEP 4b: Clamp the smoothed output to enforce the amplitude cap.
+            _smoothedTwistDeg = Mathf.Clamp(_smoothedTwistDeg, -_twistMaxDeg, _twistMaxDeg);
+
             // STEP 5: Apply as a Y-axis rotation in joint-local space.
             _torsoJoint.targetRotation = Quaternion.Euler(0f, _smoothedTwistDeg, 0f);
         }

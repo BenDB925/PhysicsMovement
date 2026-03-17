@@ -293,6 +293,21 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration in seconds for the reversal weight shift to decay back to zero.")]
         private float _reversalWeightShiftDecay = 0.35f;
 
+        // ─── Expression Amplitude Caps ──────────────────────────────────────
+
+        [Header("Expression Amplitude Caps")]
+        [SerializeField, Range(0f, 30f)]
+        [Tooltip("Hard cap (degrees) on the composite pelvis tilt that stacks acceleration " +
+                 "tilt, transient accel/decel lean, and director lean. Prevents the sum of " +
+                 "independently-valid sources from pushing the character past safe posture bounds.")]
+        private float _totalPelvisTiltCapDeg = 15f;
+
+        [SerializeField, Range(0f, 0.15f)]
+        [Tooltip("Hard cap (meters) on the total lateral COM expression offset produced by " +
+                 "pelvis sway and reversal weight shift combined. Prevents expression layers " +
+                 "from drifting the COM target beyond safe stabilization bounds.")]
+        private float _totalComExpressionOffsetCap = 0.06f;
+
         // ─── Height Maintenance ─────────────────────────────────────────────
 
         [Header("Height Maintenance")]
@@ -994,6 +1009,7 @@ namespace PhysicsDrivenMovement.Character
                 // Shifts the COM target toward the stance foot when only one foot is
                 // grounded, creating a visible hip sway toward the planted leg.
                 // Scaled by SmoothedInputMag so it disappears at idle.
+                Vector3 preExpressionFeetCenter = feetCenter;
                 {
                     Vector3 swayTarget = Vector3.zero;
                     if (_pelvisSwayMaxOffset > 0f && _legAnimator != null && !IsFallen && !_suppressPelvisExpression)
@@ -1072,6 +1088,21 @@ namespace PhysicsDrivenMovement.Character
                         float t = Mathf.Clamp01(
                             _reversalWeightShiftTimer / Mathf.Max(0.001f, _reversalWeightShiftDecay));
                         feetCenter += _reversalWeightShiftDirection * (_reversalWeightShiftMaxOffset * t);
+                    }
+                }
+
+                // STEP 3.6e: Clamp the total lateral COM expression offset (sway + reversal)
+                // so that no combination of expression layers can push the stabilization
+                // target beyond a safe bound.
+                if (_totalComExpressionOffsetCap > 0f)
+                {
+                    Vector3 comExpressionDelta = feetCenter - preExpressionFeetCenter;
+                    comExpressionDelta.y = 0f;
+                    float comExpressionMag = comExpressionDelta.magnitude;
+                    if (comExpressionMag > _totalComExpressionOffsetCap)
+                    {
+                        feetCenter = preExpressionFeetCenter
+                                     + comExpressionDelta * (_totalComExpressionOffsetCap / comExpressionMag);
                     }
                 }
 
@@ -1256,6 +1287,7 @@ namespace PhysicsDrivenMovement.Character
             float totalPelvisTilt = _smoothedPelvisTiltDeg
                                     + transientLeanDeg
                                     + _currentBodySupportCommand.DesiredLeanDegrees;
+            totalPelvisTilt = Mathf.Clamp(totalPelvisTilt, -_totalPelvisTiltCapDeg, _totalPelvisTiltCapDeg);
             Vector3 uprightTarget = Vector3.up;
             if (Mathf.Abs(totalPelvisTilt) > 0.01f)
             {
