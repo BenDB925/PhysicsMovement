@@ -5,7 +5,7 @@ Detect when the character is in an unrecoverable tilt and stop fighting it. Inst
 
 ## Current status
 - State: In progress
-- Current next step: Implement CharacterState surrender handoff and shared knockdown severity utility
+- Current next step: Implement LocomotionDirector recovery-timeout → surrender handoff
 - Blockers: None
 
 ## Current behavior

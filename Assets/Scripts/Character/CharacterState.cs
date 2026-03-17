@@ -63,6 +63,19 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public CharacterStateType CurrentState { get; private set; } = CharacterStateType.Standing;
 
+        /// <summary>
+        /// True when the most recent Fallen entry was caused by a surrender
+        /// (as opposed to a simple angle-based or collapse-based fall).
+        /// Reset on exit from Fallen.
+        /// </summary>
+        public bool WasSurrendered { get; private set; }
+
+        /// <summary>
+        /// Knockdown severity (0–1) captured at Fallen entry when <see cref="WasSurrendered"/> is true.
+        /// Consumed by floor-dwell timing (Ch3) and stand-up difficulty (Ch4).
+        /// </summary>
+        public float KnockdownSeverityValue { get; private set; }
+
         private void Awake()
         {
             // STEP 1: Cache BalanceController, collapse detection, LocomotionDirector, PlayerMovement, and Rigidbody dependencies.
@@ -249,6 +262,17 @@ namespace PhysicsDrivenMovement.Character
             if (nextState != CurrentState && nextState == CharacterStateType.Fallen)
             {
                 _enteredFallenFromCollapse = !isFallen && isLocomotionCollapsed;
+
+                if (_balanceController.IsSurrendered)
+                {
+                    WasSurrendered = true;
+                    KnockdownSeverityValue = _balanceController.SurrenderSeverity;
+                }
+                else
+                {
+                    WasSurrendered = false;
+                    KnockdownSeverityValue = 0f;
+                }
             }
 
             ChangeState(nextState);
@@ -281,6 +305,8 @@ namespace PhysicsDrivenMovement.Character
             if (newState != CharacterStateType.Fallen)
             {
                 _enteredFallenFromCollapse = false;
+                WasSurrendered = false;
+                KnockdownSeverityValue = 0f;
             }
 
             // STEP 3: Run state-entry behavior.

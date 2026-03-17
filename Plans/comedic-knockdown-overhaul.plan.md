@@ -3,7 +3,7 @@
 ## Status
 - State: Active
 - Acceptance target: Character falls over naturally when situation is unrecoverable OR hit by external force, stays on the ground for a comedic beat, then physically stands back up through a staged sequence
-- Current next step: Step 3 — CharacterState — Accept Surrender + KnockdownSeverity Utility
+- Current next step: Step 4 — LocomotionDirector — Recovery Timeout → Surrender
 - Active blockers: None
 
 ## Quick Resume
@@ -72,9 +72,7 @@ done-check. Steps within a chapter are sequential; chapters are sequential.
 | **Do NOT** | Change Fallen→GettingUp timing. Don't modify any other state transitions. |
 | **Design ref** | Ch1 §"Signal CharacterState", Ch3 §"Knockdown severity" |
 | **Done when** | EditMode compile passes. When BalanceController.IsSurrendered is true at Fallen entry, CharacterState.WasSurrendered is true and KnockdownSeverityValue matches. |
-| **Status** | [ ] |
-
-#### Step 4: LocomotionDirector — Recovery Timeout → Surrender
+| **Status** | [x] |
 | | |
 |---|---|
 | **Read** | `LocomotionDirector.cs` (~630 lines), `BalanceController.cs` (just `TriggerSurrender` API, `UprightAngle`) |
@@ -263,3 +261,4 @@ Steps 12, 13, 14 can run in parallel if multiple agents are available.
 - 2026-03-16: Restructured into 15 atomic agent-sized steps with explicit file scopes, LOC budgets, and done-checks.
 - 2026-03-16: Verified Step 1 was already implemented in `RagdollSetup` on `master` and marked it complete after a fresh EditMode pass.
 - 2026-03-16: Completed Step 2 in `BalanceController` with surrender thresholds, severity capture, `TriggerSurrender`/`ClearSurrender`, and local balance-scale gating. EditMode passed. `HardSnapRecoveryTests` + `BalanceControllerTests` passed in PlayMode. `LocomotionDirectorTests.FixedUpdate_WhenOneFootLosesContact_BreaksStrictHalfCyclePhaseMirror` and `...ConfidenceDrops_ConvergesTowardMirroredFallbackWithoutOneFrameSnap` remain red in the Chapter 1 slice and appear unrelated to the surrender seam.
+- 2026-03-17: Completed Step 3. Created `KnockdownSeverity.cs` (static utility with `ComputeFromSurrender` and `ComputeFromImpact`). Modified `CharacterState.cs`: added `WasSurrendered` and `KnockdownSeverityValue` properties, populated on Fallen entry from `BalanceController.IsSurrendered`/`SurrenderSeverity`, cleared on exit from Fallen. EditMode compile passed. All 12 `HardSnapRecoveryTests` + `BalanceControllerTests` green.
