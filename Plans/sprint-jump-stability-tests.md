@@ -14,9 +14,9 @@ Create a new PlayMode test fixture `SprintJumpStabilityTests` that reproduces th
 ## Current status
 
 - State: In Progress
-- Current next step: Task 4 — add `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant()`.
-- Verified artifact: `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now uses 5.0 s sprint windows (`SprintRampFrames = 500`, `SecondSprintFrames = 500`), and the focused PlayMode fixture reproduced the expected Task 3 red in two consecutive 2026-03-18 runs (`Result=Failed, Total=2, Passed=1, Failed=1`) with `[METRIC]` values `PeakTiltAfterJump1=91.2`, `RecoveryFrames1=45`, and `PeakSprintSpeed=4.30`.
-- Open observation: with the 5.0 s sprint window, the smoke run now aligns with the Task 3 failure on jump 1 (`PeakTilt=96.2`, `FinalState=Fallen`, `Airborne1=True`), but jump 2 still failed to enter `Airborne` in the same helper run (`Airborne2=False`), so Task 4 likely needs a tighter second-jump trigger path rather than just more assertions.
+- Current next step: Task 6 — add `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()`.
+- Verified artifact: `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now includes `SprintJump_LandingRecovery_RegainsUprightWithinDeadline()`. The focused PlayMode fixture on 2026-03-18 now runs 4 tests and reports `Result=Failed, Total=4, Passed=2, Failed=2`: the new Task 5 test passes with `[METRIC]` values `RecoveryFrames1=45` and `RecoveryFrames2=-1`, while Task 3 still fails with `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29`, and Task 4 still fails after emitting `PeakTiltAfterJump1=95.9`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=47`, `RecoveryFrames2=-1`, `FinalTilt=86.6`, `PeakSprintSpeed=4.27`, and `EverFallen=True`.
+- Open observation: Task 5 stays green because jump 1 recovers within the 150-frame deadline and the jump-2 recovery assertions are gated behind `WasAirborneAfterJump2`. The same focused run's smoke output still ended `PeakTilt=92.7`, `PeakSpeed=4.01`, `FinalState=Fallen`, `FinalTilt=86.5`, `Airborne1=True`, and `Airborne2=False`, so the shared helper continues to collapse before a second valid airborne state emerges.
 - Repo note: the live codebase exposes `LocomotionDirector` and `RecoveryTelemetryEvent` under `PhysicsDrivenMovement.Character`, not a separate `PhysicsDrivenMovement.Character.Locomotion` namespace.
 
 ## Location
@@ -375,6 +375,8 @@ public IEnumerator SprintJump_TwoConsecutiveJumps_DoesNotFaceplant()
 
 **Commit gate:** Test runs and fails with clear diagnostics if the bug exists.
 
+- 2026-03-18: Completed. Added `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant()` to `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` and tightened the shared helper with a short jump-ready stabilization window before jump 2 (3 stable grounded `Standing`/`Moving` frames within a 30-frame budget) so the second pulse does not land on a transient non-jumpable frame. Focused verification via `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests"` now reports `Result=Failed, Total=3, Passed=1, Failed=2`: Task 3 still fails on jump-1 faceplant (`PeakTiltAfterJump1=91.2`, `RecoveryFrames1=45`, `PeakSprintSpeed=4.30`), and Task 4 emits `[METRIC]` lines `PeakTiltAfterJump1=95.7`, `PeakTiltAfterJump2=86.5`, `RecoveryFrames1=50`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.29`, and `EverFallen=True` before failing on `Jump 2 should have entered Airborne`. The companion smoke run in the same fixture still ended `FinalState=Fallen` with `Airborne2=False`, indicating the first landing collapse persists through the second-jump window.
+
 ---
 
 ### Task 5 — Test method: `SprintJump_LandingRecovery_RegainsUprightWithinDeadline`
@@ -419,6 +421,8 @@ public IEnumerator SprintJump_LandingRecovery_RegainsUprightWithinDeadline()
 ```
 
 **Commit gate:** Test runs.
+
+- 2026-03-18: Completed. Added `SprintJump_LandingRecovery_RegainsUprightWithinDeadline()` to `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` and verified the focused PlayMode fixture with `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests"`. The fixture now reports `Result=Failed, Total=4, Passed=2, Failed=2`: the new Task 5 test passes with `[METRIC]` lines `RecoveryFrames1=45` and `RecoveryFrames2=-1`, confirming jump 1 regains upright inside the 150-frame deadline while jump 2 never reaches the conditional recovery assertions because `WasAirborneAfterJump2` remains false. The companion smoke run still ends `FinalState=Fallen` with `Airborne2=False`, so the next slice remains the telemetry capture needed to explain the post-landing collapse.
 
 ---
 

@@ -17,6 +17,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int PostJumpSettleFrames = 200;
         private const int SecondSprintFrames = 500;
         private const int FinalSettleFrames = 200;
+        private const int JumpReadyStabilityFrames = 3;
+        private const int SecondJumpReadyWindowFrames = 30;
         private const float FaceplantAngleThreshold = 45f;
         private const float StableUprightCeiling = 25f;
         private const int PostLandStabilityDeadline = 150;
@@ -135,6 +137,26 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 RecordContinuousState(diag);
             }
 
+            int jumpReadyStableFrames = 0;
+            for (int frame = 0; frame < SecondJumpReadyWindowFrames; frame++)
+            {
+                if (IsJumpReady())
+                {
+                    jumpReadyStableFrames++;
+                    if (jumpReadyStableFrames >= JumpReadyStabilityFrames)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    jumpReadyStableFrames = 0;
+                }
+
+                yield return new WaitForFixedUpdate();
+                RecordContinuousState(diag);
+            }
+
             _rig.PlayerMovement.SetJumpInputForTest(true);
             yield return new WaitForFixedUpdate();
             _rig.PlayerMovement.SetJumpInputForTest(false);
@@ -201,6 +223,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             diag.PeakSprintSpeed = Mathf.Max(diag.PeakSprintSpeed, planarSpeed);
         }
 
+        private bool IsJumpReady()
+        {
+            CharacterStateType state = _rig.CharacterState.CurrentState;
+            bool canJumpFromState = state == CharacterStateType.Standing ||
+                                    state == CharacterStateType.Moving;
+
+            return _rig.BalanceController.IsGrounded &&
+                   canJumpFromState &&
+                   _rig.PlayerMovement.CurrentJumpPhase == JumpPhase.None;
+        }
+
         [UnityTest]
         public IEnumerator RunSprintJumpSequence_WithFreshRig_CompletesWithoutErrors()
         {
@@ -247,6 +280,90 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(diag.EnteredFallenAfterJump1, Is.False,
                 "Character should not enter Fallen state after sprint-jump landing #1.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintJump_TwoConsecutiveJumps_DoesNotFaceplant()
+        {
+            // Arrange
+            SprintJumpDiagnostics diag = new SprintJumpDiagnostics();
+
+            // Act
+            yield return RunSprintJumpSequence(diag);
+
+            // Assert
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps PeakTiltAfterJump1={diag.MaxUprightAngleAfterJump1:F1}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps PeakTiltAfterJump2={diag.MaxUprightAngleAfterJump2:F1}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps RecoveryFrames1={diag.FramesToRecoverAfterJump1}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps RecoveryFrames2={diag.FramesToRecoverAfterJump2}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps FinalTilt={diag.FinalUprightAngle:F1}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps PeakSprintSpeed={diag.PeakSprintSpeed:F2}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_TwoJumps EverFallen={diag.EverEnteredFallen}");
+
+            Assert.That(diag.WasAirborneAfterJump1, Is.True,
+                "Jump 1 should have entered Airborne.");
+            Assert.That(diag.WasAirborneAfterJump2, Is.True,
+                "Jump 2 should have entered Airborne.");
+
+            Assert.That(diag.MaxUprightAngleAfterJump1, Is.LessThan(FaceplantAngleThreshold),
+                $"Landing #1 peak tilt {diag.MaxUprightAngleAfterJump1:F1}° exceeds {FaceplantAngleThreshold}°.");
+            Assert.That(diag.MaxUprightAngleAfterJump2, Is.LessThan(FaceplantAngleThreshold),
+                $"Landing #2 peak tilt {diag.MaxUprightAngleAfterJump2:F1}° exceeds {FaceplantAngleThreshold}°.");
+
+            Assert.That(diag.EnteredFallenAfterJump1, Is.False,
+                "No Fallen state after landing #1.");
+            Assert.That(diag.EnteredFallenAfterJump2, Is.False,
+                "No Fallen state after landing #2.");
+
+            Assert.That(diag.FinalUprightAngle, Is.LessThan(StableUprightCeiling),
+                $"After the full sequence, final tilt is {diag.FinalUprightAngle:F1}° " +
+                $"(ceiling {StableUprightCeiling}°).");
+            Assert.That(diag.FinalState, Is.Not.EqualTo(CharacterStateType.Fallen),
+                "Character should not be in Fallen state at the end of the sequence.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintJump_LandingRecovery_RegainsUprightWithinDeadline()
+        {
+            // Arrange
+            SprintJumpDiagnostics diag = new SprintJumpDiagnostics();
+
+            // Act
+            yield return RunSprintJumpSequence(diag);
+
+            // Assert
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_Recovery RecoveryFrames1={diag.FramesToRecoverAfterJump1}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_Recovery RecoveryFrames2={diag.FramesToRecoverAfterJump2}");
+
+            Assert.That(diag.WasAirborneAfterJump1, Is.True,
+                "Jump 1 must produce Airborne state.");
+
+            Assert.That(diag.FramesToRecoverAfterJump1, Is.GreaterThanOrEqualTo(0),
+                $"After landing #1, character never recovered below {StableUprightCeiling}° " +
+                $"within {PostJumpSettleFrames} frames. Peak tilt was {diag.MaxUprightAngleAfterJump1:F1}°.");
+
+            Assert.That(diag.FramesToRecoverAfterJump1, Is.LessThanOrEqualTo(PostLandStabilityDeadline),
+                $"Recovery after landing #1 took {diag.FramesToRecoverAfterJump1} frames " +
+                $"(deadline: {PostLandStabilityDeadline} frames = {PostLandStabilityDeadline * 0.01f:F1} s).");
+
+            if (diag.WasAirborneAfterJump2)
+            {
+                Assert.That(diag.FramesToRecoverAfterJump2, Is.GreaterThanOrEqualTo(0),
+                    $"After landing #2, character never recovered below {StableUprightCeiling}°.");
+
+                Assert.That(diag.FramesToRecoverAfterJump2, Is.LessThanOrEqualTo(PostLandStabilityDeadline),
+                    $"Recovery after landing #2 took {diag.FramesToRecoverAfterJump2} frames " +
+                    $"(deadline: {PostLandStabilityDeadline}).");
+            }
         }
     }
 }
