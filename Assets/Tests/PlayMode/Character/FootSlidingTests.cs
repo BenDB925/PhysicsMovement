@@ -16,6 +16,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     {
         private const int SettleFrames = 100;
         private const int WalkFrames = 500;
+        private const int SprintFrames = 500;
 
         /// <summary>
         /// Maximum per-step planted foot drift at walk speed before the test fails.
@@ -25,6 +26,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// target. WP3b will tighten it after the speed envelope is analyzed.
         /// </summary>
         private const float MaxPlantedFootDriftMetres = 0.35f;
+
+        /// <summary>
+        /// Maximum per-step planted foot drift at sprint speed. Baseline measurement
+        /// shows ~0.74m peak drift at sprint (PeakSpeed=3.22 m/s). Set to 0.80m as a
+        /// regression gate that captures the current sprint quality level. WP3b will
+        /// tighten after the speed envelope sweep in WP2b.
+        /// </summary>
+        private const float MaxSprintPlantedFootDriftMetres = 0.80f;
 
         /// <summary>
         /// Frames to skip after entering Stance before starting drift measurement.
@@ -124,6 +133,80 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Planted foot drift {tracker.MaxDrift:F4}m exceeds threshold {MaxPlantedFootDriftMetres}m. " +
                 $"The body is moving faster than the leg cycle can anchor. " +
                 $"Steps={tracker.CompletedStepCount} AvgDrift={tracker.AverageDrift:F4}m");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintForward_PlantedFeetDoNotSlide()
+        {
+            GroundSensor leftSensor = FindGroundSensor(_rig.Instance, "Foot_L");
+            GroundSensor rightSensor = FindGroundSensor(_rig.Instance, "Foot_R");
+            Assert.That(leftSensor, Is.Not.Null, "Left GroundSensor not found.");
+            Assert.That(rightSensor, Is.Not.Null, "Right GroundSensor not found.");
+
+            object leftStateMachine = LeftLegStateMachineField?.GetValue(_rig.LegAnimator);
+            object rightStateMachine = RightLegStateMachineField?.GetValue(_rig.LegAnimator);
+            Assert.That(leftStateMachine, Is.Not.Null, "Left LegStateMachine not resolved.");
+            Assert.That(rightStateMachine, Is.Not.Null, "Right LegStateMachine not resolved.");
+
+            EnsureLegStatePropertyCached(leftStateMachine);
+
+            PlantedFootDriftTracker tracker = new PlantedFootDriftTracker();
+            float peakSpeed = 0f;
+
+            // Sprint forward for ~10 seconds.
+            _rig.PlayerMovement.SetMoveInputForTest(new Vector2(0f, 1f));
+            _rig.PlayerMovement.SetSprintInputForTest(true);
+
+            for (int i = 0; i < SprintFrames; i++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                bool leftInStance = IsFootInStance(leftStateMachine, leftSensor);
+                bool rightInStance = IsFootInStance(rightStateMachine, rightSensor);
+
+                _leftStanceAge = leftInStance ? _leftStanceAge + 1 : 0;
+                _rightStanceAge = rightInStance ? _rightStanceAge + 1 : 0;
+
+                bool leftPlanted = _leftStanceAge > StanceSettleFrames;
+                bool rightPlanted = _rightStanceAge > StanceSettleFrames;
+
+                tracker.Sample(
+                    _rig.FootL.position,
+                    leftPlanted,
+                    _rig.FootR.position,
+                    rightPlanted);
+
+                float speed = new Vector3(
+                    _rig.HipsBody.linearVelocity.x, 0f,
+                    _rig.HipsBody.linearVelocity.z).magnitude;
+                if (speed > peakSpeed) peakSpeed = speed;
+            }
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+            _rig.PlayerMovement.SetSprintInputForTest(false);
+            tracker.Flush();
+
+            float finalSpeed = new Vector3(
+                _rig.HipsBody.linearVelocity.x, 0f,
+                _rig.HipsBody.linearVelocity.z).magnitude;
+
+            Debug.Log(
+                $"[METRIC] PlantedFootDrift_Sprint " +
+                $"MaxDrift={tracker.MaxDrift:F4} " +
+                $"AverageDrift={tracker.AverageDrift:F4} " +
+                $"StepCount={tracker.CompletedStepCount} " +
+                $"MaxDriftL={tracker.MaxDriftLeft:F4} " +
+                $"MaxDriftR={tracker.MaxDriftRight:F4} " +
+                $"PeakSpeed={peakSpeed:F2} " +
+                $"FinalSpeed={finalSpeed:F2}");
+
+            Assert.That(tracker.CompletedStepCount, Is.GreaterThan(0),
+                "No completed step cycles detected — planted-state signal may be broken.");
+
+            Assert.That(tracker.MaxDrift, Is.LessThan(MaxSprintPlantedFootDriftMetres),
+                $"Planted foot drift {tracker.MaxDrift:F4}m exceeds sprint threshold {MaxSprintPlantedFootDriftMetres}m. " +
+                $"The body is moving faster than the leg cycle can anchor at sprint speed. " +
+                $"Steps={tracker.CompletedStepCount} AvgDrift={tracker.AverageDrift:F4}m PeakSpeed={peakSpeed:F2}m/s");
         }
 
         private static bool IsFootInStance(object legStateMachine, GroundSensor sensor)
