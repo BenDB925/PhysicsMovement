@@ -21,6 +21,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int WalkFrames = 500;
         private const int SprintFrames = 500;
         private static readonly float[] SweepMoveForces = { 100f, 125f, 150f, 175f, 200f, 250f, 300f };
+        private static readonly float[] SweepStepFrequencyScales = { 0.10f, 0.12f, 0.15f, 0.18f, 0.20f };
+
+        private const float StepFrequencySweepMoveForce = 150f;
+        private const float StepFrequencySweepSprintMultiplier = 1.8f;
 
         /// <summary>
         /// Confirmed walk-speed regression gate from WP3a for the honest envelope.
@@ -53,11 +57,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static readonly FieldInfo MoveForceField = typeof(PlayerMovement)
             .GetField("_moveForce", BindingFlags.NonPublic | BindingFlags.Instance);
 
+        private static readonly FieldInfo SprintSpeedMultiplierField = typeof(PlayerMovement)
+            .GetField("_sprintSpeedMultiplier", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        private static readonly FieldInfo StepFrequencyScaleField = typeof(LegAnimator)
+            .GetField("_stepFrequencyScale", BindingFlags.NonPublic | BindingFlags.Instance);
+
         private static PropertyInfo _legStateCurrentStateProperty;
 
         // STEP 1: Build every foot-sliding measurement from the live prefab rig and stance signal.
         // STEP 2: Reuse that probe for the locked walk and sprint regression gates.
-        // STEP 3: Re-run the same probe across move-force tiers in the explicit speed-envelope sweep.
+        // STEP 3: Re-run the same probe across move-force and cadence tiers in explicit tuning sweeps.
 
         private PlayerPrefabTestRig _rig;
         private int _leftStanceAge;
@@ -100,6 +110,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             public float MoveForce { get; }
+            public float MaxDrift { get; }
+            public float AverageDrift { get; }
+            public float PeakSpeed { get; }
+            public int StepCount { get; }
+            public string Verdict { get; }
+        }
+
+        private sealed class StepFrequencySweepSample
+        {
+            public StepFrequencySweepSample(float stepFrequencyScale, DriftMeasurement measurement)
+            {
+                StepFrequencyScale = stepFrequencyScale;
+                MaxDrift = measurement.MaxDrift;
+                AverageDrift = measurement.AverageDrift;
+                PeakSpeed = measurement.PeakSpeed;
+                StepCount = measurement.StepCount;
+                Verdict = measurement.MaxDrift < MaxSprintPlantedFootDriftMetres
+                    ? "within-gate"
+                    : "over-gate";
+            }
+
+            public float StepFrequencyScale { get; }
             public float MaxDrift { get; }
             public float AverageDrift { get; }
             public float PeakSpeed { get; }
@@ -235,6 +267,53 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Debug.Log(BuildSpeedSweepSummary(results));
         }
 
+        [UnityTest, Explicit("Diagnostic step-frequency sweep for planted-foot drift tuning.")]
+        public IEnumerator StepFrequencySweep_MeasureDriftAtEachTier()
+        {
+            // Arrange
+            List<StepFrequencySweepSample> results = new List<StepFrequencySweepSample>(SweepStepFrequencyScales.Length);
+            _rig?.Dispose();
+            _rig = null;
+
+            // Act
+            for (int i = 0; i < SweepStepFrequencyScales.Length; i++)
+            {
+                yield return RecreateRigForSweep(i);
+
+                float stepFrequencyScale = SweepStepFrequencyScales[i];
+                SetMoveForce(_rig.PlayerMovement, StepFrequencySweepMoveForce);
+                SetSprintSpeedMultiplier(_rig.PlayerMovement, StepFrequencySweepSprintMultiplier);
+                SetStepFrequencyScale(_rig.LegAnimator, stepFrequencyScale);
+
+                DriftMeasurement measurement = null;
+                yield return MeasureForwardDrift(
+                    sprint: true,
+                    measurementFrames: SprintFrames,
+                    captureMeasurement: result => measurement = result);
+
+                Assert.That(measurement, Is.Not.Null,
+                    $"Sweep measurement for stepFrequencyScale {stepFrequencyScale:F2} should be captured.");
+                Assert.That(measurement.StepCount, Is.GreaterThan(0),
+                    $"Sweep measurement for stepFrequencyScale {stepFrequencyScale:F2} completed no stance phases.");
+
+                results.Add(new StepFrequencySweepSample(stepFrequencyScale, measurement));
+
+                Debug.Log(
+                    $"[METRIC] PlantedFootDrift_StepFrequencySweep " +
+                    $"StepFrequencyScale={stepFrequencyScale:F2} " +
+                    $"MaxDrift={measurement.MaxDrift:F4} " +
+                    $"AverageDrift={measurement.AverageDrift:F4} " +
+                    $"PeakSpeed={measurement.PeakSpeed:F2} " +
+                    $"StepCount={measurement.StepCount}");
+            }
+
+            // Assert
+            Assert.That(results, Has.Count.EqualTo(SweepStepFrequencyScales.Length),
+                "The explicit sweep should record one result per requested step-frequency tier.");
+
+            Debug.Log(BuildStepFrequencySweepSummary(results));
+        }
+
         private IEnumerator MeasureForwardDrift(bool sprint, int measurementFrames, Action<DriftMeasurement> captureMeasurement)
         {
             Assert.That(_rig, Is.Not.Null, "PlayerPrefabTestRig should be available before measuring drift.");
@@ -311,6 +390,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Failed to apply move-force override. Expected {moveForce:F2}, actual {appliedMoveForce:F2}.");
         }
 
+        private static void SetSprintSpeedMultiplier(PlayerMovement playerMovement, float sprintSpeedMultiplier)
+        {
+            Assert.That(SprintSpeedMultiplierField, Is.Not.Null,
+                "PlayerMovement._sprintSpeedMultiplier field not found via reflection.");
+            SprintSpeedMultiplierField.SetValue(playerMovement, sprintSpeedMultiplier);
+
+            float appliedSprintSpeedMultiplier = (float)SprintSpeedMultiplierField.GetValue(playerMovement);
+            Assert.That(appliedSprintSpeedMultiplier, Is.EqualTo(sprintSpeedMultiplier).Within(0.0001f),
+                $"Failed to apply sprint-speed multiplier override. Expected {sprintSpeedMultiplier:F2}, actual {appliedSprintSpeedMultiplier:F2}.");
+        }
+
+        private static void SetStepFrequencyScale(LegAnimator legAnimator, float stepFrequencyScale)
+        {
+            Assert.That(StepFrequencyScaleField, Is.Not.Null,
+                "LegAnimator._stepFrequencyScale field not found via reflection.");
+            StepFrequencyScaleField.SetValue(legAnimator, stepFrequencyScale);
+
+            float appliedStepFrequencyScale = (float)StepFrequencyScaleField.GetValue(legAnimator);
+            Assert.That(appliedStepFrequencyScale, Is.EqualTo(stepFrequencyScale).Within(0.0001f),
+                $"Failed to apply step-frequency scale override. Expected {stepFrequencyScale:F2}, actual {appliedStepFrequencyScale:F2}.");
+        }
+
         private void ResetStanceAges()
         {
             _leftStanceAge = 0;
@@ -336,6 +437,59 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             return builder.ToString().TrimEnd();
+        }
+
+        private static string BuildStepFrequencySweepSummary(IReadOnlyList<StepFrequencySweepSample> results)
+        {
+            StringBuilder builder = new StringBuilder();
+            StepFrequencySweepSample baseline = results[0];
+            builder.AppendLine("Foot sliding step-frequency sweep summary");
+            builder.AppendLine("StepFreq | PeakSpeed | MaxDrift | AvgDrift | Steps | Verdict | InferredVisualNote");
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                StepFrequencySweepSample sample = results[i];
+                string inferredVisualNote = InferVisualNote(sample, baseline);
+                builder.AppendLine(
+                    $"{sample.StepFrequencyScale,8:F2} | {sample.PeakSpeed,9:F2} | {sample.MaxDrift,8:F4} | {sample.AverageDrift,8:F4} | {sample.StepCount,5} | {sample.Verdict,-11} | {inferredVisualNote}");
+            }
+
+            return builder.ToString().TrimEnd();
+        }
+
+        private static string InferVisualNote(StepFrequencySweepSample sample, StepFrequencySweepSample baseline)
+        {
+            if (Mathf.Abs(sample.StepFrequencyScale - baseline.StepFrequencyScale) < 0.0001f)
+            {
+                return "baseline cadence reference";
+            }
+
+            float driftDelta = sample.MaxDrift - baseline.MaxDrift;
+            float stepCountDeltaRatio = baseline.StepCount > 0
+                ? (sample.StepCount - baseline.StepCount) / (float)baseline.StepCount
+                : 0f;
+
+            if (driftDelta <= -0.05f && stepCountDeltaRatio <= 0.20f)
+            {
+                return "inferred: lower drift, modest cadence rise";
+            }
+
+            if (driftDelta <= -0.05f)
+            {
+                return "inferred: lower drift, faster cadence";
+            }
+
+            if (driftDelta >= 0.05f)
+            {
+                return "inferred: worse drift than baseline";
+            }
+
+            if (stepCountDeltaRatio >= 0.35f)
+            {
+                return "inferred: cadence jump, no clear drift win";
+            }
+
+            return "inferred: near-baseline; manual review later";
         }
 
         private static bool IsFootInStance(object legStateMachine, GroundSensor sensor)
