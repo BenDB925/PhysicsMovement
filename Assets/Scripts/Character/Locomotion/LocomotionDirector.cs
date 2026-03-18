@@ -109,6 +109,12 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Minimum multiplier applied to the recovery-added stabilization boost during touchdown stabilization. Zero preserves the base support-risk stabilization while removing the extra recovery shove on landing.")]
         private float _touchdownRecoveryStabilizationScale = 1f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Multiplier applied to sprint-derived lean while the character is airborne " +
+                 "from an intentional jump. Lower values reduce the forward lean target mid-air " +
+                 "so the upright torque keeps the character closer to vertical.")]
+        private float _jumpAirborneSprintLeanScale = 0f;
+
         [Header("Surrender Recovery Timeout")]
         [SerializeField, Range(0.2f, 3f)]
         [Tooltip("Seconds a Stumble/NearFall recovery may run with angle above the ceiling before the director forces surrender.")]
@@ -607,17 +613,33 @@ namespace PhysicsDrivenMovement.Character
             // STEP 3a: Keep the director as the single owner of locomotion posture bias.
             // Turn severity contributes the existing recovery/support lean, and sprint
             // blend adds a forward lean budget that ramps over the same sprint window.
+            // During an intentional jump airborne phase, scale the sprint lean down so
+            // the reduced airborne upright torque doesn't overshoot the lean target.
             float turnLeanDegrees = _currentDesiredInput.HasMoveIntent
                 ? _currentObservation.TurnSeverity * _maxTurnLeanDegrees
                 : 0f;
+            bool isJumpAirborne = _playerMovement != null && _playerMovement.IsRecentJumpAirborne &&
+                                  !_currentObservation.IsGrounded;
+            float effectiveSprintLeanScale = touchdownSprintLeanScale;
+            if (isJumpAirborne)
+            {
+                effectiveSprintLeanScale = Mathf.Min(effectiveSprintLeanScale, _jumpAirborneSprintLeanScale);
+            }
             float sprintLeanDegrees = _currentDesiredInput.HasMoveIntent
-                ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees * touchdownSprintLeanScale
+                ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees * effectiveSprintLeanScale
                 : 0f;
 
             // Apply per-situation response profile blended by the current recovery envelope.
             RecoveryResponseProfile profile = RecoveryResponseProfile.For(_currentRecoveryState.Situation);
             float uprightStrengthScale = Mathf.Lerp(baseUprightStrengthScale,
                 baseUprightStrengthScale * profile.UprightBoostMultiplier, recoveryBlend);
+
+            // Boost upright strength during the touchdown window to help snap
+            // the character back upright after landing from a jump.
+            if (touchdownBlend > 0f)
+            {
+                uprightStrengthScale = Mathf.Max(uprightStrengthScale, 1.5f * touchdownBlend + uprightStrengthScale * (1f - touchdownBlend));
+            }
             float yawStrengthScale = Mathf.Max(
                 Mathf.Lerp(baseYawStrengthScale, profile.MinYawStrengthScale, recoveryBlend),
                 profile.MinYawStrengthScale * recoveryBlend);
@@ -714,6 +736,15 @@ namespace PhysicsDrivenMovement.Character
                 return false;
             }
 
+            // During an intentional jump landing sequence, suppress the recovery
+            // timeout surrender so the character gets more time to recover from
+            // landing impact instead of being forced into a fall.
+            if (_jumpRecoverySuppressionActive || _touchdownStabilizationActive)
+            {
+                _recoveryAngleStuckTimer = 0f;
+                return false;
+            }
+
             float uprightAngle = _balanceController.UprightAngle;
             if (uprightAngle < _surrenderRecoveryAngleCeiling)
             {
@@ -762,9 +793,19 @@ namespace PhysicsDrivenMovement.Character
 
             // STEP 1: Skip recovery escalation when the current locomotion state cannot execute a support response.
             CharacterStateType state = _currentObservation.CharacterState;
-            if (!_currentDesiredInput.HasMoveIntent ||
-                state == CharacterStateType.Fallen ||
-                state == CharacterStateType.GettingUp)
+            bool stateBlocksRecovery = state == CharacterStateType.Fallen ||
+                                       state == CharacterStateType.GettingUp;
+            if (stateBlocksRecovery && _currentRecoveryState.IsActive)
+            {
+                RecoverySituation clearedSituation = _currentRecoveryState.Situation;
+                float recoveryDuration = GetRecoveryDurationSoFar();
+                _currentRecoveryState = RecoveryState.Inactive;
+                _recoveryAngleStuckTimer = 0f;
+                CompleteRecovery(recoveryDuration, endedInSurrender: false);
+                _transitionGuard.OnRecoveryExpired(clearedSituation, _recoveryExitCooldownFrames);
+            }
+
+            if (!_currentDesiredInput.HasMoveIntent || stateBlocksRecovery)
             {
                 // Feed None to the guard so candidate tracking resets.
                 _transitionGuard.ShouldEnter(RecoverySituation.None, _recoveryEntryDebounceFrames, _recoveryExitCooldownFrames);

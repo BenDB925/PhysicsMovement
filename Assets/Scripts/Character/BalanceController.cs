@@ -63,6 +63,19 @@ namespace PhysicsDrivenMovement.Character
                  "This multiplier does NOT affect yaw torque.")]
         private float _airborneMultiplier = 0.2f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Multiplier applied to upright PD torque while airborne during an " +
+                 "intentional jump. Higher than the base airborne multiplier so the " +
+                 "character maintains posture through voluntary jumps.")]
+        private float _jumpAirborneMultiplier = 0.85f;
+
+        [SerializeField, Range(1f, 5f)]
+        [Tooltip("Multiplier applied to both kP and kD during the post-jump landing " +
+                 "recovery window (while IsRecentJumpAirborne is true and grounded). " +
+                 "Temporarily stiffens the PD controller to resist the forward angular " +
+                 "impulse from landing at sprint speed.")]
+        private float _jumpLandingGainBoost = 3f;
+
         [Header("Snap Recovery")]
         [SerializeField, Range(0.3f, 1f)]
         [Tooltip("Minimum kD multiplier at the instant of a sharp direction change. " +
@@ -443,6 +456,9 @@ namespace PhysicsDrivenMovement.Character
         private int _surrenderExtremeAngleFrameCount;
         private bool _suppressPelvisExpression;
         private float _surrenderCooldownTimer;
+
+        /// <summary>Lazily resolved reference to PlayerMovement for jump-airborne detection.</summary>
+        private PlayerMovement _playerMovement;
     private SupportScaleRamp _uprightStrengthRamp;
     private SupportScaleRamp _heightMaintenanceRamp;
     private SupportScaleRamp _stabilizationRamp;
@@ -825,8 +841,13 @@ namespace PhysicsDrivenMovement.Character
             if (previous == CharacterStateType.Airborne &&
                 (next == CharacterStateType.Standing || next == CharacterStateType.Moving))
             {
-                _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
-                _landingAbsorbTimer = _landingAbsorbTotalDuration;
+                // Keep the current landing window alive through brief bounce chatter instead
+                // of restarting the squat/lean budget on every same-landing recontact.
+                if (_landingAbsorbTimer <= 0f)
+                {
+                    _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
+                    _landingAbsorbTimer = _landingAbsorbTotalDuration;
+                }
             }
 
             if (previous == CharacterStateType.Standing && next == CharacterStateType.Moving)
@@ -891,6 +912,11 @@ namespace PhysicsDrivenMovement.Character
             {
                 TryGetComponent(out _characterState);
                 SubscribeToCharacterState();
+            }
+
+            if (_playerMovement == null)
+            {
+                TryGetComponent(out _playerMovement);
             }
 
             UpdateScaleRamps();
@@ -1409,7 +1435,16 @@ namespace PhysicsDrivenMovement.Character
 
             if (uprightAxis.sqrMagnitude > 0.001f && effectiveUprightScale > 0f)
             {
-                // STEP 4a: Reduce kD during snap recovery to bring the over-damped
+                // STEP 4a: Temporarily boost PD gains during intentional jump
+                // (both airborne and landing) to resist the forward angular impulse
+                // from launching at sprint speed and landing impact.
+                float jumpLandingBoost = 1f;
+                if (_playerMovement != null && _playerMovement.IsRecentJumpAirborne)
+                {
+                    jumpLandingBoost = _jumpLandingGainBoost;
+                }
+
+                // STEP 4b: Reduce kD during snap recovery to bring the over-damped
                 // prefab tuning closer to critical damping.  This lets the character
                 // correct the post-snap lean faster without the sluggish response that
                 // an over-damped PD produces.  kP stays at full strength for stability.
@@ -1418,7 +1453,7 @@ namespace PhysicsDrivenMovement.Character
                 // causing falls.  The reduction is gated on lean angle: once the
                 // character leans past 40 degrees, full kD is restored to prevent
                 // the reduced damping from tipping it into the Fallen state.
-                float effectiveKd = _kD;
+                float effectiveKd = _kD * jumpLandingBoost;
                 if (_currentBodySupportCommand.RecoveryKdBlend > 0f && Mathf.Abs(uprightAngleDeg) < 40f)
                 {
                     effectiveKd *= Mathf.Lerp(1f, _snapRecoveryKdScale, _currentBodySupportCommand.RecoveryKdBlend);
@@ -1426,11 +1461,11 @@ namespace PhysicsDrivenMovement.Character
 
                 float uprightRad = uprightAngleDeg * Mathf.Deg2Rad;
                 Vector3 uprightTorque =
-                    (_kP * effectiveUprightScale) * uprightRad * uprightAxis
+                    (_kP * jumpLandingBoost * effectiveUprightScale) * uprightRad * uprightAxis
                     - effectiveKd * pitchRollAngVel;
 
                 float uprightMultiplier = _hasBeenGrounded
-                    ? (effectivelyGrounded ? 1f : _airborneMultiplier)
+                    ? (effectivelyGrounded ? 1f : GetAirborneMultiplier())
                     : 1f;
                 _rb.AddTorque(uprightTorque * uprightMultiplier, ForceMode.Force);
             }
@@ -1446,7 +1481,12 @@ namespace PhysicsDrivenMovement.Character
             }
             else if (!IsSurrendered)
             {
-                if (uprightAngle > _surrenderAngleThreshold)
+                // Suppress surrender detection during intentional jump landing recovery.
+                // The forward tilt on landing is expected and the PD controller needs the
+                // full recovery window to correct it.
+                bool suppressForJumpLanding = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
+
+                if (uprightAngle > _surrenderAngleThreshold && !suppressForJumpLanding)
                 {
                     _surrenderExtremeAngleFrameCount++;
                 }
@@ -1457,7 +1497,8 @@ namespace PhysicsDrivenMovement.Character
 
                 float tiltDirectionalAngularVelocity = GetTiltDirectionalAngularVelocity(currentUp, pitchRollAngVel);
                 bool extremeAngleSurrender = _surrenderExtremeAngleFrameCount >= 2;
-                bool momentumSurrender = uprightAngle > _surrenderAnglePlusMomentumThreshold &&
+                bool momentumSurrender = !suppressForJumpLanding &&
+                                         uprightAngle > _surrenderAnglePlusMomentumThreshold &&
                                          tiltDirectionalAngularVelocity > _surrenderAngularVelocityThreshold;
                 if (extremeAngleSurrender || momentumSurrender)
                 {
@@ -1684,6 +1725,27 @@ namespace PhysicsDrivenMovement.Character
             float angularVelocitySeverity = Mathf.Clamp01(angularVelocity / 6f) * 0.3f;
             float heightSeverity = Mathf.Clamp01(1f - (hipsHeight / standingHeight)) * 0.2f;
             return Mathf.Clamp01(angleSeverity + angularVelocitySeverity + heightSeverity);
+        }
+
+        /// <summary>
+        /// Returns the effective airborne upright torque multiplier. Uses the higher
+        /// <see cref="_jumpAirborneMultiplier"/> during intentional jumps so the
+        /// character maintains posture, falling back to the base
+        /// <see cref="_airborneMultiplier"/> for knockback or environmental airborne.
+        /// </summary>
+        private float GetAirborneMultiplier()
+        {
+            if (_playerMovement == null)
+            {
+                TryGetComponent(out _playerMovement);
+            }
+
+            if (_playerMovement != null && _playerMovement.IsRecentJumpAirborne)
+            {
+                return _jumpAirborneMultiplier;
+            }
+
+            return _airborneMultiplier;
         }
 
         private static float GetTiltDirectionalAngularVelocity(Vector3 currentUp, Vector3 pitchRollAngVel)

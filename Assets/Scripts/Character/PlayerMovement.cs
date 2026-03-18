@@ -90,6 +90,12 @@ namespace PhysicsDrivenMovement.Character
              "for CharacterState to treat the jump as airborne.")]
         private float _jumpAirborneStateVelocityThreshold = 0.1f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Seconds after landing (IsGrounded becomes true) during which " +
+             "IsRecentJumpAirborne stays true. Gives downstream systems a window " +
+             "to suppress surrender / boost upright torque through the landing impact.")]
+        private float _jumpPostLandingGraceDuration = 0.5f;
+
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
                  "0 disables the slew limit and forwards the raw heading immediately.")]
@@ -160,6 +166,15 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Remaining grace time used to bridge launch intent into CharacterState airborne classification.</summary>
         private float _jumpAirborneStateGraceTimer;
+
+        /// <summary>Remaining post-landing grace time that keeps IsRecentJumpAirborne true through landing recovery.</summary>
+        private float _jumpPostLandingGraceTimer;
+
+        /// <summary>True once IsGrounded has been observed after the jump launched.</summary>
+        private bool _jumpLandingDetected;
+
+        /// <summary>True from jump launch until the character is confirmed grounded after the jump completes.</summary>
+        private bool _recentJumpAirborne;
 
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
@@ -247,6 +262,14 @@ namespace PhysicsDrivenMovement.Character
             _jumpAirborneStateGraceTimer > 0f &&
             _rb != null &&
             _rb.linearVelocity.y > _jumpAirborneStateVelocityThreshold;
+
+        /// <summary>
+        /// True from jump launch until the character has been confirmed grounded
+        /// after all jump phases and the airborne grace timer have completed.
+        /// Used by BalanceController to apply a higher airborne upright multiplier
+        /// during intentional jumps.
+        /// </summary>
+        public bool IsRecentJumpAirborne => _recentJumpAirborne;
 
         internal IReadOnlyList<JumpTelemetryEvent> JumpTelemetryLog => _jumpTelemetryLog;
 
@@ -383,6 +406,36 @@ namespace PhysicsDrivenMovement.Character
             if (_jumpAirborneStateGraceTimer > 0f)
             {
                 _jumpAirborneStateGraceTimer = Mathf.Max(0f, _jumpAirborneStateGraceTimer - Time.fixedDeltaTime);
+            }
+
+            // Track when the character first touches down after a jump launch.
+            // Start the post-landing grace timer so IsRecentJumpAirborne persists
+            // through the landing impact window.
+            if (_recentJumpAirborne && _balance != null && _balance.IsGrounded)
+            {
+                if (!_jumpLandingDetected)
+                {
+                    _jumpLandingDetected = true;
+                    _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
+                }
+                else if (_jumpPostLandingGraceTimer > 0f)
+                {
+                    _jumpPostLandingGraceTimer -= Time.fixedDeltaTime;
+                }
+            }
+
+            // Clear the recent-jump-airborne flag once the character is confirmed
+            // grounded, all jump phases have completed, and the post-landing
+            // grace window has elapsed.
+            if (_recentJumpAirborne &&
+                _jumpPhase == JumpPhase.None &&
+                _jumpAirborneStateGraceTimer <= 0f &&
+                _jumpLandingDetected &&
+                _jumpPostLandingGraceTimer <= 0f &&
+                _balance != null && _balance.IsGrounded)
+            {
+                _recentJumpAirborne = false;
+                _jumpLandingDetected = false;
             }
 
             // STEP 2: Early-out when required dependencies are missing.
@@ -648,6 +701,7 @@ namespace PhysicsDrivenMovement.Character
         private void FireJumpLaunch(string telemetryReason)
         {
             _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            _recentJumpAirborne = true;
             BeginJumpAirborneStateGrace();
             EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.LaunchFired, telemetryReason);
 
@@ -758,6 +812,27 @@ namespace PhysicsDrivenMovement.Character
             float sprintMovementMultiplier = GetSprintMovementMultiplier();
             float activeMaxSpeed = _maxSpeed * sprintMovementMultiplier;
             float activeMoveForce = _moveForce * sprintMovementMultiplier;
+
+            // Suppress movement force during intentional jumps when the character is
+            // not grounded, and reduce it during the early post-landing window.
+            // The hips force tips the character forward when the feet have no ground
+            // traction. The character retains existing horizontal momentum from the
+            // sprint — only the ADDITIONAL push is removed or attenuated.
+            if (_recentJumpAirborne && _balance != null)
+            {
+                if (!_balance.IsGrounded)
+                {
+                    activeMoveForce = 0f;
+                }
+                else if (_jumpPostLandingGraceTimer > _jumpPostLandingGraceDuration * 0.5f)
+                {
+                    // First half of the post-landing window: ramp force back up smoothly.
+                    float landingProgress = 1f - (_jumpPostLandingGraceTimer - _jumpPostLandingGraceDuration * 0.5f)
+                                                  / (_jumpPostLandingGraceDuration * 0.5f);
+                    activeMoveForce *= Mathf.Clamp01(landingProgress);
+                }
+            }
+
             if (horizontalVelocity.magnitude < activeMaxSpeed)
             {
                 float leanMultiplier = GetLeanForceMultiplier();
