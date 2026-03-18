@@ -13,10 +13,10 @@ Create a new PlayMode test fixture `SprintJumpStabilityTests` that reproduces th
 
 ## Current status
 
-- State: In Progress
-- Current next step: Task 9 — run the focused `SprintJumpStabilityTests` PlayMode fixture, record the known-red baseline metrics, commit, and update Chapter 9 status. Task 7 remains skipped until `Tools/test-slices.json` exists in the live repo.
-- Verified artifacts: `Assets/Tests/PlayMode/Utilities/ScenarioDefinitions.cs` now includes `ScenarioDefinitions.SprintJump`, and `Assets/Tests/EditMode/Character/ScenarioDefinitionsTests.cs` now asserts 10 total scenarios including `SprintJump`. The focused EditMode fixture on 2026-03-18 followed the intended red → green path: first `Result=Failed, Total=1, Passed=0, Failed=1` after tightening the expectation, then `Result=Passed, Total=1, Passed=1, Failed=0` once the catalog entry landed.
-- Open observation: The Task 6 telemetry log now captures two recovery windows. The first starts as `Slip`, escalates to `NearFall`, and exits naturally via `recovery_window_elapsed`; the second follows the same entry/escalation pattern but ends with `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. That explains why the shared helper still ends `FinalState=Fallen` and never reaches a second valid airborne state.
+- State: Complete
+- Current next step: Resume Chapter 9 C9.3a and leave this child plan as the known-red sprint-jump baseline. If `Tools/test-slices.json` lands before then, backfill the skipped Task 7 `sprint-jump` slice entry.
+- Verified artifacts: Fresh Task 9 baseline artifacts are `TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, and `Logs/test_playmode_20260318_075506.log`, which capture the focused PlayMode result `Result=Failed, Total=5, Passed=3, Failed=2` plus the emitted sprint-jump metrics.
+- Open observation: The Task 9 rerun kept the same failure shape. The smoke path still ended `PeakTilt=96.2`, `PeakSpeed=4.06`, `FinalState=Fallen`, `FinalTilt=86.5`, `Airborne1=True`, and `Airborne2=False`, while the telemetry path again captured two recovery windows that terminated with `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. That explains why the shared helper still ends fallen and never reaches a second valid airborne state.
 - Repo note: the live codebase exposes `LocomotionDirector` and `RecoveryTelemetryEvent` under `PhysicsDrivenMovement.Character`, not a separate `PhysicsDrivenMovement.Character.Locomotion` namespace.
 
 ## Location
@@ -534,6 +534,9 @@ Update the `All` array to include it. Update the EditMode count assertion in `Sc
    - Note which tests failed and which (if any) passed.
 5. **Commit** with message: `test: add SprintJumpStabilityTests — reproduces sprint+jump faceplant instability`
 6. **Update** Chapter 9 plan status to note the new tests and their known-failing status.
+
+- 2026-03-18: Completed. Ran the focused PlayMode fixture via `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests"`, which compiled successfully before executing the tests and produced fresh artifacts at `TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, and `Logs/test_playmode_20260318_075506.log`. The known-red baseline is now recorded as `Result=Failed, Total=5, Passed=3, Failed=2`.
+- 2026-03-18: Baseline metrics from that run: `SprintJump_SingleJump` emitted `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29` before failing on the faceplant assertion. `SprintJump_TwoJumps` emitted `PeakTiltAfterJump1=96.8`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=47`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.28`, and `EverFallen=True` before failing on `Jump 2 should have entered Airborne`. The passing tests were `RunSprintJumpSequence_WithFreshRig_CompletesWithoutErrors`, `SprintJump_LandingRecovery_RegainsUprightWithinDeadline` (`RecoveryFrames1=45`, `RecoveryFrames2=-1`), and `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding` (`EventCount=7`, terminal `angle_above_ceiling` / `recovery_surrendered`). This child plan is now complete, with Task 7 still deferred until `Tools/test-slices.json` exists.
 
 ---
 
