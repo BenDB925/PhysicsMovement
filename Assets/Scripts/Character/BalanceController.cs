@@ -375,6 +375,7 @@ namespace PhysicsDrivenMovement.Character
         private Quaternion _targetFacingRotation = Quaternion.identity;
 
         private BodySupportCommand _currentBodySupportCommand;
+        private LandingWindowTelemetrySample _currentLandingWindowTelemetrySample;
 
         /// <summary>Cached fallen state from the previous FixedUpdate for transition logging.</summary>
         private bool _wasFallen;
@@ -518,6 +519,8 @@ namespace PhysicsDrivenMovement.Character
         /// <see cref="BodySupportCommand.HeightMaintenanceScale"/> values.
         /// </summary>
         public float StandingHipsHeight => _standingHipsHeight;
+
+        internal LandingWindowTelemetrySample CurrentLandingWindowTelemetrySample => _currentLandingWindowTelemetrySample;
 
         // ─── Jump Crouch Offset (C8.5) ────────────────────────────────────
 
@@ -1540,6 +1543,22 @@ namespace PhysicsDrivenMovement.Character
                     }
                 }
             }
+
+            CharacterStateType landingTelemetryState = _characterState != null
+                ? _characterState.CurrentState
+                : CharacterStateType.Standing;
+            _currentLandingWindowTelemetrySample = new LandingWindowTelemetrySample(
+                Time.frameCount,
+                Time.time,
+                UprightAngle,
+                _currentBodySupportCommand.DesiredLeanDegrees,
+                landingAbsorbBlend,
+                totalPelvisTilt,
+                _currentBodySupportCommand.RecoveryBlend,
+                _currentBodySupportCommand.RecoveryKdBlend,
+                IsGrounded,
+                IsSurrendered,
+                landingTelemetryState);
         }
 
         private void UpdateScaleRamps()

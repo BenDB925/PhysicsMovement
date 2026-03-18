@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using PhysicsDrivenMovement.Input;
 using UnityEngine;
 
@@ -31,6 +32,8 @@ namespace PhysicsDrivenMovement.Character
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerMovement : MonoBehaviour
     {
+        private const int JumpTelemetryCapacity = 64;
+
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
 
@@ -139,6 +142,10 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Remaining launch-extension time in seconds.</summary>
         private float _jumpLaunchTimer;
 
+        private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
+        private int _jumpAttemptCounter;
+        private int _activeJumpAttemptId;
+
         /// <summary>
         /// Latest jump intent sampled for the current physics step before TryApplyJump consumes it.
         /// This lets higher-level coordination systems observe the same jump intent without
@@ -216,6 +223,8 @@ namespace PhysicsDrivenMovement.Character
         /// <see cref="JumpPhase.None"/> outside of a jump.
         /// </summary>
         public JumpPhase CurrentJumpPhase => _jumpPhase;
+
+        internal IReadOnlyList<JumpTelemetryEvent> JumpTelemetryLog => _jumpTelemetryLog;
 
         internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
@@ -317,6 +326,9 @@ namespace PhysicsDrivenMovement.Character
 
             _currentFacingDirection = initialFacing.normalized;
             _hasFacingDirection = true;
+            _jumpTelemetryLog.Clear();
+            _jumpAttemptCounter = 0;
+            _activeJumpAttemptId = 0;
         }
 
         private void FixedUpdate()
@@ -449,9 +461,12 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            int attemptId = ++_jumpAttemptCounter;
+
             // Gate 0: already winding up — consume the input but don't restart.
             if (_jumpPhase != JumpPhase.None)
             {
+                EmitJumpTelemetry(attemptId, JumpTelemetryEventType.RequestRejected, "sequence_in_progress");
                 return;
             }
 
@@ -464,6 +479,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_characterState == null)
             {
+                EmitJumpTelemetry(attemptId, JumpTelemetryEventType.RequestRejected, "missing_character_state");
                 return;
             }
 
@@ -472,14 +488,22 @@ namespace PhysicsDrivenMovement.Character
                                     state == CharacterStateType.Moving;
             if (!canJumpFromState)
             {
+                EmitJumpTelemetry(
+                    attemptId,
+                    JumpTelemetryEventType.RequestRejected,
+                    "state_not_jumpable:" + state);
                 return;
             }
 
             // Gate 2: must be grounded.
             if (!_balance.IsGrounded)
             {
+                EmitJumpTelemetry(attemptId, JumpTelemetryEventType.RequestRejected, "not_grounded");
                 return;
             }
+
+            EmitJumpTelemetry(attemptId, JumpTelemetryEventType.JumpAccepted, "accepted");
+            _activeJumpAttemptId = attemptId;
 
             // All gates passed — enter wind-up phase (C8.5a).
             if (_jumpWindUpDuration > 0f)
@@ -491,11 +515,15 @@ namespace PhysicsDrivenMovement.Character
                 {
                     _legAnimator.SetJumpWindUp(true, _jumpWindUpKneeBendBoost);
                 }
+
+                EmitJumpTelemetry(attemptId, JumpTelemetryEventType.WindUpEntered, "wind_up_started");
             }
             else
             {
                 // Zero-duration wind-up: fire immediately (legacy behaviour / test override).
                 _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+                EmitJumpTelemetry(attemptId, JumpTelemetryEventType.LaunchFired, "launch_without_wind_up");
+                _activeJumpAttemptId = 0;
             }
         }
 
@@ -513,6 +541,8 @@ namespace PhysicsDrivenMovement.Character
             // Abort wind-up if the character fell or left the ground unexpectedly.
             if (_balance.IsFallen || !_balance.IsGrounded)
             {
+                string abortReason = _balance.IsFallen ? "became_fallen" : "lost_grounded";
+                EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.WindUpAborted, abortReason);
                 ClearJumpSequence();
                 return;
             }
@@ -526,6 +556,7 @@ namespace PhysicsDrivenMovement.Character
 
             // Wind-up complete — fire impulse and transition to launch phase.
             _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.LaunchFired, "wind_up_completed");
 
             // Clear wind-up overrides.
             _jumpWindUpTimer = 0f;
@@ -548,6 +579,7 @@ namespace PhysicsDrivenMovement.Character
             else
             {
                 _jumpPhase = JumpPhase.None;
+                _activeJumpAttemptId = 0;
             }
         }
 
@@ -577,6 +609,7 @@ namespace PhysicsDrivenMovement.Character
         {
             _jumpPhase = JumpPhase.None;
             _jumpLaunchTimer = 0f;
+            _activeJumpAttemptId = 0;
             if (_legAnimator != null)
             {
                 _legAnimator.SetJumpLaunch(false);
@@ -592,12 +625,43 @@ namespace PhysicsDrivenMovement.Character
             _jumpPhase = JumpPhase.None;
             _jumpWindUpTimer = 0f;
             _jumpLaunchTimer = 0f;
+            _activeJumpAttemptId = 0;
             _balance.ClearJumpCrouchOffset();
             if (_legAnimator != null)
             {
                 _legAnimator.SetJumpWindUp(false, 0f);
                 _legAnimator.SetJumpLaunch(false);
             }
+        }
+
+        private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)
+        {
+            if (attemptId <= 0)
+            {
+                return;
+            }
+
+            if (_jumpTelemetryLog.Count >= JumpTelemetryCapacity)
+            {
+                _jumpTelemetryLog.RemoveAt(0);
+            }
+
+            CharacterStateType characterState = _characterState != null
+                ? _characterState.CurrentState
+                : CharacterStateType.Standing;
+            bool isGrounded = _balance != null && _balance.IsGrounded;
+            bool isFallen = _balance != null && _balance.IsFallen;
+
+            _jumpTelemetryLog.Add(new JumpTelemetryEvent(
+                attemptId,
+                Time.frameCount,
+                Time.time,
+                eventType,
+                reason,
+                characterState,
+                isGrounded,
+                isFallen,
+                _jumpPhase));
         }
 
         private void ApplyMovementForces(Vector2 moveInput)

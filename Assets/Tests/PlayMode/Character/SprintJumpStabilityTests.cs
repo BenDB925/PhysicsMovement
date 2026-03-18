@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using UnityEngine;
@@ -22,6 +24,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float FaceplantAngleThreshold = 45f;
         private const float StableUprightCeiling = 25f;
         private const int PostLandStabilityDeadline = 150;
+        private const float LandingTelemetryWindowSeconds = 0.5f;
 
         private PlayerPrefabTestRig _rig;
 
@@ -62,10 +65,44 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             public List<float> UprightAngleSamplesAfterJump1 = new List<float>();
             public List<float> UprightAngleSamplesAfterJump2 = new List<float>();
+            public List<LandingTelemetrySnapshot> LandingWindowSamplesAfterJump1 = new List<LandingTelemetrySnapshot>();
+            public List<LandingTelemetrySnapshot> LandingWindowSamplesAfterJump2 = new List<LandingTelemetrySnapshot>();
+        }
+
+        private sealed class LandingTelemetrySnapshot
+        {
+            public int FrameNumber;
+            public float Time;
+            public float UprightAngle;
+            public float DesiredLeanDegrees;
+            public float LandingAbsorbBlend;
+            public float TotalPelvisTilt;
+            public float RecoveryBlend;
+            public float RecoveryKdBlend;
+            public bool IsGrounded;
+            public bool IsSurrendered;
+            public CharacterStateType CharacterState;
+            public string NdjsonLine;
+        }
+
+        private sealed class JumpTelemetrySnapshot
+        {
+            public int AttemptId;
+            public int FrameNumber;
+            public float Time;
+            public string EventType;
+            public string Reason;
+            public CharacterStateType CharacterState;
+            public bool IsGrounded;
+            public bool IsFallen;
+            public string JumpPhase;
+            public string NdjsonLine;
         }
 
         private IEnumerator RunSprintJumpSequence(SprintJumpDiagnostics diag)
         {
+            int landingWindowFrames = Mathf.CeilToInt(
+                LandingTelemetryWindowSeconds / Mathf.Max(0.0001f, Time.fixedDeltaTime));
             yield return _rig.WarmUp(physicsFrames: SettleFrames, renderFrames: 0);
 
             Vector2 forwardInput = new Vector2(0f, 1f);
@@ -95,6 +132,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             bool wasAirborne1 = false;
             bool landedAfter1 = false;
+            int landing1SampleCount = 0;
             for (int frame = 0; frame < PostJumpSettleFrames; frame++)
             {
                 yield return new WaitForFixedUpdate();
@@ -113,6 +151,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 if (wasAirborne1 && _rig.BalanceController.IsGrounded)
                 {
                     landedAfter1 = true;
+                }
+
+                if (landedAfter1 && landing1SampleCount < landingWindowFrames)
+                {
+                    diag.LandingWindowSamplesAfterJump1.Add(CaptureLandingTelemetry(_rig.BalanceController));
+                    landing1SampleCount++;
                 }
 
                 if (state == CharacterStateType.Fallen)
@@ -165,6 +209,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             bool wasAirborne2 = false;
             bool landedAfter2 = false;
+            int landing2SampleCount = 0;
             for (int frame = 0; frame < FinalSettleFrames; frame++)
             {
                 yield return new WaitForFixedUpdate();
@@ -183,6 +228,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 if (wasAirborne2 && _rig.BalanceController.IsGrounded)
                 {
                     landedAfter2 = true;
+                }
+
+                if (landedAfter2 && landing2SampleCount < landingWindowFrames)
+                {
+                    diag.LandingWindowSamplesAfterJump2.Add(CaptureLandingTelemetry(_rig.BalanceController));
+                    landing2SampleCount++;
                 }
 
                 if (state == CharacterStateType.Fallen)
@@ -394,10 +445,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return RunSprintJumpSequence(diag);
 
             IList telemetryLog = telemetryLogProperty.GetValue(director) as IList;
+            List<JumpTelemetrySnapshot> jumpTelemetry = ReadJumpTelemetry(_rig.PlayerMovement);
 
             // Assert
             Assert.That(telemetryLog, Is.Not.Null,
                 "RecoveryTelemetryLog should return the in-memory telemetry ring buffer.");
+            Assert.That(jumpTelemetry, Is.Not.Null,
+                "Jump telemetry should return the in-memory jump-attempt log.");
+            Assert.That(jumpTelemetry.Count, Is.GreaterThanOrEqualTo(2),
+                "The two scripted jump requests should emit jump telemetry events.");
 
             TestContext.Out.WriteLine($"[METRIC] SprintJump_Telemetry EventCount={telemetryLog.Count}");
             for (int index = 0; index < telemetryLog.Count; index++)
@@ -416,12 +472,203 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 TestContext.Out.WriteLine($"[METRIC] SprintJump_Telemetry Event[{index}]={ndjsonLine}");
             }
 
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_JumpTelemetry EventCount={jumpTelemetry.Count}");
+            for (int index = 0; index < jumpTelemetry.Count; index++)
+            {
+                TestContext.Out.WriteLine($"[METRIC] SprintJump_JumpTelemetry Event[{index}]={jumpTelemetry[index].NdjsonLine}");
+            }
+
+            LogLandingWindowMetrics("Landing1", diag.LandingWindowSamplesAfterJump1);
+            LogLandingWindowMetrics("Landing2", diag.LandingWindowSamplesAfterJump2);
+            LogJumpAttemptMetrics("Jump1", jumpTelemetry, 1);
+            LogJumpAttemptMetrics("Jump2", jumpTelemetry, 2);
+
             if (diag.EverEnteredFallen || diag.PeakUprightAngleOverall > 30f)
             {
                 Assert.That(telemetryLog.Count, Is.GreaterThan(0),
                     "Recovery telemetry should log at least one event when the character " +
                     $"wobbles (peak tilt {diag.PeakUprightAngleOverall:F1}°) or enters Fallen.");
             }
+        }
+
+        private static LandingTelemetrySnapshot CaptureLandingTelemetry(BalanceController balanceController)
+        {
+            object sample = GetPropertyValue<object>(balanceController, "CurrentLandingWindowTelemetrySample");
+
+            return new LandingTelemetrySnapshot
+            {
+                FrameNumber = GetPropertyValue<int>(sample, "FrameNumber"),
+                Time = GetPropertyValue<float>(sample, "Time"),
+                UprightAngle = GetPropertyValue<float>(sample, "UprightAngle"),
+                DesiredLeanDegrees = GetPropertyValue<float>(sample, "DesiredLeanDegrees"),
+                LandingAbsorbBlend = GetPropertyValue<float>(sample, "LandingAbsorbBlend"),
+                TotalPelvisTilt = GetPropertyValue<float>(sample, "TotalPelvisTilt"),
+                RecoveryBlend = GetPropertyValue<float>(sample, "RecoveryBlend"),
+                RecoveryKdBlend = GetPropertyValue<float>(sample, "RecoveryKdBlend"),
+                IsGrounded = GetPropertyValue<bool>(sample, "IsGrounded"),
+                IsSurrendered = GetPropertyValue<bool>(sample, "IsSurrendered"),
+                CharacterState = GetPropertyValue<CharacterStateType>(sample, "CharacterState"),
+                NdjsonLine = InvokeToNdjsonLine(sample),
+            };
+        }
+
+        private static List<JumpTelemetrySnapshot> ReadJumpTelemetry(PlayerMovement playerMovement)
+        {
+            IList telemetryLog = GetPropertyValue<object>(playerMovement, "JumpTelemetryLog") as IList;
+            Assert.That(telemetryLog, Is.Not.Null,
+                "JumpTelemetryLog should expose the in-memory jump attempt ring buffer.");
+
+            List<JumpTelemetrySnapshot> snapshots = new List<JumpTelemetrySnapshot>(telemetryLog.Count);
+            for (int index = 0; index < telemetryLog.Count; index++)
+            {
+                object telemetryEvent = telemetryLog[index];
+                Assert.That(telemetryEvent, Is.Not.Null,
+                    $"Jump telemetry event {index} should not be null.");
+
+                snapshots.Add(new JumpTelemetrySnapshot
+                {
+                    AttemptId = GetPropertyValue<int>(telemetryEvent, "AttemptId"),
+                    FrameNumber = GetPropertyValue<int>(telemetryEvent, "FrameNumber"),
+                    Time = GetPropertyValue<float>(telemetryEvent, "Time"),
+                    EventType = GetPropertyValue<object>(telemetryEvent, "EventType").ToString(),
+                    Reason = GetPropertyValue<string>(telemetryEvent, "Reason"),
+                    CharacterState = GetPropertyValue<CharacterStateType>(telemetryEvent, "CharacterState"),
+                    IsGrounded = GetPropertyValue<bool>(telemetryEvent, "IsGrounded"),
+                    IsFallen = GetPropertyValue<bool>(telemetryEvent, "IsFallen"),
+                    JumpPhase = GetPropertyValue<object>(telemetryEvent, "JumpPhase").ToString(),
+                    NdjsonLine = InvokeToNdjsonLine(telemetryEvent),
+                });
+            }
+
+            return snapshots;
+        }
+
+        private static void LogLandingWindowMetrics(string label, List<LandingTelemetrySnapshot> samples)
+        {
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} WindowSampleCount={samples.Count}");
+            if (samples.Count == 0)
+            {
+                return;
+            }
+
+            LandingTelemetrySnapshot landingSample = samples[0];
+            LandingTelemetrySnapshot peakSample = landingSample;
+            int peakSampleIndex = 0;
+            for (int index = 1; index < samples.Count; index++)
+            {
+                if (samples[index].UprightAngle > peakSample.UprightAngle)
+                {
+                    peakSample = samples[index];
+                    peakSampleIndex = index;
+                }
+            }
+
+            int firstRecoverySampleIndex = FindFirstSampleIndex(samples, sample => sample.RecoveryBlend > 0.0001f);
+            int firstRecoveryKdSampleIndex = FindFirstSampleIndex(samples, sample => sample.RecoveryKdBlend > 0.0001f);
+            int firstSurrenderSampleIndex = FindFirstSampleIndex(samples, sample => sample.IsSurrendered);
+
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} LandingFrame={landingSample.FrameNumber}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} PeakTiltFrame={peakSample.FrameNumber}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} PeakTiltSampleIndex={peakSampleIndex}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} FirstRecoverySampleIndex={firstRecoverySampleIndex}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} FirstRecoveryKdSampleIndex={firstRecoveryKdSampleIndex}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} FirstSurrenderSampleIndex={firstSurrenderSampleIndex}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_{label} PeakDuringRecovery={peakSample.RecoveryBlend > 0.0001f}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_{label} PeakDuringReducedDamping={peakSample.RecoveryKdBlend > 0.0001f}");
+            TestContext.Out.WriteLine(
+                $"[METRIC] SprintJump_{label} PeakAfterSurrender={peakSample.IsSurrendered}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} LandingSample={landingSample.NdjsonLine}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} PeakSample={peakSample.NdjsonLine}");
+        }
+
+        private static void LogJumpAttemptMetrics(string label, List<JumpTelemetrySnapshot> telemetry, int attemptId)
+        {
+            List<JumpTelemetrySnapshot> attemptEvents = new List<JumpTelemetrySnapshot>();
+            for (int index = 0; index < telemetry.Count; index++)
+            {
+                if (telemetry[index].AttemptId == attemptId)
+                {
+                    attemptEvents.Add(telemetry[index]);
+                }
+            }
+
+            bool jumpAccepted = false;
+            bool windUpEntered = false;
+            bool launchFired = false;
+            string windUpAbortReason = "none";
+
+            for (int index = 0; index < attemptEvents.Count; index++)
+            {
+                JumpTelemetrySnapshot attemptEvent = attemptEvents[index];
+                if (attemptEvent.EventType == "JumpAccepted")
+                {
+                    jumpAccepted = true;
+                }
+                else if (attemptEvent.EventType == "WindUpEntered")
+                {
+                    windUpEntered = true;
+                }
+                else if (attemptEvent.EventType == "WindUpAborted")
+                {
+                    windUpAbortReason = attemptEvent.Reason;
+                }
+                else if (attemptEvent.EventType == "LaunchFired")
+                {
+                    launchFired = true;
+                }
+            }
+
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} AttemptEventCount={attemptEvents.Count}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} JumpAccepted={jumpAccepted}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} WindUpEntered={windUpEntered}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} WindUpAbortedReason={windUpAbortReason}");
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_{label} LaunchFired={launchFired}");
+            for (int index = 0; index < attemptEvents.Count; index++)
+            {
+                TestContext.Out.WriteLine(
+                    $"[METRIC] SprintJump_{label} Event[{index}]={attemptEvents[index].NdjsonLine}");
+            }
+        }
+
+        private static int FindFirstSampleIndex(
+            List<LandingTelemetrySnapshot> samples,
+            Predicate<LandingTelemetrySnapshot> predicate)
+        {
+            for (int index = 0; index < samples.Count; index++)
+            {
+                if (predicate(samples[index]))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string InvokeToNdjsonLine(object instance)
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            MethodInfo method = instance.GetType().GetMethod("ToNdjsonLine", flags);
+
+            Assert.That(method, Is.Not.Null,
+                $"Expected type '{instance.GetType().FullName}' to expose ToNdjsonLine().");
+
+            return method.Invoke(instance, null) as string;
+        }
+
+        private static T GetPropertyValue<T>(object instance, string propertyName)
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            PropertyInfo property = instance.GetType().GetProperty(propertyName, flags);
+
+            Assert.That(property, Is.Not.Null,
+                $"Expected type '{instance.GetType().FullName}' to expose property '{propertyName}'.");
+
+            object value = property.GetValue(instance);
+            Assert.That(value, Is.Not.Null, $"Property '{propertyName}' should not be null.");
+            return (T)value;
         }
     }
 }
