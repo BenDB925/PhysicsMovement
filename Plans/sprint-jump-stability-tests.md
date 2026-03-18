@@ -14,8 +14,8 @@ Create a new PlayMode test fixture `SprintJumpStabilityTests` that reproduces th
 ## Current status
 
 - State: In Progress
-- Current next step: Task 8 — add `SprintJump` to `ScenarioDefinitions.cs` and update the scenario-count assertion. Task 7 is skipped for now because `Tools/test-slices.json` does not exist in the live repo yet.
-- Verified artifact: `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now includes `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()`. The focused PlayMode fixture on 2026-03-18 now runs 5 tests and reports `Result=Failed, Total=5, Passed=3, Failed=2`: the new Task 6 telemetry test passes with `[METRIC] SprintJump_Telemetry EventCount=7`, Task 5 still passes with `RecoveryFrames1=45` and `RecoveryFrames2=-1`, while Task 3 still fails with `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29`, and Task 4 still fails after emitting `PeakTiltAfterJump1=96.0`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=46`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.48`, and `EverFallen=True`.
+- Current next step: Task 9 — run the focused `SprintJumpStabilityTests` PlayMode fixture, record the known-red baseline metrics, commit, and update Chapter 9 status. Task 7 remains skipped until `Tools/test-slices.json` exists in the live repo.
+- Verified artifacts: `Assets/Tests/PlayMode/Utilities/ScenarioDefinitions.cs` now includes `ScenarioDefinitions.SprintJump`, and `Assets/Tests/EditMode/Character/ScenarioDefinitionsTests.cs` now asserts 10 total scenarios including `SprintJump`. The focused EditMode fixture on 2026-03-18 followed the intended red → green path: first `Result=Failed, Total=1, Passed=0, Failed=1` after tightening the expectation, then `Result=Passed, Total=1, Passed=1, Failed=0` once the catalog entry landed.
 - Open observation: The Task 6 telemetry log now captures two recovery windows. The first starts as `Slip`, escalates to `NearFall`, and exits naturally via `recovery_window_elapsed`; the second follows the same entry/escalation pattern but ends with `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. That explains why the shared helper still ends `FinalState=Fallen` and never reaches a second valid airborne state.
 - Repo note: the live codebase exposes `LocomotionDirector` and `RecoveryTelemetryEvent` under `PhysicsDrivenMovement.Character`, not a separate `PhysicsDrivenMovement.Character.Locomotion` namespace.
 
@@ -511,6 +511,8 @@ public static readonly ScenarioDefinition SprintJump = new ScenarioDefinition(
 ```
 
 Update the `All` array to include it. Update the EditMode count assertion in `ScenarioDefinitionsTests.AllScenariosAreValid` from 9 → 10.
+
+- 2026-03-18: Completed. Added `ScenarioDefinitions.SprintJump` to `Assets/Tests/PlayMode/Utilities/ScenarioDefinitions.cs`, updated `ScenarioDefinitions.All`, and tightened `Assets/Tests/EditMode/Character/ScenarioDefinitionsTests.cs` so the reflection-backed gate now asserts 10 scenarios including `SprintJump`. Focused verification via `Tools/Run-UnityTests.ps1 -Platform EditMode -TestFilter "PhysicsDrivenMovement.Tests.EditMode.Character.ScenarioDefinitionsTests"` followed the intended red → green path: the first run failed `0/1` on the new count/presence expectation before the catalog entry landed, and the second run passed `1/1` after the scenario was added. The plan now advances to Task 9.
 
 ---
 

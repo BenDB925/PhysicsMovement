@@ -37,8 +37,8 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 "ScenarioDefinitions should expose a public static All property for the canonical scenario list.");
             Assert.That(scenarios, Is.Not.Null,
                 "ScenarioDefinitions.All should return a concrete array of scenario entries.");
-            Assert.That(scenarios.Length, Is.EqualTo(9),
-                "Chapter 9 C9.1a defines nine canonical locomotion scenarios.");
+            Assert.That(scenarios.Length, Is.EqualTo(10),
+                "Chapter 9 scenario coverage should include the SprintJump regression scenario.");
 
             HashSet<string> uniqueNames = new HashSet<string>(StringComparer.Ordinal);
             for (int index = 0; index < scenarios.Length; index++)
@@ -66,6 +66,9 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
                 Assert.That(exercisedSubsystems.Length, Is.GreaterThan(0),
                     $"Scenario '{name}' should list at least one exercised subsystem.");
             }
+
+            Assert.That(uniqueNames.Contains("SprintJump"), Is.True,
+                "ScenarioDefinitions.All should include the SprintJump regression scenario.");
         }
 
         private static Assembly LoadPlayModeAssembly()

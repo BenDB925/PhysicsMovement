@@ -83,6 +83,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float StumbleRecoveryDurationSeconds = 5f;
         private const float TerrainStepUpDurationSeconds = 7f;
         private const float TerrainSlopeDurationSeconds = 5f;
+        private const float SprintJumpDurationSeconds = 12f;
         private const float LapCircuitDurationSeconds = 40f;
 
         private static readonly Vector3[] LapCircuitWaypoints = GetLapCircuitWaypoints();
@@ -162,6 +163,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             TerrainSlopeDurationSeconds,
             new[] { "terrain", "gait", "balance" });
 
+        public static readonly ScenarioDefinition SprintJump = new ScenarioDefinition(
+            "SprintJump",
+            new[]
+            {
+                new Vector3(200f, 0f, 200f),
+                new Vector3(200f, 0f, 230f),
+            },
+            SprintJumpDurationSeconds,
+            new[] { "gait", "balance", "recovery", "jump" });
+
         public static readonly ScenarioDefinition LapCircuit = new ScenarioDefinition(
             "LapCircuit",
             LapCircuitWaypoints,
@@ -186,6 +197,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             StumbleRecovery,
             TerrainStepUp,
             TerrainSlope,
+            SprintJump,
             LapCircuit,
             LongRunFatigue,
         };

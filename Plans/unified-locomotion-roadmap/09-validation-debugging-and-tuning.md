@@ -39,7 +39,7 @@ Prevent the unified system from becoming a black box.
 ## Status
 
 - State: In Progress.
-- Current next step: sprint-jump child plan Task 8 (`ScenarioDefinitions.SprintJump` plus scenario-count update). Task 7 is skipped until `Tools/test-slices.json` exists, then the chapter can resume C9.3a.
+- Current next step: sprint-jump child plan Task 9 (run the focused `SprintJumpStabilityTests` fixture, record the known-red baseline metrics, commit, and update Chapter 9 status). Task 7 remains skipped until `Tools/test-slices.json` exists, then the chapter can resume C9.3a.
 - Active blockers: None.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
@@ -61,11 +61,13 @@ Define the canonical set of named locomotion scenarios used by every test, basel
     5. **StumbleRecovery** — `StumbleStutterRegressionTests` waypoints (extract or mirror; scenario should include an abrupt direction change that historically produces stumble).
     6. **TerrainStepUp** — `GaitOutcomeTests.DirectApproachIntoStepUpLane` spawn + waypoint (extract).
     7. **TerrainSlope** — `GaitOutcomeTests.WalkUpSlopeLane` spawn + waypoint (extract).
-    8. **LapCircuit** — `LapDemoRunner.CourseWaypoints` full 24-waypoint Top Gear circuit (reference directly, do not duplicate).
-    9. **LongRunFatigue** — LapCircuit repeated 3 times. Budget = 3× single-lap budget.
-  - Done when: `ScenarioDefinitions.All` returns all 9 entries; an EditMode test asserts count, unique names, and non-empty waypoints.
+    8. **SprintJump** — 30 m forward sprint lane rooted at `(200, 0, 200)` for sprint → jump → land regression coverage.
+    9. **LapCircuit** — `LapDemoRunner.CourseWaypoints` full 24-waypoint Top Gear circuit (reference directly, do not duplicate).
+    10. **LongRunFatigue** — LapCircuit repeated 3 times. Budget = 3× single-lap budget.
+  - Done when: `ScenarioDefinitions.All` returns all 10 entries; an EditMode test asserts count, unique names, and non-empty waypoints.
   - Verification: EditMode compile + new EditMode test `ScenarioDefinitionsTests.AllScenariosAreValid`.
   - 2026-03-17: Added `ScenarioDefinitions` under `Assets/Tests/PlayMode/Utilities/` with all 9 canonical entries, terrain lane anchors derived from the current `Arena_01` terrain-gallery geometry, and `LapCircuit` sourced directly from `LapDemoRunner.CourseWaypoints` via reflection. Added reflection-backed EditMode coverage in `ScenarioDefinitionsTests`; focused verification passed `1/1`.
+  - 2026-03-18: Sprint-jump Task 8 extended the scenario catalog with `ScenarioDefinitions.SprintJump`, updated `ScenarioDefinitions.All` to 10 entries, and raised the reflection-backed EditMode gate so it now asserts both the new total count and explicit `SprintJump` presence. Focused verification followed the intended red → green path and finished `1/1` green.
 
 - [x] **C9.1b Migrate existing tests to use `ScenarioDefinitions`**
   - Scope: In `HardSnapRecoveryTests`, `MovementQualityTests`, `StumbleStutterRegressionTests`, and `GaitOutcomeTests`, replace inline waypoint arrays with references to the corresponding `ScenarioDefinitions` entry. Keep assertion thresholds unchanged.
@@ -106,6 +108,7 @@ Expand the PowerShell summary pipeline so post-run output includes quantitative 
 - 2026-03-18: Completed sprint-jump Task 4. `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now adds `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant()` and a short second-jump readiness window in the shared helper (3 stable grounded `Standing`/`Moving` frames within a 30-frame budget) so the second pulse does not land on a transient non-jumpable frame. Focused verification now runs `3` tests and reports `1 passed, 2 failed`: Task 3 remains the direct faceplant red (`PeakTiltAfterJump1=91.2`, `RecoveryFrames1=45`, `PeakSprintSpeed=4.30`), while Task 4 emits `[METRIC]` values `PeakTiltAfterJump1=95.7`, `PeakTiltAfterJump2=86.5`, `RecoveryFrames1=50`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.29`, and `EverFallen=True` before failing on `Jump 2 should have entered Airborne`. The smoke output in the same run still ends `FinalState=Fallen` with `Airborne2=False`, so the child plan's next step is now Task 5 recovery-deadline coverage.
 - 2026-03-18: Completed sprint-jump Task 5. `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now adds `SprintJump_LandingRecovery_RegainsUprightWithinDeadline()`, and the focused PlayMode fixture reports `2 passed, 2 failed, 4 total`: the new recovery-deadline test passes with `[METRIC]` output `RecoveryFrames1=45` and `RecoveryFrames2=-1`, proving jump 1 recovers within the 150-frame deadline while the existing reds remain isolated to the faceplant and missing second-airborne checks. The smoke output in the same run still ends `FinalState=Fallen` with `Airborne2=False`, so the child plan's next step is now Task 6 telemetry capture around landing.
 - 2026-03-18: Completed sprint-jump Task 6. `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now adds `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()`, enabling the director's opt-in telemetry via reflection and dumping each event as `[METRIC]` NDJSON. Focused verification now runs `5` tests and reports `3 passed, 2 failed`: the new telemetry test passes with `EventCount=7` and logs two recovery windows, ending in `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. Those events explain the persistent `FinalState=Fallen` / `Airborne2=False` outcome, so the child plan now skips Task 7 because `Tools/test-slices.json` is absent and moves to Task 8 (`ScenarioDefinitions.SprintJump`).
+- 2026-03-18: Completed sprint-jump Task 8. `Assets/Tests/PlayMode/Utilities/ScenarioDefinitions.cs` now includes `ScenarioDefinitions.SprintJump`, and `Assets/Tests/EditMode/Character/ScenarioDefinitionsTests.cs` now asserts 10 total scenarios including `SprintJump`. Focused verification of `PhysicsDrivenMovement.Tests.EditMode.Character.ScenarioDefinitionsTests` followed the intended red → green path and finished `1/1` green. The child plan now advances to Task 9 for the known-red PlayMode baseline capture and commit.
 
 - [ ] **C9.3a Emit tagged metric lines from PlayMode tests**
   - Scope: In `MovementQualityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `GaitOutcomeTests`, after each assertion block emit a `TestContext.Out.WriteLine` line with the format `[METRIC] <TestName> <MetricName>=<Value>`. Metrics to emit:
@@ -202,7 +205,7 @@ Define the repeatable process and tooling for capturing a new baseline snapshot 
 ## Exit criteria
 
 - Every major locomotion failure can be traced to a specific decision and observation snapshot via `RecoveryTelemetryLog` and `FallPoseRecorder`.
-- All 9 named scenarios are defined in `ScenarioDefinitions` and referenced by at least one test.
+- All 10 named scenarios are defined in `ScenarioDefinitions` and referenced by at least one test.
 - `TestResults/latest-summary.md` includes a metrics table with baseline deltas.
 - `DEBUGGING.md` contains a concrete triage flowchart referencing the telemetry and slice infrastructure.
 - `Tools/Capture-Baseline.ps1` can reproduce the full baseline snapshot in one command.
