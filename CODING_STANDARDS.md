@@ -1,459 +1,266 @@
 # Coding Standards — C# / Unity (Agent-Optimised)
 
-> **Audience:** AI coding agents (Claude model via GitHub Copilot).
-> **Purpose:** Defines mandatory workflow, style, testing, documentation, and review rules for every code change in any Unity project that references this file.
-> **Authority:** This file supersedes ad-hoc conventions. If a rule here conflicts with a prompt, follow this file unless the user explicitly overrides it.
+> Audience: AI coding agents working in this repo.
+> Purpose: Define the mandatory workflow, testing expectations, style rules, documentation contract, and self-review gate for every change.
+> Authority: Follow this file unless the user explicitly overrides a rule.
 
----
+## Quick Load
+
+- Follow Phases A-F in order. Do not skip straight to code.
+- Treat the active parent plan or roadmap chapter as a live execution record and update it as soon as the task state changes.
+- Write or update tests before implementation, confirm red when introducing new behavior, and finish with the smallest trustworthy green regression slice.
+- Prefer outcome-based PlayMode verification for physics behavior, keep classes small, and extract collaborators before a class becomes a context sink.
+- Finish every completed subtask with the Phase F self-review table and a focused commit.
+
+## Read More When
+
+- Continue into Section 1 when you need the full task workflow and closeout rules.
+- Continue into Section 2 for test selection, verification scope, and artifact expectations.
+- Continue into Sections 3-6 when touching C#, Unity runtime behavior, or public APIs.
+- Continue into Section 7 when adding new systems, public members, or task-record detail.
+- Use `AGENT_TEST_RUNNING.md` for exact unattended test commands and artifact triage. Use `Plans/README.md` for parent-plan, child-doc, and bug-sheet structure.
 
 ## 1 — Development Workflow (Mandatory Sequence)
 
-Every task — bug fix, feature, refactor — MUST follow these phases **in order**. Do NOT skip phases.
+Every task must follow these phases in order.
 
 ### Phase A: Understand the Problem
 
 1. State the problem or feature in one sentence.
-2. Identify the **acceptance criteria** — what does "done" look like?
-3. List affected classes/systems. If unsure, search the codebase first.
-4. Read existing class-level `<summary>` XML docs and any `// DESIGN:` comments before touching code.
-5. When a referenced doc has `Quick Load` or `Read More When`, read those sections first and continue deeper only if the task needs that extra detail.
-6. Prefer the active parent plan and the freshest artifact summary before opening raw logs, raw XML, or long historical notes.
-7. Read `LOCOMOTION_BASELINES.md` only when comparing regressions, triaging known reds, or validating against an earlier baseline.
-8. For roadmap work, load only the chapter docs whose scope matches the task instead of reading every chapter.
-9. For test work, read `TestResults/latest-summary.md` when present, then the relevant XML, and only then the full Unity log if the summary or XML is insufficient.
-10. Before implementation, identify the active parent plan or roadmap chapter that owns the work. Treat it as a live execution record and update it as soon as subtasks close, bugs or hypotheses appear, blockers or next steps change, or better resume artifacts are produced.
+2. Define the acceptance criteria before designing the fix.
+3. Identify the affected classes or systems. Search first if the owner is unclear.
+4. Read class-level XML docs and relevant `// DESIGN:` comments before editing.
+5. When a referenced doc offers `Quick Load` or `Read More When`, read those sections first and continue deeper only if the task needs it.
+6. Prefer the active parent plan, roadmap chapter, or freshest artifact summary before raw logs, old child docs, or older chat context.
+7. Read `LOCOMOTION_BASELINES.md` only for regression comparison or known-red validation.
+8. Read only the roadmap chapters that own the task instead of loading the entire roadmap.
+9. For test triage, start with `TestResults/latest-summary.md`, then the relevant XML, and only then the full Unity log if needed.
+10. Identify the active parent plan or chapter before implementation and update it as soon as subtasks, blockers, hypotheses, next steps, or best resume artifacts change.
 
 ### Phase B: Comment-First Design
 
-1. In each class that will change, write `// STEP n:` comments describing the **logical flow** of the solution before writing any implementation code.
-2. Comments must be detailed enough that another agent could implement the code from them alone.
-3. If the solution introduces a new class, create the file with only:
-   - The `<summary>` XML doc describing purpose, responsibilities, and collaborators.
-   - The `// STEP n:` skeleton.
-   - Public interface signatures (methods, properties) with XML docs — bodies can be `throw new NotImplementedException();`.
-4. Commit nothing yet — this is design only.
+1. Before implementation, add `// STEP n:` comments to each changed class describing the intended logical flow.
+2. For new classes, start with the class `<summary>`, the `// STEP n:` skeleton, and public signatures with XML docs.
+3. Do not commit during design-only work.
 
 ### Phase C: Write Tests First
 
-1. For every behaviour described in the Step comments, write at least one **unit test** (EditMode) or **integration test** (PlayMode) that asserts the expected outcome.
-2. Tests MUST compile but MUST FAIL (red) because the implementation doesn't exist yet.
-3. Also write **regression tests** for any existing behaviour that could break.
-4. Follow the naming convention: `MethodName_Condition_ExpectedResult`.
-5. Tests live in `Assets/Tests/EditMode/` or `Assets/Tests/PlayMode/` mirroring the source folder structure.
-6. **Run created tests from the terminal** using the -TestFilter command with the test script to confirm they fail. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §2–3 for exact commands. Parse the NUnit XML results to verify `failed > 0`.
-7. If Unity exits but `TestResults/*.xml` is missing, treat it as a transient infrastructure race (lock/licensing/startup), rerun up to 2–3 attempts, and only conclude failure after retries still produce no XML.
+1. Cover every new or changed behavior with EditMode or PlayMode tests based on what the behavior actually needs.
+2. New behavior tests must compile and fail red before implementation.
+3. Add regression coverage for nearby behavior that could break.
+4. Use the naming pattern `MethodName_Condition_ExpectedResult`.
+5. Mirror source paths under `Assets/Tests/EditMode/` or `Assets/Tests/PlayMode/`.
+6. Run focused red and green phases through `AGENT_TEST_RUNNING.md` and trust fresh `TestResults/` artifacts over terminal text alone.
+7. If results XML is missing, treat that as infrastructure failure and rerun sequentially before trusting the outcome.
 
-### Phase C+: Outcome Tests & Parameter Optimizers
+### Phase C+: Outcome Tests and Parameter Sweeps
 
-> **Ask yourself:** *Is there a "what's the best this system can do?" question worth answering?*
-
-For any feature that involves **tunable numeric parameters** (forces, gains, angles, speeds, thresholds), consider writing an **outcome test** and/or a **parameter optimizer** alongside the unit tests.
-
-#### Outcome Tests
-Outcome tests verify system-level behaviour that unit tests miss — e.g. "character travels ≥ 2.5m in 5 seconds of walking." They always pass/fail cleanly and catch regressions that only manifest at runtime. See `GaitOutcomeTests.cs` for the pattern.
-
-When to write one:
-- The feature is physics-based or emergent (unit tests can pass while the system is broken)
-- There's a meaningful threshold that defines "working" (displacement, stability, response time)
-- A previous bug would have been caught by this test (regression value)
-
-#### Parameter Optimizers
-Optimizers run a grid sweep across parameter values, score each combination, and write a ranked report. They always `Assert.Pass` — they are not pass/fail tests but **diagnostic tools**. See `GaitOptimizerTests.cs` for the pattern.
-
-When to write one:
-- You're setting numeric defaults that affect feel or performance
-- The parameters interact non-linearly (tuning one changes what the best value for another is)
-- You'd otherwise set values "by feel" and adjust later
-
-**Naming convention:**
-- Outcome tests: `SystemName_Condition_ExpectedResult` (standard)
-- Optimizer sweeps: `SystemName_SweepParameters_WritesRankedReport`
-- Sensitivity tests: `SystemName_FieldName_Sensitivity_LogsDisplacementPerValue`
-
-**Optimizer scoring pattern:**
-```
-score = primaryMetric - penaltyA × countA - penaltyB × countB
-```
-Common metrics: displacement, time-to-stable, recovery frames, lap completion.
-Common penalties: spins detected, fallen at end, waypoints missed.
-
-**Report output:** Always write to `Logs/` (e.g. `Logs/system-optimizer-results.txt`) so results persist across sessions and can be read by Zé to update the prefab.
-
-**Applying results:** Update **prefab values only** — never change C# field defaults to match optimizer output. C# defaults are the safe starting point for a fresh component; prefab overrides are the tuned production values. Changing C# defaults will break tests that assert those defaults.
+- Prefer outcome-based PlayMode tests for physics or emergent behavior when unit tests can pass while the system is still wrong.
+- Add parameter sweep or optimizer tests when numeric tuning would otherwise be guesswork. Write reports to `Logs/` and apply tuned values to prefabs, not C# defaults.
+- If a threshold meaningfully defines working, capture it in a pass or fail outcome test.
 
 ### Phase D: Implement to Pass Tests
 
-1. Write the minimum code required to make all tests from Phase C pass.
-2. Do not add untested behaviour in this phase.
-3. Run the **smallest relevant regression slice** that covers the changed behaviour and its closest neighbours. Use the task map in `TASK_ROUTING.md` to choose the relevant suites and the focused commands in [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) §4.
-4. Escalate to broader coverage only when the change is cross-cutting: shared infrastructure, multiple systems, scene/bootstrap code, assembly-definition changes, or anything that makes the impact uncertain.
-5. If results XML is missing on a run, rerun sequentially with retries before marking the test gate as failed.
+1. Write the minimum code needed to make the Phase C tests pass.
+2. Do not add unrelated behavior in this phase.
+3. Run the smallest relevant regression slice that covers the touched behavior and its nearest neighbors.
+4. Escalate to broader coverage only for shared infrastructure, scene or bootstrap wiring, assembly-definition changes, or uncertain blast radius.
+5. If reruns still produce no XML, keep the gate infrastructure-red instead of treating it as green.
 
 ### Phase E: Verify Feature / Fix
 
-1. Confirm the acceptance criteria from Phase A are met.
-2. If the feature requires runtime verification (physics feel, visual result, network sync), state what to check and how.
-3. If acceptance criteria are NOT met → return to Phase B and iterate. Write new Step comments, new tests, new code.
+1. Confirm the Phase A acceptance criteria are met.
+2. If runtime feel, visuals, or networking matter, state exactly what must be checked and how.
+3. If acceptance criteria are not met, return to Phase B and iterate with updated Step comments, tests, and code.
 
 ### Phase F: Pre-Commit Self-Review
 
-Before presenting work as ready, run **every item** in this checklist. If any item fails, fix it before committing.
+Run every check below before presenting the work as ready.
 
-| #  | Check | Action if failed |
-|----|-------|-----------------|
-| F1 | **Dead code** — Are there any methods, fields, classes, or `using` statements that are no longer referenced? | Remove them. |
-| F2 | **Redundancy** — Is there duplicated logic that should be extracted into a shared method or utility? | Refactor to single source of truth. |
-| F3 | **Test coverage** — Does every public method and every branch in new/changed code have a corresponding test? | Write missing tests. |
-| F4 | **Simplicity vs flexibility** — Could the solution be simpler WITHOUT sacrificing extensibility? Are interfaces and abstractions justified by current or clearly anticipated use? | Refactor, but do not remove extensibility points that serve a known future need. |
-| F5 | **Naming** — Do all new symbols follow the naming conventions in §3? | Rename. |
-| F6 | **XML docs** — Do all new/changed public and protected members have `<summary>` docs? Does every class have a class-level `<summary>`? | Add docs. |
-| F7 | **No warnings** — Does the project compile with zero warnings? | Fix warnings. |
-| F8 | **DESIGN comments** — Are `// STEP n:` comments from Phase B still accurate post-implementation? Were they converted to meaningful inline comments or removed if redundant? | Update or clean up. |
-| F9 | **Agent context files** — If new systems/classes were added, was `.copilot-instructions.md` or `ARCHITECTURE.md` updated to reference them? If the task used a parent plan or roadmap chapter, is that record current with status, blockers, next step, and resume artifacts? | Update those files or task records. |
-| F10 | **Regression** — Did you run the focused regression tests that match the touched system, and were they all green? If the change was cross-cutting, did you escalate to the wider suite? Use [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) to pick the right scope and parse XML results. | Fix regressions before committing. |
+| # | Check | Action if failed |
+|---|---|---|
+| F1 | Dead code | Remove unused methods, fields, classes, or `using` statements. |
+| F2 | Redundancy | Extract duplicated logic to a shared implementation. |
+| F3 | Test coverage | Add missing tests for changed public methods and new branches. |
+| F4 | Simplicity vs flexibility | Remove unjustified abstractions or overbuilt plumbing. |
+| F5 | Naming | Rename symbols that break the conventions in Section 3. |
+| F6 | XML docs | Add or update `<summary>` docs for new or changed public and protected members. |
+| F7 | No warnings | Fix warnings before closing the subtask. |
+| F8 | `// STEP` accuracy | Update or remove Step comments that no longer match the code. |
+| F9 | Agent context files | Refresh plans, `.copilot-instructions.md`, or `ARCHITECTURE.md` when the task changes their truth. |
+| F10 | Regression gate | Run the focused regression slice that matches the touched system and confirm it is green. |
 
-**Output format for the self-review:** Present a table of F1–F10 with PASS/FAIL and a brief note. If any FAIL, describe the fix applied. The user should see the review results before they're committed.
+Output the Phase F result as a PASS or FAIL table with a brief note for each row. If any row fails, fix it before committing.
 
-**Commit-per-subtask rule:** When working inside a plan's chapter, run the full Phase F self-review and commit after **each completed subtask** — not once at the end. Each commit should cover exactly one subtask's scope. Update the parent plan or chapter status immediately after the commit so the record stays current.
-
----
+Commit per completed subtask. Each commit should cover one bounded slice, and the parent plan or chapter must be updated in the same slice before you move on.
 
 ## 2 — Testing Standards
 
-> **Agents:** You can run tests directly from the terminal without user intervention. See [`AGENT_TEST_RUNNING.md`](AGENT_TEST_RUNNING.md) for complete instructions on batch-mode execution, result parsing, and troubleshooting.
-
-### Framework
-
-- **Prefer the repo test runner** Use `Tools/Run-UnityTests.ps1` as the primary unattended EditMode and PlayMode runner so `TestResults/` remains the authoritative artifact source. Fall back to raw Unity CLI only when the repo script is insufficient.
-- **Unity Test Framework** (NUnit-based).
-- **EditMode tests** for pure logic, data transforms, state machines, utility functions — anything that doesn't need a scene or MonoBehaviour lifecycle.
-- **PlayMode tests** for physics interactions, coroutine/async flows, component integration, NetworkBehaviour, and anything requiring `Awake`/`Start`/`Update`.
-
-### Rules
+- Use `Tools/Run-UnityTests.ps1` as the primary unattended runner. `AGENT_TEST_RUNNING.md` owns the exact commands, exit codes, and troubleshooting flow.
+- Use EditMode for pure logic, state transforms, data validation, and utility code.
+- Use PlayMode for physics behavior, MonoBehaviour lifecycle, component integration, scene behavior, and networking.
+- Run EditMode and PlayMode sequentially, never in parallel, and verify fresh XML under `TestResults/` before trusting the result.
 
 | Rule | Detail |
-|------|--------|
-| Naming | `MethodName_Condition_ExpectedResult` — e.g., `ApplyForce_WhenGrounded_IncreasesVelocity` |
-| Arrange-Act-Assert | Every test must have clearly separated AAA sections, each marked with `// Arrange`, `// Act`, `// Assert` comments. |
-| One assert per concept | Multiple `Assert` calls are fine if they test facets of the same concept. Do not test unrelated things in one test. |
-| No test interdependency | Tests must not depend on execution order or shared mutable state. Use `[SetUp]`/`[TearDown]`. |
-| Test file location | Mirror source path: `Assets/Scripts/Character/MuscleController.cs` → `Assets/Tests/EditMode/Character/MuscleControllerTests.cs` |
-| Assembly definitions | Tests must have their own `.asmdef` referencing the source `.asmdef` and `nunit.framework`. |
-| Verification scope | Default to feature-scoped verification: changed tests plus nearby regression suites for the same runtime loop. Only run the full project suite when the change is broad or the impact cannot be bounded confidently. |
+|---|---|
+| Naming | Use `MethodName_Condition_ExpectedResult`. |
+| Arrange-Act-Assert | Mark AAA sections with `// Arrange`, `// Act`, and `// Assert` comments. |
+| One concept per test | Multiple asserts are fine when they validate the same behavior. |
+| No test interdependency | Use `[SetUp]` and `[TearDown]`; do not depend on execution order. |
+| Test file location | Mirror the source path under `Assets/Tests/EditMode/` or `Assets/Tests/PlayMode/`. |
+| Assembly definitions | Tests need their own `.asmdef` with only the dependencies they actually require. |
+| Verification scope | Default to feature-scoped verification and widen only when the blast radius justifies it. |
 
----
-
-## 3 — Naming & Style Conventions (Microsoft C#)
+## 3 — Naming & Style Conventions
 
 ### Casing
 
-| Symbol | Convention | Example |
-|--------|-----------|---------|
-| Namespace | PascalCase | `Character.Physics` |
-| Class / Struct / Enum | PascalCase | `MuscleController` |
-| Interface | `I` + PascalCase | `IGrabbable` |
-| Public method | PascalCase | `ApplyForce()` |
-| Public property | PascalCase | `IsGrounded` |
-| Private field | `_camelCase` | `_rigidbody` |
-| Local variable | camelCase | `currentForce` |
-| Constant | PascalCase | `MaxHealth` |
-| Enum member | PascalCase | `PlayerState.Ragdoll` |
-| Event | PascalCase | `OnPlayerDied` |
-| Type parameter | `T` + PascalCase (if named) | `TResult` |
+- Namespaces, classes, structs, enums, public methods, public properties, constants, enum members, and events use PascalCase.
+- Interfaces use `I` plus PascalCase.
+- Private fields use `_camelCase`.
+- Local variables and parameters use camelCase.
+- Type parameters use `T` plus PascalCase when named.
 
 ### Layout
 
-- One class per file. File name matches class name.
-- `using` directives at top, outside namespace. System namespaces first, then Unity, then project.
-- Member order within a class:
-  1. Constants / static readonly
-  2. Serialized fields (`[SerializeField] private`)
-  3. Private fields
-  4. Public properties
-  5. Unity lifecycle methods (`Awake`, `OnEnable`, `Start`, `FixedUpdate`, `Update`, `LateUpdate`, `OnDisable`, `OnDestroy`) — in lifecycle order
-  6. Public methods
-  7. Private methods
-  8. Nested types
+- One class per file. File names match the main type.
+- Place `using` directives at the top: System first, then Unity, then project namespaces.
+- Member order within a class: constants and statics, serialized fields, private fields, public properties, Unity lifecycle methods, public methods, private methods, nested types.
 
 ### Formatting
 
-- Allman braces (opening brace on new line).
-- 4-space indentation (no tabs).
-- Max line length: 120 characters (soft guideline).
-- Always use braces for `if`/`else`/`for`/`while`/`foreach`, even single-line bodies.
-- Use `var` only when the type is obvious from the right-hand side.
-- Prefer expression-bodied members for trivial one-liners (`public float Speed => _speed;`).
+- Use Allman braces and 4-space indentation.
+- Treat 120 characters as the soft maximum line length.
+- Always use braces for control-flow statements.
+- Use `var` only when the right-hand side makes the type obvious.
+- Prefer expression-bodied members only for trivial one-line members.
 
 ### Unity-Specific Style
 
-- **Never use public fields for serialization.** Use `[SerializeField] private` and expose via property if needed.
-- Prefer `TryGetComponent` over `GetComponent` (avoids allocation on failure).
-- Cache component references in `Awake()`, not in `Update()`.
-- Use `CompareTag("tag")` instead of `== "tag"`.
-
----
+- Never use public fields for serialization. Use `[SerializeField] private` and expose properties only when needed.
+- Prefer `TryGetComponent` over `GetComponent` where failure is expected.
+- Cache component references in `Awake`, not per frame.
+- Use `CompareTag` instead of string equality for tags.
 
 ## 4 — Architecture & Design
 
 ### Philosophy
 
-Design for **future flexibility**. Use interfaces and abstraction proactively when a system is likely to have multiple implementations or when it isolates a subsystem for testing. Abstractions must be **justified** — "this will clearly need to vary" qualifies; "it might someday" does not.
-
-Avoid god classes. Split functionality before a class becomes a context sink for humans or agents.
-
-- Target no more than 300-350 lines of executable logic per class.
-- Keep total class length normally under 500 lines, and treat 600 lines including comments, XML docs, and serialized field blocks as a hard ceiling.
-- If a class is already near the cap, extract focused collaborators or helper components before adding more behavior.
-- Do not use partial classes to hide sprawl; reserve them for generated code or truly separate responsibilities.
+- Design for justified flexibility. Use interfaces and abstractions when the variation is real, not hypothetical.
+- Avoid god classes. Target roughly 300-350 lines of executable logic, stay normally under 500 total lines, and treat 600 total lines as a hard refactor ceiling.
+- Prefer focused collaborators over adding another subsystem responsibility to an already large MonoBehaviour.
 
 ### Principles
 
-| Principle | Application |
-|-----------|------------|
-| Single Responsibility | Each class has one reason to change. MonoBehaviours should delegate logic to plain C# classes where possible. |
-| Dependency Inversion | Depend on interfaces, not concretions. Pass dependencies via constructor (plain C#) or `[SerializeField]` / `Inject` (MonoBehaviour). |
-| Composition over Inheritance | Prefer composing behaviours from small components over deep inheritance hierarchies. |
-| Interface Segregation | Keep interfaces small and focused. A class should not be forced to implement unused members. |
-| Open/Closed | Extend behaviour through new implementations, not modifying existing classes. Use events/delegates for extensibility points. |
+- Single Responsibility: each class should have one reason to change.
+- Dependency Inversion: depend on abstractions when it improves testability or isolates volatility.
+- Composition over Inheritance: favor small components over deep inheritance chains.
+- Interface Segregation: keep interfaces small and focused.
+- Open/Closed: extend behavior with new implementations or hooks instead of editing stable code unnecessarily.
 
 ### Dependency Injection
 
-- No DI framework required. Use **constructor injection** for plain C# classes and **serialized field injection** for MonoBehaviours.
-- If a project adopts Zenject/VContainer, prefer constructor injection everywhere and limit `[Inject]` on MonoBehaviours to the method-injection pattern.
+- Use constructor injection for plain C# classes.
+- Use serialized-field injection for MonoBehaviours unless the project explicitly adopts a DI container.
+- If Zenject or VContainer is added, keep constructor injection as the default and limit MonoBehaviour injection to the supported project pattern.
 
 ### Patterns to Prefer
 
-| Pattern | When |
-|---------|------|
-| ScriptableObject events/data | Shared config, data-driven design, decoupling. |
-| Observer (C# events/delegates) | Decoupled communication between systems. |
-| State pattern / state machine | Character states, game phases, UI flows. |
-| Strategy pattern | Swappable algorithms (e.g., different movement models). |
-| Factory | Object creation that needs flexibility or pooling. |
-| Object pooling | Any frequently spawned/destroyed objects. |
-
----
+Use ScriptableObject data and events, observer-style events, state machines, strategy objects, factories, and pooling when they solve a current or clearly anticipated variation point.
 
 ## 5 — Unity-Specific Guidelines
 
 ### Physics
 
-- Physics logic belongs in `FixedUpdate()`. Never apply forces in `Update()`.
-- Input should be read in `Update()` and stored, then consumed in `FixedUpdate()`.
-- Set Rigidbody interpolation to `Interpolate` for player-controlled bodies to avoid visual jitter.
-- Prefer `Rigidbody.AddForce` with appropriate `ForceMode` over directly setting `velocity`.
-- Use layers and the collision matrix for filtering — avoid checking tags in `OnCollision*`.
+- Put physics logic in `FixedUpdate`.
+- Read input in `Update`, store it, and consume it in `FixedUpdate`.
+- Use Rigidbody interpolation for player-controlled bodies that need smooth presentation.
+- Prefer `Rigidbody.AddForce` and collision layers over directly setting velocity or filtering with ad hoc tag checks.
 
 ### Coroutines vs Async/Await
 
-- Use **coroutines** for Unity-lifecycle-bound sequences (animations, timed gameplay events).
-- Use **async/await** (UniTask preferred if available, otherwise `Awaitable` in Unity 2023+) for I/O, networking, or genuinely asynchronous operations.
-- Never use `async void` except for Unity event methods that require it. Use `async UniTaskVoid` or fire-and-forget carefully.
+- Use coroutines for Unity-lifecycle-bound sequences such as timed gameplay events.
+- Use `async` and `await` for I/O, networking, or genuinely asynchronous work. Prefer the project-standard async abstraction when present.
+- Do not use `async void` except where Unity requires it.
 
 ### Memory & Performance
 
-| Rule | Detail |
-|------|--------|
-| Avoid per-frame allocations | No `new` in `Update`/`FixedUpdate`/`LateUpdate`. Use caching, pooling, `NativeArray`, or `stackalloc`. |
-| Cache component refs | Store `GetComponent` results in `Awake`. Never call `GetComponent` in a loop or per-frame. |
-| Pool frequently spawned objects | Use an object pool for projectiles, effects, UI elements, etc. |
-| String operations | Avoid string concatenation in hot paths. Use `StringBuilder` or `string.Create`. |
-| Avoid LINQ in hot paths | LINQ allocates enumerators. Use `for`/`foreach` loops in performance-critical code. |
-| Physics queries | Prefer `NonAlloc` variants (`RaycastNonAlloc`, `OverlapSphereNonAlloc`). Pre-allocate result arrays. |
-| Use Profiler | Wrap suspect code in `Profiler.BeginSample` / `Profiler.EndSample` during investigation. Remove before committing unless intentionally kept. |
+- Avoid per-frame allocations in `Update`, `FixedUpdate`, and `LateUpdate`.
+- Cache frequently used references and pool frequently spawned objects.
+- Avoid hot-path string concatenation, LINQ, and alloc-heavy physics queries when a simpler loop or `NonAlloc` API will do.
+- Use profiler samples during investigation and remove them before commit unless they are intentionally permanent diagnostics.
 
-### Networking (Netcode for GameObjects)
+### Networking
 
-- Physics simulation is host-authoritative. Clients send inputs; host applies forces and replicates state.
-- Use `NetworkVariable` for replicated state. Use RPCs for events/actions.
-- `[ServerRpc]` for client→host; `[ClientRpc]` for host→clients.
-- Minimise data sent per tick — replicate transforms only for objects the client needs.
-
----
+- Treat physics as host-authoritative. Clients send inputs; the host applies forces and replicates state.
+- Use `NetworkVariable` for replicated state and RPCs for actions or events.
+- Minimize data sent per tick to what the client actually needs.
 
 ## 6 — Error Handling
 
 | Situation | Approach |
-|-----------|----------|
-| Unrecoverable state (missing required component, null dependency) | `Debug.LogError` + `return` or `throw` in editor. Never silently continue. |
-| Expected failure (network timeout, file not found) | Return a result type or `bool TryX(out T result)` pattern. Log at `Warning` level. |
-| Development assertions | Use `Debug.Assert(condition, message)` for invariants. These are stripped from release builds. |
-| Try/catch | Use only around genuinely unpredictable external operations (IO, network, third-party). Never use as flow control. |
-| Null checks | Prefer null-coalescing and null-conditional operators. For Unity objects, remember that `UnityEngine.Object` overloads `==` — use the Unity-safe null check (`obj == null` or `obj != null`), not `is null` / `is not null`. |
-
----
+|---|---|
+| Missing required component or unrecoverable state | `Debug.LogError` plus `return`, or `throw` in editor-only initialization paths. Do not silently continue. |
+| Expected failure | Prefer result types or `bool TryX(out T result)` patterns and log at warning level only when useful. |
+| Development invariant | Use `Debug.Assert` for developer-time checks. |
+| Try/catch | Use only around genuinely unpredictable external operations such as I/O, networking, or third-party calls. |
+| Null checks | Use Unity-safe null checks (`obj == null` and `obj != null`) for `UnityEngine.Object` references. |
 
 ## 7 — Documentation Rules (Agent-Context Optimised)
 
-The goal is to give agents maximum context **without reading method bodies**. Every layer of documentation below is **mandatory**.
+The goal is to give agents enough context without forcing every task to read method bodies or execution diaries.
 
 ### Layer 0: Task Record Tree
 
-When a user provides a task list, asks for a plan, or the work becomes a multi-step debugging or implementation effort, create or update a task record tree before major implementation work.
-
-1. Use the user-specified folder if one is given. Otherwise default to `Plans/` and follow `Plans/README.md`.
-2. The parent plan file is the canonical summary. Keep it short and current with status, next step, blockers, and links to child docs.
-3. Update the active parent plan or chapter doc during the work, not only at pause or completion. Record cleared subtasks, new bugs or hypotheses, changed blockers, changed next steps, and new verification artifacts in the same slice that produced them.
-4. Split a work package out of the parent once that section would exceed 80 lines, needs more than 3 dated progress notes, or requires raw logs or telemetry.
-5. Create a dedicated bug sheet when an investigation section would exceed 120 lines, includes more than 30 lines of raw logs or telemetry, or tracks more than one active bug or hypothesis thread.
-6. Whenever a child doc changes materially, update the parent doc in the same slice. Never leave child docs unlinked.
-7. If the user provides an existing plan document, treat it as the parent record unless they explicitly ask for a new top-level doc.
-8. For roadmap work, the touched chapter doc is the parent record for that slice. Avoid editing unrelated in-progress chapter docs for cross-cutting policy changes; put those updates in shared long-lived docs or the roadmap parent plan instead.
+1. Use the user-specified folder if given. Otherwise default to `Plans/` and follow `Plans/README.md`.
+2. Keep the parent plan or active chapter short: status, next step, blockers, verified artifacts, and links to child docs or bug sheets.
+3. Update the active parent plan or chapter during the work, not only at pause or completion.
+4. Split early into child docs or bug sheets when detail, logs, or multiple active hypotheses accumulate.
 
 ### Layer 1: Class-Level XML Doc (`<summary>`)
 
-Every class/struct/interface MUST have a `<summary>` block that answers:
-
-1. **What** — one-sentence purpose.
-2. **Why** — what problem it solves or what system it belongs to.
-3. **Collaborators** — which other classes/interfaces it depends on or communicates with.
-4. **Lifecycle** — for MonoBehaviours, which Unity messages it uses and why.
-
-```csharp
-/// <summary>
-/// Applies configurable muscle forces to character joints to maintain an upright posture.
-/// Part of the Character/Physics system. Driven by <see cref="CharacterController"/>
-/// which sets target poses. Uses FixedUpdate to apply joint forces each physics step.
-/// Collaborators: <see cref="IJointConfig"/>, <see cref="CharacterController"/>.
-/// </summary>
-public class MuscleController : MonoBehaviour { }
-```
+Every class, struct, and interface needs a `<summary>` that explains what it does, why it exists, its collaborators, and any MonoBehaviour lifecycle responsibilities.
 
 ### Layer 2: Member-Level XML Docs
 
-All `public` and `protected` members must have `<summary>`. Include `<param>`, `<returns>`, `<exception>` where applicable.
+All `public` and `protected` members need `<summary>` docs. Add `<param>`, `<returns>`, and `<exception>` tags where they add clarity.
 
 ### Layer 3: `// DESIGN:` Comments
 
-For non-obvious design decisions, use `// DESIGN:` prefix so agents can grep for rationale:
-
-```csharp
-// DESIGN: We apply forces in local space because joint axes are defined locally.
-```
+Use `// DESIGN:` only for non-obvious rationale that a future agent should be able to grep quickly.
 
 ### Layer 4: `.copilot-instructions.md` (Repo Root)
 
-This file is auto-read by Copilot/Claude. It MUST contain:
-
-1. A reference to this coding standards file.
-2. A one-paragraph project summary.
-3. A list of top-level systems/namespaces with one-line descriptions.
-4. Any project-specific rules that override or extend this document.
-
-**Update this file whenever a new system or namespace is added.**
+Keep this file thin: repo summary, reading order, context-budget rules, implemented surface, and repo-specific overrides that are not better stated elsewhere.
 
 ### Layer 5: `ARCHITECTURE.md` (Repo Root)
 
-A living document describing:
-
-1. High-level system diagram (text-based, Mermaid or ASCII).
-2. Data flow for core loops (input → physics → render, networking tick).
-3. Key classes per system with one-line descriptions.
-4. Integration points between systems.
-
-**Update this file whenever architecture changes.**
+Update `ARCHITECTURE.md` when subsystem ownership, runtime flow, or integration boundaries change.
 
 ### Layer 6: Assembly Definition Docs
 
-Each `.asmdef` should have a corresponding section in `ARCHITECTURE.md` explaining what it contains and what it depends on.
+Keep assembly-definition ownership and dependency notes in `ARCHITECTURE.md` rather than repeating them across multiple root docs.
 
----
+## 8 — Project Structure Rules
 
-## 8 — Folder Structure
-
-```
-Assets/
-├── Materials/
-├── Prefabs/
-├── Scenes/
-├── Scripts/
-│   ├── Character/        # Player character systems (physics, muscles, state)
-│   ├── Core/             # Game-wide singletons, managers, utilities
-│   ├── Input/            # Input handling, action maps
-│   ├── Networking/       # NGO components, network managers
-│   └── UI/               # UI controllers, views
-├── ScriptableObjects/    # SO assets (config, events, data)
-├── Tests/
-│   ├── EditMode/
-│   │   ├── Character/
-│   │   ├── Core/
-│   │   ├── Input/
-│   │   ├── Networking/
-│   │   └── UI/
-│   └── PlayMode/
-│       ├── Character/
-│       ├── Core/
-│       ├── Input/
-│       ├── Networking/
-│       └── UI/
-└── ThirdParty/           # External plugins, vendored code (do not modify)
-```
-
-- Mirror the `Scripts/` structure in `Tests/EditMode/` and `Tests/PlayMode/`.
-- New systems get a new folder under `Scripts/` and corresponding test folders.
-- Do not put test code in the main Scripts assembly.
-
----
+- Mirror source folders under `Assets/Tests/`.
+- Keep test code out of runtime assemblies.
+- Use `TASK_ROUTING.md` and `ARCHITECTURE.md` for the current implemented surface instead of copying a large aspirational folder tree into this file.
 
 ## 9 — Agent Operating Rules
 
-These rules govern agent behaviour directly.
-
 | Rule | Detail |
-|------|--------|
-| **Read before write** | Always read the target file and its class-level docs before editing. Check related tests. |
-| **One concern per commit** | Each commit should address exactly one bug, feature, or refactor. |
-| **Commit per subtask** | When executing a plan chapter, run Phase F self-review and commit after each completed subtask. Update the parent plan status immediately after each commit. |
-| **Never delete tests** | Tests may be updated if behaviour intentionally changes, but never silently removed. |
-| **Explain trade-offs** | If multiple approaches exist, briefly state alternatives and why the chosen approach was selected. |
-| **Flag uncertainty** | If unsure whether a change is safe, say so explicitly. Suggest how to verify. |
-| **Preserve existing patterns** | When adding to an existing system, follow the patterns already in use there unless this document mandates otherwise. |
-| **Update context files** | After any structural change (new class, new namespace, new system), update `.copilot-instructions.md` and `ARCHITECTURE.md`. |
-| **No magic numbers** | Extract literals to named constants or ScriptableObject fields. |
-| **Respect access modifiers** | Keep everything as private as possible. Only expose what is genuinely needed externally. |
-| **Prefer pure functions** | Where possible, write static methods with no side effects for logic. This makes them trivially testable. |
+|---|---|
+| Read before write | Read the target file, relevant docs, and nearby tests before editing. |
+| One concern per commit | Each commit covers one bug, feature, refactor, or documentation slice. |
+| Commit per subtask | When working from a plan chapter or child doc, run Phase F and commit after each completed subtask. |
+| Never delete tests silently | Update tests when behavior intentionally changes, but do not remove coverage without replacing it. |
+| Explain trade-offs | When multiple credible approaches exist, note why the chosen approach won. |
+| Flag uncertainty | If a risk remains, say so and say how to verify it. |
+| Preserve existing patterns | Match the surrounding system unless there is a clear repo-level reason to change direction. |
+| Update context files | Refresh plans, `.copilot-instructions.md`, and `ARCHITECTURE.md` when their truth changes. |
+| No magic numbers | Extract literals to named constants or serialized configuration where that improves clarity. |
+| Respect access modifiers | Keep symbols as private as practical and expose only what the caller actually needs. |
+| Prefer pure functions | Use side-effect-free helpers where possible to keep logic testable. |
 
----
-
-## 10 — Quick Reference: Workflow at a Glance
-
-```
-TASK RECEIVED
-     │
-     ▼
- ┌─────────────────────┐
- │  A. Understand       │  Define problem, acceptance criteria, affected classes.
- └────────┬────────────┘
-          ▼
- ┌─────────────────────┐
- │  B. Comment Design   │  Write // STEP comments in target classes.
- └────────┬────────────┘
-          ▼
- ┌─────────────────────┐
- │  C. Write Tests      │  Red tests that assert expected behaviour.
- └────────┬────────────┘
-          ▼
- ┌─────────────────────┐
- │  D. Implement        │  Write code to make tests green.
- └────────┬────────────┘
-          ▼
- ┌─────────────────────┐
- │  E. Verify           │  Acceptance criteria met? All tests pass?
- └────────┬────────────┘
-          │ NO ──► Loop back to B
-          ▼ YES
- ┌─────────────────────┐
- │  F. Self-Review      │  Run F1–F10 checklist. Fix failures.
- └────────┬────────────┘
-          ▼
- ┌─────────────────────┐
- │  G. Commit Subtask   │  git add + commit. Update plan status.
- └────────┬────────────┘
-          ▼
-     PRESENT TO USER
-     (with review table)
-```
-
----
-
-*End of coding standards. This document is versioned alongside the project. Propose changes via the same workflow defined above.*
+End of coding standards. This document is versioned alongside the project and should stay a rulebook, not a tutorial or execution diary.
