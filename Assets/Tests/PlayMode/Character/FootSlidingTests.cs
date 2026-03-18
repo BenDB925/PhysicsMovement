@@ -30,6 +30,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float MaxStrideSweepSprintMultiplier = 1.8f;
         private const float MaxStrideSweepStepFrequencyScale = 0.15f;
         private const float MaxStrideSweepBaselineLength = 0.30f;
+        private const int ComparisonTrialCount = 3;
+
+        private static readonly EnvelopeTuningProfile LockedBaselineEnvelope =
+            new EnvelopeTuningProfile("baseline", 150f, 1.8f, 0.10f, 0.30f);
+
+        private static readonly EnvelopeTuningProfile CandidateEnvelope =
+            new EnvelopeTuningProfile("candidate", 150f, 1.8f, 0.15f, 0.35f);
 
         /// <summary>
         /// Confirmed walk-speed regression gate from WP3a for the honest envelope.
@@ -76,6 +83,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // STEP 1: Build every foot-sliding measurement from the live prefab rig and stance signal.
         // STEP 2: Reuse that probe for the locked walk and sprint regression gates.
         // STEP 3: Re-run the same probe across move-force, cadence, and stride-length tiers in explicit tuning sweeps.
+        // STEP 4: Compare the locked baseline against candidate tuning in repeated walk and sprint trials before promoting defaults.
 
         private PlayerPrefabTestRig _rig;
         private int _leftStanceAge;
@@ -167,6 +175,130 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             public float PeakSpeed { get; }
             public int StepCount { get; }
             public string Verdict { get; }
+        }
+
+        private sealed class EnvelopeTuningProfile
+        {
+            public EnvelopeTuningProfile(
+                string name,
+                float moveForce,
+                float sprintSpeedMultiplier,
+                float stepFrequencyScale,
+                float maxStrideLength)
+            {
+                Name = name;
+                MoveForce = moveForce;
+                SprintSpeedMultiplier = sprintSpeedMultiplier;
+                StepFrequencyScale = stepFrequencyScale;
+                MaxStrideLength = maxStrideLength;
+            }
+
+            public string Name { get; }
+            public float MoveForce { get; }
+            public float SprintSpeedMultiplier { get; }
+            public float StepFrequencyScale { get; }
+            public float MaxStrideLength { get; }
+
+            public string Label =>
+                $"{MoveForce:F0}/{SprintSpeedMultiplier:F1}/{StepFrequencyScale:F2}/{MaxStrideLength:F2}";
+        }
+
+        private sealed class EnvelopeComparisonSummary
+        {
+            public EnvelopeComparisonSummary(
+                EnvelopeTuningProfile profile,
+                bool sprint,
+                IReadOnlyList<DriftMeasurement> measurements)
+            {
+                Assert.That(profile, Is.Not.Null, "Envelope profile should be provided.");
+                Assert.That(measurements, Is.Not.Null, "Envelope measurements should be provided.");
+                Assert.That(measurements.Count, Is.GreaterThan(0), "Envelope comparison needs at least one measurement.");
+
+                Profile = profile;
+                Sprint = sprint;
+                TrialCount = measurements.Count;
+                GateThreshold = sprint ? MaxSprintPlantedFootDriftMetres : MaxWalkPlantedFootDriftMetres;
+
+                float totalMaxDrift = 0f;
+                float totalAverageDrift = 0f;
+                float totalPeakSpeed = 0f;
+                float totalFinalSpeed = 0f;
+                float totalStepCount = 0f;
+                float minMaxDrift = float.MaxValue;
+                float maxMaxDrift = float.MinValue;
+                float minPeakSpeed = float.MaxValue;
+                float maxPeakSpeed = float.MinValue;
+                bool allTrialsWithinGate = true;
+
+                for (int i = 0; i < measurements.Count; i++)
+                {
+                    DriftMeasurement measurement = measurements[i];
+                    totalMaxDrift += measurement.MaxDrift;
+                    totalAverageDrift += measurement.AverageDrift;
+                    totalPeakSpeed += measurement.PeakSpeed;
+                    totalFinalSpeed += measurement.FinalSpeed;
+                    totalStepCount += measurement.StepCount;
+                    minMaxDrift = Mathf.Min(minMaxDrift, measurement.MaxDrift);
+                    maxMaxDrift = Mathf.Max(maxMaxDrift, measurement.MaxDrift);
+                    minPeakSpeed = Mathf.Min(minPeakSpeed, measurement.PeakSpeed);
+                    maxPeakSpeed = Mathf.Max(maxPeakSpeed, measurement.PeakSpeed);
+                    allTrialsWithinGate &= measurement.MaxDrift < GateThreshold;
+                }
+
+                AverageMaxDrift = totalMaxDrift / measurements.Count;
+                AverageAverageDrift = totalAverageDrift / measurements.Count;
+                AveragePeakSpeed = totalPeakSpeed / measurements.Count;
+                AverageFinalSpeed = totalFinalSpeed / measurements.Count;
+                AverageStepCount = totalStepCount / measurements.Count;
+                MinMaxDrift = minMaxDrift;
+                MaxMaxDrift = maxMaxDrift;
+                DriftRange = maxMaxDrift - minMaxDrift;
+                MinPeakSpeed = minPeakSpeed;
+                MaxPeakSpeed = maxPeakSpeed;
+                PeakSpeedRange = maxPeakSpeed - minPeakSpeed;
+                AllTrialsWithinGate = allTrialsWithinGate;
+                ConsistencyTag = BuildConsistencyTag(allTrialsWithinGate, DriftRange, PeakSpeedRange);
+            }
+
+            public EnvelopeTuningProfile Profile { get; }
+            public bool Sprint { get; }
+            public int TrialCount { get; }
+            public float GateThreshold { get; }
+            public float AverageMaxDrift { get; }
+            public float AverageAverageDrift { get; }
+            public float AveragePeakSpeed { get; }
+            public float AverageFinalSpeed { get; }
+            public float AverageStepCount { get; }
+            public float MinMaxDrift { get; }
+            public float MaxMaxDrift { get; }
+            public float DriftRange { get; }
+            public float MinPeakSpeed { get; }
+            public float MaxPeakSpeed { get; }
+            public float PeakSpeedRange { get; }
+            public bool AllTrialsWithinGate { get; }
+            public string ConsistencyTag { get; }
+
+            public string ModeLabel => Sprint ? "Sprint" : "Walk";
+
+            private static string BuildConsistencyTag(bool allTrialsWithinGate, float driftRange, float peakSpeedRange)
+            {
+                if (!allTrialsWithinGate)
+                {
+                    return "gate-breach";
+                }
+
+                if (driftRange <= 0.05f && peakSpeedRange <= 0.20f)
+                {
+                    return "stable";
+                }
+
+                if (driftRange <= 0.12f && peakSpeedRange <= 0.35f)
+                {
+                    return "moderate-variance";
+                }
+
+                return "high-variance";
+            }
         }
 
         [UnitySetUp]
@@ -263,7 +395,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Act
             for (int i = 0; i < SweepMoveForces.Length; i++)
             {
-                yield return RecreateRigForSweep(i);
+                yield return RecreateRigForSweep();
 
                 float moveForce = SweepMoveForces[i];
                 SetMoveForce(_rig.PlayerMovement, moveForce);
@@ -308,7 +440,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Act
             for (int i = 0; i < SweepStepFrequencyScales.Length; i++)
             {
-                yield return RecreateRigForSweep(i);
+                yield return RecreateRigForSweep();
 
                 float stepFrequencyScale = SweepStepFrequencyScales[i];
                 SetMoveForce(_rig.PlayerMovement, StepFrequencySweepMoveForce);
@@ -355,7 +487,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Act
             for (int i = 0; i < SweepMaxStrideLengths.Length; i++)
             {
-                yield return RecreateRigForSweep(i);
+                yield return RecreateRigForSweep();
 
                 float maxStrideLength = SweepMaxStrideLengths[i];
                 SetMoveForce(_rig.PlayerMovement, MaxStrideSweepMoveForce);
@@ -391,6 +523,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 "The explicit sweep should record one result per requested max-stride tier.");
 
             Debug.Log(BuildMaxStrideSweepSummary(results));
+        }
+
+        [UnityTest, Explicit("Diagnostic repeated comparison for the locked baseline versus the WP4 candidate envelope.")]
+        public IEnumerator EnvelopeComparison_BaselineAndCandidate_RepeatWalkAndSprintTrials()
+        {
+            // Arrange
+            List<EnvelopeComparisonSummary> summaries = new List<EnvelopeComparisonSummary>(4);
+            _rig?.Dispose();
+            _rig = null;
+
+            // Act
+            yield return RunEnvelopeTrials(LockedBaselineEnvelope, sprint: false, summary => summaries.Add(summary));
+            yield return RunEnvelopeTrials(LockedBaselineEnvelope, sprint: true, summary => summaries.Add(summary));
+            yield return RunEnvelopeTrials(CandidateEnvelope, sprint: false, summary => summaries.Add(summary));
+            yield return RunEnvelopeTrials(CandidateEnvelope, sprint: true, summary => summaries.Add(summary));
+
+            // Assert
+            Assert.That(summaries, Has.Count.EqualTo(4),
+                "The envelope comparison should capture baseline and candidate summaries for both walk and sprint.");
+
+            Debug.Log(BuildEnvelopeComparisonSummary(summaries));
         }
 
         private IEnumerator MeasureForwardDrift(bool sprint, int measurementFrames, Action<DriftMeasurement> captureMeasurement)
@@ -446,12 +599,80 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             captureMeasurement(new DriftMeasurement(tracker, peakSpeed, GetPlanarSpeed(_rig.HipsBody)));
         }
 
-        private IEnumerator RecreateRigForSweep(int sweepIndex)
+        private IEnumerator RunEnvelopeTrials(
+            EnvelopeTuningProfile profile,
+            bool sprint,
+            Action<EnvelopeComparisonSummary> captureSummary)
+        {
+            Assert.That(profile, Is.Not.Null, "Envelope tuning profile should be provided.");
+            Assert.That(captureSummary, Is.Not.Null, "Envelope comparison summary callback should be provided.");
+
+            List<DriftMeasurement> measurements = new List<DriftMeasurement>(ComparisonTrialCount);
+            int measurementFrames = sprint ? SprintFrames : WalkFrames;
+
+            for (int trialIndex = 0; trialIndex < ComparisonTrialCount; trialIndex++)
+            {
+                yield return RecreateRigForSweep();
+                ApplyEnvelopeProfile(_rig, profile);
+
+                DriftMeasurement measurement = null;
+                yield return MeasureForwardDrift(
+                    sprint,
+                    measurementFrames,
+                    captureMeasurement: result => measurement = result);
+
+                Assert.That(measurement, Is.Not.Null,
+                    $"Envelope comparison measurement should be captured for profile {profile.Label}, " +
+                    $"mode {(sprint ? "Sprint" : "Walk")}, trial {trialIndex + 1}.");
+                Assert.That(measurement.StepCount, Is.GreaterThan(0),
+                    $"Envelope comparison completed no stance phases for profile {profile.Label}, " +
+                    $"mode {(sprint ? "Sprint" : "Walk")}, trial {trialIndex + 1}.");
+
+                measurements.Add(measurement);
+
+                Debug.Log(
+                    $"[METRIC] PlantedFootDrift_EnvelopeTrial " +
+                    $"Profile={profile.Name} " +
+                    $"Mode={(sprint ? "Sprint" : "Walk")} " +
+                    $"Trial={trialIndex + 1} " +
+                    $"MoveForce={profile.MoveForce:F0} " +
+                    $"SprintMultiplier={profile.SprintSpeedMultiplier:F2} " +
+                    $"StepFrequencyScale={profile.StepFrequencyScale:F2} " +
+                    $"MaxStrideLength={profile.MaxStrideLength:F2} " +
+                    $"MaxDrift={measurement.MaxDrift:F4} " +
+                    $"AverageDrift={measurement.AverageDrift:F4} " +
+                    $"PeakSpeed={measurement.PeakSpeed:F2} " +
+                    $"FinalSpeed={measurement.FinalSpeed:F2} " +
+                    $"StepCount={measurement.StepCount}");
+            }
+
+            EnvelopeComparisonSummary summary = new EnvelopeComparisonSummary(profile, sprint, measurements);
+
+            Debug.Log(
+                $"[METRIC] PlantedFootDrift_EnvelopeSummary " +
+                $"Profile={profile.Name} " +
+                $"Mode={summary.ModeLabel} " +
+                $"Trials={summary.TrialCount} " +
+                $"AvgMaxDrift={summary.AverageMaxDrift:F4} " +
+                $"DriftRange={summary.DriftRange:F4} " +
+                $"AvgPeakSpeed={summary.AveragePeakSpeed:F2} " +
+                $"PeakSpeedRange={summary.PeakSpeedRange:F2} " +
+                $"AvgFinalSpeed={summary.AverageFinalSpeed:F2} " +
+                $"AvgStepCount={summary.AverageStepCount:F1} " +
+                $"GateVerdict={(summary.AllTrialsWithinGate ? "within-gate" : "gate-breach")} " +
+                $"Consistency={summary.ConsistencyTag}");
+
+            captureSummary(summary);
+        }
+
+        private IEnumerator RecreateRigForSweep()
         {
             _rig?.Dispose();
             _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
             {
-                TestOrigin = new Vector3(sweepIndex * 250f, 0f, 0f),
+                // Scene isolation already gives each measurement a fresh empty scene, so
+                // keep every tuning trial at the same origin and avoid position-driven drift variance.
+                TestOrigin = Vector3.zero,
             });
 
             ResetStanceAges();
@@ -521,6 +742,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Failed to apply max-stride override. Expected {maxStrideLength:F2}, actual {appliedMaxStrideLength:F2}.");
         }
 
+        private static void ApplyEnvelopeProfile(PlayerPrefabTestRig rig, EnvelopeTuningProfile profile)
+        {
+            Assert.That(rig, Is.Not.Null, "PlayerPrefabTestRig should exist before applying an envelope profile.");
+            Assert.That(profile, Is.Not.Null, "Envelope tuning profile should be provided.");
+
+            SetMoveForce(rig.PlayerMovement, profile.MoveForce);
+            SetSprintSpeedMultiplier(rig.PlayerMovement, profile.SprintSpeedMultiplier);
+            SetStepFrequencyScale(rig.LegAnimator, profile.StepFrequencyScale);
+            SetMaxStrideLength(rig.LegAnimator, profile.MaxStrideLength);
+        }
+
         private void ResetStanceAges()
         {
             _leftStanceAge = 0;
@@ -582,6 +814,54 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             return builder.ToString().TrimEnd();
+        }
+
+        private static string BuildEnvelopeComparisonSummary(IReadOnlyList<EnvelopeComparisonSummary> summaries)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Foot sliding envelope comparison summary");
+            builder.AppendLine("Mode | Profile | AvgMaxDrift | DriftRange | AvgPeakSpeed | PeakSpeedRange | AvgFinalSpeed | AvgSteps | GateVerdict | Consistency | DeltaVsBaseline");
+
+            for (int i = 0; i < summaries.Count; i++)
+            {
+                EnvelopeComparisonSummary summary = summaries[i];
+                EnvelopeComparisonSummary baseline = FindEnvelopeComparisonBaseline(summaries, summary.Sprint);
+                string deltaSummary = BuildEnvelopeDeltaSummary(summary, baseline);
+
+                builder.AppendLine(
+                    $"{summary.ModeLabel,5} | {summary.Profile.Label,18} | {summary.AverageMaxDrift,11:F4} | {summary.DriftRange,10:F4} | {summary.AveragePeakSpeed,12:F2} | {summary.PeakSpeedRange,14:F2} | {summary.AverageFinalSpeed,13:F2} | {summary.AverageStepCount,8:F1} | {(summary.AllTrialsWithinGate ? "within-gate" : "gate-breach"),11} | {summary.ConsistencyTag,17} | {deltaSummary}");
+            }
+
+            return builder.ToString().TrimEnd();
+        }
+
+        private static EnvelopeComparisonSummary FindEnvelopeComparisonBaseline(
+            IReadOnlyList<EnvelopeComparisonSummary> summaries,
+            bool sprint)
+        {
+            for (int i = 0; i < summaries.Count; i++)
+            {
+                if (summaries[i].Sprint == sprint && summaries[i].Profile.Name == LockedBaselineEnvelope.Name)
+                {
+                    return summaries[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static string BuildEnvelopeDeltaSummary(
+            EnvelopeComparisonSummary summary,
+            EnvelopeComparisonSummary baseline)
+        {
+            if (baseline == null || ReferenceEquals(summary, baseline))
+            {
+                return "baseline reference";
+            }
+
+            float driftDelta = summary.AverageMaxDrift - baseline.AverageMaxDrift;
+            float peakSpeedDelta = summary.AveragePeakSpeed - baseline.AveragePeakSpeed;
+            return $"dDrift={driftDelta:+0.0000;-0.0000;0.0000} dSpeed={peakSpeedDelta:+0.00;-0.00;0.00}";
         }
 
         private static string InferVisualNote(StepFrequencySweepSample sample, StepFrequencySweepSample baseline)
