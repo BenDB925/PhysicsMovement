@@ -3335,6 +3335,14 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6761110208012158854, guid: d3a8b7c153b64e845afd18f1e2bd1cb4, type: 3}
+      propertyPath: _preTriggerSeconds
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 6761110208012158854, guid: d3a8b7c153b64e845afd18f1e2bd1cb4, type: 3}
+      propertyPath: _postTriggerSeconds
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 6761110208012158854, guid: d3a8b7c153b64e845afd18f1e2bd1cb4, type: 3}
       propertyPath: _recordContinuousSamples
       value: 0
       objectReference: {fileID: 0}

@@ -1,7 +1,9 @@
+# Archived on 2026-03-18 during the legacy-plan cleanup pass. Keep this as the frozen sprint-jump baseline record; use `Plans/sprint-jump-smoothing.plan.md` for any new runtime work.
+
 # Sprint-Jump Stability Tests — Implementation Plan
 
-Back to parent plan: [Unified Locomotion Roadmap](unified-locomotion-roadmap.plan.md)  
-Chapter 9 anchor: [09-validation-debugging-and-tuning.md](unified-locomotion-roadmap/09-validation-debugging-and-tuning.md)
+Back to parent plan: [Unified Locomotion Roadmap](../unified-locomotion-roadmap.plan.md)  
+Chapter 9 anchor: [09-validation-debugging-and-tuning.md](../unified-locomotion-roadmap/09-validation-debugging-and-tuning.md)
 
 ## Problem
 
@@ -13,8 +15,8 @@ Create a new PlayMode test fixture `SprintJumpStabilityTests` that reproduces th
 
 ## Current status
 
-- State: Complete
-- Current next step: Resume Chapter 9 C9.3a and leave this child plan as the known-red sprint-jump baseline. If `Tools/test-slices.json` lands before then, backfill the skipped Task 7 `sprint-jump` slice entry.
+- State: Archived after baseline capture
+- Current next step: Use `Plans/sprint-jump-smoothing.plan.md` for any new runtime work and keep this file as the frozen known-red baseline.
 - Verified artifacts: Fresh Task 9 baseline artifacts are `TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, and `Logs/test_playmode_20260318_075506.log`, which capture the focused PlayMode result `Result=Failed, Total=5, Passed=3, Failed=2` plus the emitted sprint-jump metrics.
 - Open observation: The Task 9 rerun kept the same failure shape. The smoke path still ended `PeakTilt=96.2`, `PeakSpeed=4.06`, `FinalState=Fallen`, `FinalTilt=86.5`, `Airborne1=True`, and `Airborne2=False`, while the telemetry path again captured two recovery windows that terminated with `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. That explains why the shared helper still ends fallen and never reaches a second valid airborne state.
 - Repo note: the live codebase exposes `LocomotionDirector` and `RecoveryTelemetryEvent` under `PhysicsDrivenMovement.Character`, not a separate `PhysicsDrivenMovement.Character.Locomotion` namespace.

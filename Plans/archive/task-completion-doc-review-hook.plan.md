@@ -1,7 +1,9 @@
+# Archived on 2026-03-18 during the legacy-plan cleanup pass. The hook shipped and no live plan tracking is needed unless the behavior changes again.
+
 # Task Completion Documentation Review Hook
 
 ## Status
-- State: Complete
+- State: Archived (hook shipped)
 - Acceptance target: Add a hook that notices user task-complete confirmations and forces a documentation and task-record review before the agent finishes.
 - Current next step: None.
 - Active blockers: None.

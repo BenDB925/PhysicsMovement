@@ -1,13 +1,15 @@
+# Archived on 2026-03-18 during the legacy-plan cleanup pass. Slice 1 shipped; reopen this history only if a new routing slice is explicitly chosen.
+
 # Context Budget Workflow Improvements
 
 ## Status
-- State: In Progress
+- State: Archived after Slice 1
 - Acceptance target: Land the proposed context-budget workflow slices incrementally, starting with the summary-first doc pass.
-- Current next step: Decide whether to implement Slice 2 context-budget routing rules now that Slice 1 summary headers are in place.
+- Current next step: None. Reopen this history only if the workflow needs another dedicated context-budget routing pass.
 - Active blockers: None.
 
 ## Child docs
-- [x] Token budget proposal: concrete wins, target files, and rollout order (`Plans/context-budget-workflow-improvements/01-token-budget-proposal.md`)
+- [x] Token budget proposal: concrete wins, target files, and rollout order (`Plans/archive/context-budget-workflow-improvements/01-token-budget-proposal.md`)
 
 ## Work packages
 1. [x] Inspect the current routing, heavy docs, and completion hook workflow.

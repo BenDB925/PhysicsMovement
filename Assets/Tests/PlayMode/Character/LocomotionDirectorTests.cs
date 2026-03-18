@@ -271,6 +271,78 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenLandingBouncesDuringActiveTouchdown_DoesNotArmASecondTouchdownWindow()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for touchdown rearm coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetSprintInputForTest(true);
+
+            for (int frame = 0; frame < 30; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object sprintSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float fullSprintLeanDegrees = GetPropertyValue<float>(sprintSupportCommand, "DesiredLeanDegrees");
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Airborne);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            object touchdownSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float touchdownLeanDegrees = GetPropertyValue<float>(touchdownSupportCommand, "DesiredLeanDegrees");
+            bool touchdownActive = GetPrivateFieldValue<bool>(_director, "_touchdownStabilizationActive");
+
+            for (int frame = 0; frame < 5; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            bool touchdownRearmedByBounce = GetPrivateFieldValue<bool>(_director, "_touchdownStabilizationArmed");
+            bool touchdownObservedUngroundedSinceArmed = GetPrivateFieldValue<bool>(_director, "_touchdownObservedUngroundedSinceArmed");
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+
+            for (int frame = 0; frame < 45; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object recoveredSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float recoveredLeanDegrees = GetPropertyValue<float>(recoveredSupportCommand, "DesiredLeanDegrees");
+            bool touchdownStillActive = GetPrivateFieldValue<bool>(_director, "_touchdownStabilizationActive");
+
+            // Assert
+            Assert.That(fullSprintLeanDegrees, Is.GreaterThan(1.5f),
+                "Full sprint should request a visible lean before the touchdown window is armed.");
+            Assert.That(touchdownActive, Is.True,
+                "Grounded reacquisition after a real airborne phase should activate touchdown stabilization.");
+            Assert.That(touchdownLeanDegrees, Is.LessThan(fullSprintLeanDegrees * 0.6f),
+                "The first touchdown window should attenuate sprint lean before the landing chatter begins.");
+            Assert.That(touchdownRearmedByBounce, Is.False,
+                "A brief airborne bounce during an already-active touchdown window should not queue a second touchdown cycle.");
+            Assert.That(touchdownObservedUngroundedSinceArmed, Is.False,
+                "Landing bounce chatter should not preserve a latent raw-airborne flag once touchdown is already active.");
+            Assert.That(touchdownStillActive, Is.False,
+                "Once the original touchdown window resolves, the director should not remain inside a rearmed touchdown cycle.");
+            Assert.That(recoveredLeanDegrees, Is.GreaterThan(touchdownLeanDegrees + 1f),
+                "After the single touchdown window resolves, sprint lean should recover instead of staying attenuated through a second touchdown activation.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenIntentionalJumpBegins_ClearsLowPriorityRecoveryState()
         {
             // Arrange
@@ -1107,6 +1179,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Expected type '{instance.GetType().FullName}' to expose private field '{fieldName}'.");
 
             field.SetValue(instance, value);
+        }
+
+        private static T GetPrivateFieldValue<T>(object instance, string fieldName)
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo field = instance.GetType().GetField(fieldName, flags);
+
+            Assert.That(field, Is.Not.Null,
+                $"Expected type '{instance.GetType().FullName}' to expose private field '{fieldName}'.");
+
+            object value = field.GetValue(instance);
+            return (T)value;
         }
 
         private static void SetActiveRecoveryStateForTest(

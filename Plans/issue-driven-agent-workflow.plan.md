@@ -3,15 +3,18 @@
 ## Status
 - State: Active
 - Acceptance target: Stand up a workflow where durable reference docs stay in-repo, PRDs and execution slices live in GitHub issues, local plan files stay slim and resumable, stuck investigations split cleanly into bug issues plus bug sheets, and a fresh agent can execute one step from the plan and issue context alone.
-- Current next step: Draft and launch the follow-on active-history migration slice for `AGENT_MOVEMENT_MIGRATION_PLAN.md`, unless priorities change.
+- Current next step: Slim the remaining oversized active parent plans that still crowd the live surface, starting with `Plans/comedic-knockdown-overhaul.plan.md`, unless priorities change.
 - Active blockers: None currently.
 
 ## Quick Resume
 - The documentation-slimming pilot now has live GitHub slice issues for `.copilot-instructions.md`, `AGENT_TEST_RUNNING.md`, `CODING_STANDARDS.md`, `LOCOMOTION_BASELINES.md`, and `DEBUGGING.md`, with child docs `06` through `10` serving as the canonical local resume surface.
-- `DEBUGGING.md` is now a compact playbook aligned with `.github/skills/debugging-workflow/SKILL.md`, keeping durable debugging rules and repo-specific patterns while moving repeated process prose out of the default read path.
-- The next useful restart point is a follow-on active-history migration slice for `AGENT_MOVEMENT_MIGRATION_PLAN.md` unless priorities change.
+- The live documentation surface is now smaller: `AGENT_MOVEMENT_MIGRATION_PLAN.md`, `Plans/sprint-jump-stability-tests.md`, `Plans/context-budget-workflow-improvements.plan.md`, and `Plans/task-completion-doc-review-hook.plan.md` moved under `Plans/archive/`, and the active sprint-jump docs now point at the archived baseline record.
+- The durable root docs stayed in place because they still provide current routing or subsystem context: `.copilot-instructions.md`, `TASK_ROUTING.md`, `ARCHITECTURE.md`, `CODING_STANDARDS.md`, `AGENT_TEST_RUNNING.md`, `DEBUGGING.md`, `LOCOMOTION_BASELINES.md`, `PLAN.md`, and `CONCEPT.md`. The next useful restart point is to slim the remaining oversized active parent plans, starting with `Plans/comedic-knockdown-overhaul.plan.md`, unless priorities change.
 
 ## Verified Artifacts
+- `Plans/issue-driven-agent-workflow/11-legacy-plan-archive-pass.md`: child doc for the legacy-plan cleanup pass, including the keep/archive decisions and updated restart point.
+- `Plans/archive/AGENT_MOVEMENT_MIGRATION_PLAN.md`: archived hard-turn migration history removed from the repo root.
+- `Plans/archive/sprint-jump-stability-tests.md`: archived sprint-jump baseline record now referenced only from the active sprint-jump docs.
 - `https://github.com/BenDB925/PhysicsMovement/issues/7`: live slice issue for the `DEBUGGING.md` slimming pass.
 - `Plans/issue-driven-agent-workflow/10-debugging-slimming.md`: child doc for the fifth documentation-slimming slice, including the launched slice link and next restart point.
 - `DEBUGGING.md`: slimmed debugging playbook aligned with `.github/skills/debugging-workflow/SKILL.md` and the new context-budget target.
@@ -54,6 +57,7 @@
 - [x] CODING_STANDARDS slimming slice: local execution record plus launched slice for the third documentation pass (`Plans/issue-driven-agent-workflow/08-coding-standards-slimming.md`)
 - [x] LOCOMOTION_BASELINES slimming slice: local execution record plus launched slice for the fourth documentation pass (`Plans/issue-driven-agent-workflow/09-locomotion-baselines-slimming.md`)
 - [x] DEBUGGING slimming slice: local execution record plus launched slice for the fifth documentation pass (`Plans/issue-driven-agent-workflow/10-debugging-slimming.md`)
+- [x] Legacy plan archive pass: archived oversized legacy plans from the root and `Plans/` surfaces, rewired live references, and recorded which root docs still deserve to stay live (`Plans/issue-driven-agent-workflow/11-legacy-plan-archive-pass.md`)
 
 ## Work packages
 1. [x] Define the issue model: PRD issue, local plan file, tracer-bullet slice issues, bug issues, refactor RFCs, AFK/HITL semantics, blocker links, and the stuck-issue split rules.
@@ -64,6 +68,7 @@
 6. [ ] Trim long-lived documentation back to durable reference only and document the steady-state workflow.
 
 ## Progress notes
+- 2026-03-18: Archived the obvious legacy plan surface under `Plans/archive/`, removing `AGENT_MOVEMENT_MIGRATION_PLAN.md` from the repo root, moving the completed sprint-jump baseline and older workflow plans out of the live `Plans/` surface, rewiring the active sprint-jump docs, and confirming that the remaining root docs still have durable routing or subsystem value.
 - 2026-03-18: Slimmed `DEBUGGING.md` into a compact debugging playbook, launched slice #7 under PRD #1, marked the documentation-slimming work package complete, and updated the next restart point to the `AGENT_MOVEMENT_MIGRATION_PLAN.md` archive-or-summarize slice.
 - 2026-03-18: Slimmed `LOCOMOTION_BASELINES.md` into a current baseline index, moved the detailed baseline history to `Plans/archive/locomotion-baselines-history.md`, launched slice #6 under PRD #1, and updated the local plan tree so `DEBUGGING.md` is now the leading documentation-slimming candidate.
 - 2026-03-18: Slimmed `CODING_STANDARDS.md` into a tighter rulebook, launched slice #4 under PRD #1, closed retry duplicate #5, and updated the local plan tree so `LOCOMOTION_BASELINES.md` is now the leading documentation-slimming candidate.

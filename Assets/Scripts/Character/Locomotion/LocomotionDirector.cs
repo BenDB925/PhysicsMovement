@@ -107,7 +107,7 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Minimum multiplier applied to the recovery-added stabilization boost during touchdown stabilization. Zero preserves the base support-risk stabilization while removing the extra recovery shove on landing.")]
-        private float _touchdownRecoveryStabilizationScale = 0f;
+        private float _touchdownRecoveryStabilizationScale = 1f;
 
         [Header("Surrender Recovery Timeout")]
         [SerializeField, Range(0.2f, 3f)]
@@ -182,9 +182,9 @@ namespace PhysicsDrivenMovement.Character
         private float _touchdownStabilizationTimer;
         private float _touchdownStabilizationBlendTimer;
         private bool _touchdownStabilizationArmed;
+        private bool _touchdownObservedUngroundedSinceArmed;
         private bool _touchdownStabilizationActive;
         private bool _touchdownStabilizationBlendingOut;
-        private bool _wasGroundedLastCommand;
         private RecoveryState _currentRecoveryState;
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
@@ -312,9 +312,9 @@ namespace PhysicsDrivenMovement.Character
             _touchdownStabilizationTimer = 0f;
             _touchdownStabilizationBlendTimer = 0f;
             _touchdownStabilizationArmed = false;
+            _touchdownObservedUngroundedSinceArmed = false;
             _touchdownStabilizationActive = false;
             _touchdownStabilizationBlendingOut = false;
-            _wasGroundedLastCommand = false;
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
             _recoveryEntryTime = 0f;
@@ -471,34 +471,49 @@ namespace PhysicsDrivenMovement.Character
         private float UpdateTouchdownStabilizationWindow(float recoveryBlend)
         {
             bool isAirborneState = _currentObservation.CharacterState == CharacterStateType.Airborne;
-            bool jumpTouchdownCandidate = isAirborneState && _jumpRecoverySuppressionActive;
+            bool recentJumpAirborneBridge = _playerMovement != null &&
+                                            _playerMovement.ShouldTreatJumpLaunchAsAirborne;
+            bool jumpTouchdownCandidate = isAirborneState &&
+                                          (_jumpRecoverySuppressionActive || recentJumpAirborneBridge);
+            bool touchdownWindowIdle = !_touchdownStabilizationActive &&
+                                       !_touchdownStabilizationBlendingOut;
 
             // STEP 1: Arm the touchdown window only after a real airborne phase so contact
             // chatter during normal sprinting does not retrigger the landing posture budget.
             // Intentional jump launch can briefly classify the character as Airborne before
             // both foot sensors have fully released, so arm the touchdown window from that
-            // authored airborne state as well instead of requiring raw ground loss first.
-            if (isAirborneState &&
+            // authored airborne state as well. Keep it armed across that chatter, but do not
+            // actually start the window until raw grounding proves a real airborne→touchdown
+            // cycle by going false and then true.
+            if (touchdownWindowIdle &&
+                isAirborneState &&
                 (!_currentObservation.IsGrounded || jumpTouchdownCandidate))
             {
                 _touchdownStabilizationArmed = true;
+                if (!_currentObservation.IsGrounded)
+                {
+                    _touchdownObservedUngroundedSinceArmed = true;
+                }
             }
 
-            // STEP 2: Start the window on the first grounded frame after that airborne phase,
-            // even when CharacterState has not yet left Airborne. This bridges the launch-
-            // classified airborne window where raw foot grounding may still be coasting true.
-            bool groundedAfterAirborne = _currentObservation.IsGrounded && !_wasGroundedLastCommand;
-            bool groundedDuringAirborneLanding = _currentObservation.IsGrounded && isAirborneState;
+            // STEP 2: Spend the touchdown budget only after raw grounding has dropped out
+            // since arming and the recent-launch airborne bridge has finished. The bridge
+            // stays active while the body is still rising out of jump launch, so grounded
+            // chatter during that upward phase should not consume the landing window.
+            bool groundedAfterAirborne = _currentObservation.IsGrounded &&
+                                         _touchdownObservedUngroundedSinceArmed &&
+                                         !recentJumpAirborneBridge;
             if (_touchdownStabilizationArmed &&
                 !_touchdownStabilizationActive &&
                 !_touchdownStabilizationBlendingOut &&
-                (groundedAfterAirborne || groundedDuringAirborneLanding))
+                groundedAfterAirborne)
             {
                 _touchdownStabilizationTimer = 0f;
                 _touchdownStabilizationBlendTimer = _touchdownStabilizationBlendOutDuration;
                 _touchdownStabilizationActive = true;
                 _touchdownStabilizationBlendingOut = false;
                 _touchdownStabilizationArmed = false;
+                _touchdownObservedUngroundedSinceArmed = false;
             }
 
             // STEP 3: Hold full attenuation until the landing actually settles, then blend
@@ -512,10 +527,12 @@ namespace PhysicsDrivenMovement.Character
                 if (!_touchdownStabilizationBlendingOut)
                 {
                     bool holdElapsed = _touchdownStabilizationTimer >= _touchdownStabilizationHoldDuration;
-                    bool landingStabilized = HasTouchdownStabilized(recoveryBlend);
+                    bool minimumResolvedLandingDurationElapsed = _touchdownStabilizationTimer >=
+                                                                 (_touchdownStabilizationHoldDuration + _touchdownStabilizationBlendOutDuration);
+                    bool landingStabilized = HasTouchdownStabilized();
                     bool maxDurationReached = _touchdownStabilizationTimer >= _touchdownStabilizationMaxDuration;
 
-                    if (maxDurationReached || (holdElapsed && landingStabilized))
+                    if (maxDurationReached || (minimumResolvedLandingDurationElapsed && landingStabilized))
                     {
                         _touchdownStabilizationBlendingOut = true;
                     }
@@ -529,6 +546,7 @@ namespace PhysicsDrivenMovement.Character
                     if (_touchdownStabilizationBlendTimer <= 0f)
                     {
                         _touchdownStabilizationActive = false;
+                        _touchdownStabilizationBlendingOut = false;
                     }
                 }
                 else
@@ -537,19 +555,17 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            _wasGroundedLastCommand = _currentObservation.IsGrounded;
             return touchdownBlend;
         }
 
-        private bool HasTouchdownStabilized(float recoveryBlend)
+        private bool HasTouchdownStabilized()
         {
             return _currentObservation.IsGrounded &&
                    !_currentObservation.IsFallen &&
                    _currentObservation.CharacterState != CharacterStateType.Airborne &&
                    _currentObservation.CharacterState != CharacterStateType.Fallen &&
                    _currentObservation.CharacterState != CharacterStateType.GettingUp &&
-                   _currentObservation.UprightAngleDegrees <= _touchdownStabilizationExitUprightAngle &&
-                   recoveryBlend <= _touchdownStabilizationExitRecoveryBlend;
+                   _currentObservation.UprightAngleDegrees <= _touchdownStabilizationExitUprightAngle;
         }
 
         private void EmitObservationDrivenCommands()

@@ -6,7 +6,7 @@ Slim `DEBUGGING.md` into a compact debugging playbook and pattern index aligned 
 
 ## Current status
 - State: Complete
-- Current next step: Start the follow-on active-history migration slice, with `AGENT_MOVEMENT_MIGRATION_PLAN.md` as the leading candidate unless priorities change.
+- Current next step: The follow-on active-history migration slice is complete in `Plans/issue-driven-agent-workflow/11-legacy-plan-archive-pass.md`; the next likely cleanup target is the oversized active parent-plan surface, starting with `Plans/comedic-knockdown-overhaul.plan.md` unless priorities change.
 - Blockers: None currently.
 
 ## Decisions

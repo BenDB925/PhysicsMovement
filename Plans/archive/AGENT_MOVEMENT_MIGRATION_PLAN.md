@@ -1,3 +1,5 @@
+# Archived on 2026-03-18 during the legacy-plan cleanup pass. Keep this only as historical hard-turn migration and diagnostic context; do not treat it as the current owner plan.
+
 # Agent Movement Migration Plan
 
 ## Purpose
