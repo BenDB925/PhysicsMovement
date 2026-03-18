@@ -23,19 +23,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static readonly float[] SweepMoveForces = { 100f, 125f, 150f, 175f, 200f, 250f, 300f };
 
         /// <summary>
-        /// Maximum per-step planted foot drift at walk speed before the test fails.
-        /// The plan's initial guess of 0.04m assumed IK-quality foot anchoring;
-        /// the physics-driven character (no foot pinning) measures ~0.31m peak
-        /// drift at walk speed. This threshold is a regression gate — not a quality
-        /// target. WP3b will tighten it after the speed envelope is analyzed.
+        /// Confirmed walk-speed regression gate from WP3a for the honest envelope.
+        /// The user-preferred walk baseline measures 0.3076m peak drift at
+        /// _moveForce = 150, so 0.35m keeps a small tolerance for physics variance
+        /// without widening the accepted envelope.
         /// </summary>
-        private const float MaxPlantedFootDriftMetres = 0.35f;
+        private const float MaxWalkPlantedFootDriftMetres = 0.35f;
 
         /// <summary>
-        /// Maximum per-step planted foot drift at sprint speed. Baseline measurement
-        /// shows ~0.74m peak drift at sprint (PeakSpeed=3.22 m/s). Set to 0.80m as a
-        /// regression gate that captures the current sprint quality level. WP3b will
-        /// tighten after the speed envelope sweep in WP2b.
+        /// Confirmed sprint-speed regression gate from WP3a for the locked
+        /// 150 / 1.8 / 0.10 / 0.30 envelope. The user-preferred sprint baseline stays
+        /// within this threshold, while the speed sweep crosses the drift knee at
+        /// _moveForce = 200 and above.
         /// </summary>
         private const float MaxSprintPlantedFootDriftMetres = 0.80f;
 
@@ -57,7 +56,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static PropertyInfo _legStateCurrentStateProperty;
 
         // STEP 1: Build every foot-sliding measurement from the live prefab rig and stance signal.
-        // STEP 2: Reuse that probe for the walk and sprint regression gates.
+        // STEP 2: Reuse that probe for the locked walk and sprint regression gates.
         // STEP 3: Re-run the same probe across move-force tiers in the explicit speed-envelope sweep.
 
         private PlayerPrefabTestRig _rig;
@@ -151,8 +150,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(measurement.StepCount, Is.GreaterThan(0),
                 "No completed step cycles detected — planted-state signal may be broken.");
 
-            Assert.That(measurement.MaxDrift, Is.LessThan(MaxPlantedFootDriftMetres),
-                $"Planted foot drift {measurement.MaxDrift:F4}m exceeds threshold {MaxPlantedFootDriftMetres}m. " +
+            Assert.That(measurement.MaxDrift, Is.LessThan(MaxWalkPlantedFootDriftMetres),
+                $"Planted foot drift {measurement.MaxDrift:F4}m exceeds walk threshold {MaxWalkPlantedFootDriftMetres}m. " +
                 $"The body is moving faster than the leg cycle can anchor. " +
                 $"Steps={measurement.StepCount} AvgDrift={measurement.AverageDrift:F4}m");
         }

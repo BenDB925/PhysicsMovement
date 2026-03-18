@@ -7,6 +7,7 @@ Purpose: keep the current locomotion baseline reference, known active reds, and 
 - Treat this file as the current baseline index, not the full regression history.
 - Current metric anchor: Chapter 8 regression baseline refresh on 2026-03-17.
 - Current full-gate reference: Chapter 8 completion verification on 2026-03-17.
+- Foot sliding regression gate locked on 2026-03-18; open [Plans/foot-sliding-speed-envelope.plan.md](Plans/foot-sliding-speed-envelope.plan.md) for the thresholds, honest speed ceiling, and the safe method-level filter.
 - Stable known red in isolation: `SustainedLocomotionCollapse_TransitionsIntoFallen`.
 - Known order-sensitive full-suite pressure points: `WalkStraight_NoFalls` and `TurnAndWalk_CornerRecovery`; `LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls` remains a pre-existing time-limit failure.
 
@@ -14,6 +15,7 @@ Purpose: keep the current locomotion baseline reference, known active reds, and 
 
 - Open [Plans/archive/locomotion-baselines-history.md](Plans/archive/locomotion-baselines-history.md) when you need Chapter 1 or older Chapter 8 snapshot detail.
 - Open [Plans/unified-locomotion-roadmap/09-validation-debugging-and-tuning.md](Plans/unified-locomotion-roadmap/09-validation-debugging-and-tuning.md) when the task is baseline-refresh workflow or telemetry tooling.
+- Open [Plans/foot-sliding-speed-envelope.plan.md](Plans/foot-sliding-speed-envelope.plan.md) when the task touches move-force, sprint multiplier, cadence, stride length, or planted-foot drift thresholds.
 - Open [DEBUGGING.md](DEBUGGING.md) when the task is active investigation rather than known-red comparison.
 
 ---
@@ -41,6 +43,13 @@ Current metric anchors:
 - HardSnap 90-degree snap: recovery frame `56`, post-turn progress `7.63 m`, max stalled frames `4`.
 - SpinRecovery: forward displacement `2.443 m`, yaw angular velocity at frame 150 `0.313 rad/s`.
 - MovementQuality corner course: completed in `458` frames with `0` fallen frames.
+
+Current focused foot-sliding gate:
+- Method-level filter: `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.WalkForward_PlantedFeetDoNotSlide;PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.SprintForward_PlantedFeetDoNotSlide`
+- Locked thresholds: walk `< 0.35 m` max drift, sprint `< 0.80 m` max drift
+- Honest envelope reference: `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, `_stepFrequencyScale = 0.10`, `MaxStrideLength = 0.30`
+- Use the method-level filter above because fixture-level `FootSlidingTests` also executes the explicit speed sweep.
+- Detailed envelope analysis: [Plans/foot-sliding-speed-envelope.plan.md](Plans/foot-sliding-speed-envelope.plan.md)
 
 ## Known Active Reds
 
