@@ -3,7 +3,7 @@
 ## Status
 - State: **In Progress**
 - Acceptance target: Find the maximum honest movement speed where the character's planted feet do not visibly slide across the ground, lock that as a regression-tested quality gate, and document the parameter envelope.
-- Current next step: WP4b (stretch) — test whether higher `MaxStrideLength` values can beat or complement the promising `_stepFrequencyScale = 0.15` candidate without making the gait look unnatural.
+- Current next step: WP4c (stretch) — compare the locked `150 / 1.8 / 0.10 / 0.30` baseline against the best WP4a/WP4b candidate and decide whether the honest envelope actually expands.
 - Active blockers: None.
 
 ## Motivation
@@ -153,9 +153,22 @@ Only pursue after WP3 is complete and the baseline is locked.
   - **Interim candidate:** `_stepFrequencyScale = 0.15` is the strongest quantitative candidate so far. Relative to the fresh `0.10` baseline in this sweep, it trims max drift by `0.2322m` (`0.7435 -> 0.5113`) while slightly increasing peak speed (`3.22 -> 3.34 m/s`). `_stepFrequencyScale = 0.12` also improves drift but costs `0.33 m/s` peak speed. `_stepFrequencyScale = 0.20` crosses the sprint gate.
   - **Comparison note:** This sweep's `0.10` reference matched the locked sprint regression sample rather than the earlier WP2b 150-force row, so treat WP4a as a fresh same-session comparison across cadence tiers rather than a direct replacement for the earlier move-force sweep.
 
-- [ ] **WP4b: Test higher `MaxStrideLength` values**
+- [x] **WP4b: Test higher `MaxStrideLength` values** ✅ 2026-03-18
   - Scope: Same approach but varying `MaxStrideLength` from `[0.25, 0.30, 0.35, 0.40]`. Longer strides cover more ground per cycle, potentially allowing higher speed without sliding — but may look comically long.
   - Done when: A third sweep table is captured.
+  - Result: 1/1 explicit PlayMode test passes (`FootSlidingTests.MaxStrideLengthSweep_MeasureDriftAtEachTier`). Fresh artifacts: `TestResults/PlayMode.xml`, `TestResults/latest-summary.md`, `Logs/test_playmode_20260318_203858.log`.
+  - **Focused seam verification:** 1/1 focused EditMode contract test passes for `LocomotionContractsTests.StepPlanner_ComputeSwingTarget_MaxStrideLengthOverride_ClampsForwardStrideAtRequestedCeiling` (`Logs/test_editmode_20260318_203441.log`). This adds the minimal runtime seam needed to vary `StepPlanner`'s stride clamp during the PlayMode sweep without changing prefab defaults.
+  - **Sweep results:**
+
+    | `MaxStrideLength` | Peak Speed (m/s) | Max Drift (m) | Avg Drift (m) | StepCount | Verdict vs 0.80m sprint gate | Inferred visual note |
+    |---|---|---|---|---|---|---|
+    | 0.25 | 3.22 | 0.7435 | 0.1858 | 26 | within-gate | inferred: tighter stride, more slip |
+    | 0.30 | 2.89 | 0.5393 | 0.1161 | 22 | within-gate | baseline stride reference |
+    | 0.35 | 3.34 | 0.5113 | 0.1734 | 27 | within-gate | inferred: longer reach, modest speed gain |
+    | 0.40 | 3.23 | 0.7455 | 0.2037 | 25 | within-gate | inferred: longer reach, more slip |
+
+  - **Interim candidate:** With `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, and `_stepFrequencyScale = 0.15`, raising `MaxStrideLength` to `0.35` is the strongest WP4b candidate so far. Relative to the same-sweep `0.30` reference, it cuts max drift by `0.0280m` (`0.5393 -> 0.5113`) while increasing peak speed by `0.45 m/s` (`2.89 -> 3.34`). `0.40` gives back almost all of the drift win (`0.7455m`) without additional speed.
+  - **Comparison note:** Treat WP4b as a fresh same-session comparison against the `0.15` cadence candidate rather than a direct replacement for the earlier locked baseline. The baseline remains `0.10 / 0.30` until WP4c decides whether the combined `0.15 / 0.35` candidate earns promotion.
 
 - [ ] **WP4c: Recommend the optimal parameter combination**
   - Scope: From WP4a and WP4b data, recommend the combination of `_moveForce`, `_sprintSpeedMultiplier`, `_stepFrequencyScale`, and `MaxStrideLength` that maximizes peak grounded speed while keeping planted foot drift below the visual threshold. Update the regression gate thresholds if the envelope expands.
@@ -163,15 +176,16 @@ Only pursue after WP3 is complete and the baseline is locked.
 
 ## Envelope Results
 
-The current honest envelope is bounded by the data already captured in WP1-WP2:
+The current honest envelope is bounded by the locked WP1-WP3 baseline plus the WP4 diagnostic sweeps:
 
 - **Recommended full-envelope ceiling:** `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, `_stepFrequencyScale = 0.10`, `MaxStrideLength = 0.30`.
 - **Locked regression gate:** Walk must stay below `0.35m` max drift and sprint must stay below `0.80m` max drift. Use the method-level filter `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.WalkForward_PlantedFeetDoNotSlide;PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.SprintForward_PlantedFeetDoNotSlide` because fixture-level `FootSlidingTests` also runs the explicit diagnostic sweeps.
 - **Why 150 stays recommended:** It is the highest force with explicit green evidence at both walk (`0.3076m < 0.35m`) and sprint (`0.5113m < 0.80m`).
 - **Why 175 is not promoted yet:** It passes the sprint sweep but sits only `0.0256m` under the sprint gate and has no companion walk-speed measurement, so promoting it would be extrapolation rather than a verified envelope.
 - **Observed knee:** The drift curve bends sharply between `_moveForce = 175` and `_moveForce = 200`. That step adds only `17.7%` more peak speed (`3.61 -> 4.25 m/s`) but `45.5%` more max drift (`0.7744 -> 1.1266 m`), which is consistent with the hips force outrunning the current cadence/stride ceiling.
-- **WP4a interim cadence candidate:** Keeping `_moveForce = 150` and `_sprintSpeedMultiplier = 1.8`, raising `_stepFrequencyScale` to `0.15` produced the best quantitative sprint result in the WP4a sweep (`PeakSpeed = 3.34 m/s`, `MaxDrift = 0.5113 m`). It is promising but not promoted yet because the locked baseline still points at `0.10`, the visual note is inferred rather than directly observed, and WP4b/WP4c still need stride and combined-envelope comparison.
-- **Follow-up candidates:** WP4b should test whether raising `MaxStrideLength` above `0.30` can improve on the `_stepFrequencyScale = 0.15` candidate without pushing drift back over the gate or making the gait look exaggerated.
+- **WP4a interim cadence candidate:** Keeping `_moveForce = 150` and `_sprintSpeedMultiplier = 1.8`, raising `_stepFrequencyScale` to `0.15` produced the best quantitative sprint result in the WP4a sweep (`PeakSpeed = 3.34 m/s`, `MaxDrift = 0.5113 m`). It remains promising but not promoted because the locked baseline still points at `0.10`, the visual note is inferred rather than directly observed, and WP4c still needs the combined-envelope decision.
+- **WP4b interim cadence+stride candidate:** Keeping `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, and `_stepFrequencyScale = 0.15`, raising `MaxStrideLength` to `0.35` produced the best WP4b result (`PeakSpeed = 3.34 m/s`, `MaxDrift = 0.5113 m`). Relative to the same-sweep `0.30` tier it adds `0.45 m/s` peak speed and trims `0.0280m` max drift, while `0.40` regresses to `0.7455m` drift.
+- **Follow-up decision for WP4c:** Compare the locked baseline (`0.10 / 0.30`) against the combined `0.15 / 0.35` candidate and decide whether the honest envelope truly expands or whether the new candidate stays a sprint-only diagnostic tier.
 
 | `_moveForce` | `_sprintMultiplier` | `_stepFreqScale` | `MaxStride` | Peak Speed (m/s) | Max Drift (m) | Avg Drift (m) | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -194,14 +208,24 @@ WP4a fixed-force cadence sweep (`_moveForce = 150`, `_sprintMultiplier = 1.8`, `
 | 0.18 | 3.23 | 0.7455 | 0.2037 | 25 | inferred: near-baseline; manual review later |
 | 0.20 | 3.55 | 1.0277 | 0.2477 | 27 | inferred: worse drift than baseline |
 
+WP4b fixed-force stride sweep (`_moveForce = 150`, `_sprintMultiplier = 1.8`, `_stepFreqScale = 0.15`):
+
+| `MaxStride` | Peak Speed (m/s) | Max Drift (m) | Avg Drift (m) | StepCount | Inferred visual note |
+|---|---|---|---|---|---|
+| 0.25 | 3.22 | 0.7435 | 0.1858 | 26 | inferred: tighter stride, more slip |
+| 0.30 | 2.89 | 0.5393 | 0.1161 | 22 | baseline stride reference |
+| 0.35 | 3.34 | 0.5113 | 0.1734 | 27 | inferred: longer reach, modest speed gain |
+| 0.40 | 3.23 | 0.7455 | 0.2037 | 25 | inferred: longer reach, more slip |
+
 ## Verification Gate
 
 - Walk-speed drift test green at the locked `0.35m` gate (WP1b/WP3b).
 - Sprint-speed drift test green at the locked `0.80m` gate (WP2a/WP3b).
 - Move-force sweep data captured and analyzed (WP2b + WP3a).
 - Step-frequency sweep data captured with inferred visual notes (WP4a).
+- Max-stride sweep data captured with inferred visual notes and a focused StepPlanner seam check (WP4b).
 - Regression gate locked with explicit thresholds and a method-level filter string (WP3b).
-- Locked walk/sprint regression gate reran green after adding the WP4a explicit sweep (`2 passed, 0 failed, 2 total`; `Logs/test_playmode_20260318_202509.log`).
+- Locked walk/sprint regression gate reran green after adding the WP4b explicit sweep (`2 passed, 0 failed, 2 total`; `Logs/test_playmode_20260318_203602.log`).
 - No durable new regressions in `GaitOutcomeTests`, `MovementQualityTests`, or `SprintJumpStabilityTests` beyond the existing `MovementQualityTests` known-red / order-sensitive envelope; `SprintJumpStabilityTests` reran green in isolation after the mixed-slice contamination run.
 
 ## Progress Notes
@@ -213,3 +237,4 @@ WP4a fixed-force cadence sweep (`_moveForce = 150`, `_sprintMultiplier = 1.8`, `
 - 2026-03-18: **WP3b complete.** Locked `FootSlidingTests` to the confirmed regression-gate wording (`0.35m` walk, `0.80m` sprint) and documented the exact method-level filter required to avoid the explicit sweep because this repo does not currently ship `Tools/test-slices.json`. Fresh focused verification: `2 passed, 0 failed, 2 total` via `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.WalkForward_PlantedFeetDoNotSlide;PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.SprintForward_PlantedFeetDoNotSlide` (`Logs/test_playmode_20260318_200823.log`). Broader verification matched the existing `MovementQualityTests` known-red / order-sensitive envelope, and the lone extra sprint-jump failure from the mixed run cleared in isolated `SprintJumpStabilityTests` rerun (`5 passed, 0 failed`, `Logs/test_playmode_20260318_201158.log`).
 - 2026-03-18: **WP3c complete.** Cross-linked the locked foot-sliding envelope from `LOCOMOTION_BASELINES.md` so future movement tuning work can jump directly to the honest speed ceiling, drift thresholds, and safe test filter.
 - 2026-03-18: **WP4a complete.** Added the explicit diagnostic sweep `FootSlidingTests.StepFrequencySweep_MeasureDriftAtEachTier`, which locks `_moveForce = 150` and `_sprintSpeedMultiplier = 1.8` while sweeping `_stepFrequencyScale` across `[0.10, 0.12, 0.15, 0.18, 0.20]`. Fresh explicit verification is `1 passed, 0 failed, 1 total` (`Logs/test_playmode_20260318_202352.log`). The strongest quantitative candidate is `_stepFrequencyScale = 0.15` (`MaxDrift = 0.5113m`, `PeakSpeed = 3.34 m/s`), while `_stepFrequencyScale = 0.20` crosses the sprint gate (`1.0277m`). The locked walk/sprint regression gate stayed green after the new diagnostic landed (`2 passed, 0 failed, 2 total`; `Logs/test_playmode_20260318_202509.log`). Visual notes remain inferred from cadence-versus-drift deltas and still need manual observation before any baseline is promoted.
+- 2026-03-18: **WP4b complete.** Added the explicit diagnostic sweep `FootSlidingTests.MaxStrideLengthSweep_MeasureDriftAtEachTier`, which keeps `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, and `_stepFrequencyScale = 0.15` fixed while sweeping `MaxStrideLength` across `[0.25, 0.30, 0.35, 0.40]` through a minimal `StepPlanner` test seam. Fresh explicit verification is `1 passed, 0 failed, 1 total` (`Logs/test_playmode_20260318_203858.log`), and the focused seam contract also passed in EditMode (`1 passed, 0 failed, 1 total`; `Logs/test_editmode_20260318_203441.log`). The strongest same-session candidate is `0.15 / 0.35` (`PeakSpeed = 3.34 m/s`, `MaxDrift = 0.5113m`), while `0.40` regresses near the baseline-like slip tier (`0.7455m`). The locked walk/sprint regression gate remained green after the new explicit sweep landed (`2 passed, 0 failed, 2 total`; `Logs/test_playmode_20260318_203602.log`).

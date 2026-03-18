@@ -22,9 +22,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SprintFrames = 500;
         private static readonly float[] SweepMoveForces = { 100f, 125f, 150f, 175f, 200f, 250f, 300f };
         private static readonly float[] SweepStepFrequencyScales = { 0.10f, 0.12f, 0.15f, 0.18f, 0.20f };
+        private static readonly float[] SweepMaxStrideLengths = { 0.25f, 0.30f, 0.35f, 0.40f };
 
         private const float StepFrequencySweepMoveForce = 150f;
         private const float StepFrequencySweepSprintMultiplier = 1.8f;
+        private const float MaxStrideSweepMoveForce = 150f;
+        private const float MaxStrideSweepSprintMultiplier = 1.8f;
+        private const float MaxStrideSweepStepFrequencyScale = 0.15f;
+        private const float MaxStrideSweepBaselineLength = 0.30f;
 
         /// <summary>
         /// Confirmed walk-speed regression gate from WP3a for the honest envelope.
@@ -63,11 +68,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static readonly FieldInfo StepFrequencyScaleField = typeof(LegAnimator)
             .GetField("_stepFrequencyScale", BindingFlags.NonPublic | BindingFlags.Instance);
 
+        private static readonly FieldInfo StepPlannerField = typeof(LegAnimator)
+            .GetField("_stepPlanner", BindingFlags.NonPublic | BindingFlags.Instance);
+
         private static PropertyInfo _legStateCurrentStateProperty;
 
         // STEP 1: Build every foot-sliding measurement from the live prefab rig and stance signal.
         // STEP 2: Reuse that probe for the locked walk and sprint regression gates.
-        // STEP 3: Re-run the same probe across move-force and cadence tiers in explicit tuning sweeps.
+        // STEP 3: Re-run the same probe across move-force, cadence, and stride-length tiers in explicit tuning sweeps.
 
         private PlayerPrefabTestRig _rig;
         private int _leftStanceAge;
@@ -132,6 +140,28 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             public float StepFrequencyScale { get; }
+            public float MaxDrift { get; }
+            public float AverageDrift { get; }
+            public float PeakSpeed { get; }
+            public int StepCount { get; }
+            public string Verdict { get; }
+        }
+
+        private sealed class MaxStrideSweepSample
+        {
+            public MaxStrideSweepSample(float maxStrideLength, DriftMeasurement measurement)
+            {
+                MaxStrideLength = maxStrideLength;
+                MaxDrift = measurement.MaxDrift;
+                AverageDrift = measurement.AverageDrift;
+                PeakSpeed = measurement.PeakSpeed;
+                StepCount = measurement.StepCount;
+                Verdict = measurement.MaxDrift < MaxSprintPlantedFootDriftMetres
+                    ? "within-gate"
+                    : "over-gate";
+            }
+
+            public float MaxStrideLength { get; }
             public float MaxDrift { get; }
             public float AverageDrift { get; }
             public float PeakSpeed { get; }
@@ -314,6 +344,55 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Debug.Log(BuildStepFrequencySweepSummary(results));
         }
 
+        [UnityTest, Explicit("Diagnostic max-stride sweep for planted-foot drift tuning.")]
+        public IEnumerator MaxStrideLengthSweep_MeasureDriftAtEachTier()
+        {
+            // Arrange
+            List<MaxStrideSweepSample> results = new List<MaxStrideSweepSample>(SweepMaxStrideLengths.Length);
+            _rig?.Dispose();
+            _rig = null;
+
+            // Act
+            for (int i = 0; i < SweepMaxStrideLengths.Length; i++)
+            {
+                yield return RecreateRigForSweep(i);
+
+                float maxStrideLength = SweepMaxStrideLengths[i];
+                SetMoveForce(_rig.PlayerMovement, MaxStrideSweepMoveForce);
+                SetSprintSpeedMultiplier(_rig.PlayerMovement, MaxStrideSweepSprintMultiplier);
+                SetStepFrequencyScale(_rig.LegAnimator, MaxStrideSweepStepFrequencyScale);
+                SetMaxStrideLength(_rig.LegAnimator, maxStrideLength);
+
+                DriftMeasurement measurement = null;
+                yield return MeasureForwardDrift(
+                    sprint: true,
+                    measurementFrames: SprintFrames,
+                    captureMeasurement: result => measurement = result);
+
+                Assert.That(measurement, Is.Not.Null,
+                    $"Sweep measurement for maxStrideLength {maxStrideLength:F2} should be captured.");
+                Assert.That(measurement.StepCount, Is.GreaterThan(0),
+                    $"Sweep measurement for maxStrideLength {maxStrideLength:F2} completed no stance phases.");
+
+                results.Add(new MaxStrideSweepSample(maxStrideLength, measurement));
+
+                Debug.Log(
+                    $"[METRIC] PlantedFootDrift_MaxStrideSweep " +
+                    $"StepFrequencyScale={MaxStrideSweepStepFrequencyScale:F2} " +
+                    $"MaxStrideLength={maxStrideLength:F2} " +
+                    $"MaxDrift={measurement.MaxDrift:F4} " +
+                    $"AverageDrift={measurement.AverageDrift:F4} " +
+                    $"PeakSpeed={measurement.PeakSpeed:F2} " +
+                    $"StepCount={measurement.StepCount}");
+            }
+
+            // Assert
+            Assert.That(results, Has.Count.EqualTo(SweepMaxStrideLengths.Length),
+                "The explicit sweep should record one result per requested max-stride tier.");
+
+            Debug.Log(BuildMaxStrideSweepSummary(results));
+        }
+
         private IEnumerator MeasureForwardDrift(bool sprint, int measurementFrames, Action<DriftMeasurement> captureMeasurement)
         {
             Assert.That(_rig, Is.Not.Null, "PlayerPrefabTestRig should be available before measuring drift.");
@@ -412,6 +491,36 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Failed to apply step-frequency scale override. Expected {stepFrequencyScale:F2}, actual {appliedStepFrequencyScale:F2}.");
         }
 
+        private static void SetMaxStrideLength(LegAnimator legAnimator, float maxStrideLength)
+        {
+            Assert.That(StepPlannerField, Is.Not.Null,
+                "LegAnimator._stepPlanner field not found via reflection.");
+
+            object stepPlanner = StepPlannerField.GetValue(legAnimator);
+            Assert.That(stepPlanner, Is.Not.Null,
+                "LegAnimator._stepPlanner instance not found via reflection.");
+
+            MethodInfo setter = stepPlanner.GetType().GetMethod(
+                "SetMaxStrideLengthForTesting",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            Assert.That(setter, Is.Not.Null,
+                "StepPlanner.SetMaxStrideLengthForTesting not found via reflection.");
+
+            setter.Invoke(stepPlanner, new object[] { maxStrideLength });
+
+            FieldInfo maxStrideLengthField = stepPlanner.GetType().GetField(
+                "_maxStrideLength",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(maxStrideLengthField, Is.Not.Null,
+                "StepPlanner._maxStrideLength field not found via reflection.");
+
+            float appliedMaxStrideLength = (float)maxStrideLengthField.GetValue(stepPlanner);
+            Assert.That(appliedMaxStrideLength, Is.EqualTo(maxStrideLength).Within(0.0001f),
+                $"Failed to apply max-stride override. Expected {maxStrideLength:F2}, actual {appliedMaxStrideLength:F2}.");
+        }
+
         private void ResetStanceAges()
         {
             _leftStanceAge = 0;
@@ -457,6 +566,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return builder.ToString().TrimEnd();
         }
 
+        private static string BuildMaxStrideSweepSummary(IReadOnlyList<MaxStrideSweepSample> results)
+        {
+            StringBuilder builder = new StringBuilder();
+            MaxStrideSweepSample baseline = FindStrideSweepBaseline(results);
+            builder.AppendLine("Foot sliding max-stride sweep summary");
+            builder.AppendLine("MaxStride | PeakSpeed | MaxDrift | AvgDrift | Steps | Verdict | InferredVisualNote");
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                MaxStrideSweepSample sample = results[i];
+                string inferredVisualNote = InferStrideVisualNote(sample, baseline);
+                builder.AppendLine(
+                    $"{sample.MaxStrideLength,9:F2} | {sample.PeakSpeed,9:F2} | {sample.MaxDrift,8:F4} | {sample.AverageDrift,8:F4} | {sample.StepCount,5} | {sample.Verdict,-11} | {inferredVisualNote}");
+            }
+
+            return builder.ToString().TrimEnd();
+        }
+
         private static string InferVisualNote(StepFrequencySweepSample sample, StepFrequencySweepSample baseline)
         {
             if (Mathf.Abs(sample.StepFrequencyScale - baseline.StepFrequencyScale) < 0.0001f)
@@ -487,6 +614,68 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             if (stepCountDeltaRatio >= 0.35f)
             {
                 return "inferred: cadence jump, no clear drift win";
+            }
+
+            return "inferred: near-baseline; manual review later";
+        }
+
+        private static MaxStrideSweepSample FindStrideSweepBaseline(IReadOnlyList<MaxStrideSweepSample> results)
+        {
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (Mathf.Abs(results[i].MaxStrideLength - MaxStrideSweepBaselineLength) < 0.0001f)
+                {
+                    return results[i];
+                }
+            }
+
+            return results[0];
+        }
+
+        private static string InferStrideVisualNote(MaxStrideSweepSample sample, MaxStrideSweepSample baseline)
+        {
+            if (Mathf.Abs(sample.MaxStrideLength - baseline.MaxStrideLength) < 0.0001f)
+            {
+                return "baseline stride reference";
+            }
+
+            float strideDelta = sample.MaxStrideLength - baseline.MaxStrideLength;
+            float driftDelta = sample.MaxDrift - baseline.MaxDrift;
+            float speedDelta = sample.PeakSpeed - baseline.PeakSpeed;
+
+            if (driftDelta <= -0.05f && speedDelta >= -0.05f)
+            {
+                return strideDelta >= 0f
+                    ? "inferred: longer reach, cleaner support"
+                    : "inferred: tighter stride, cleaner support";
+            }
+
+            if (driftDelta <= -0.05f)
+            {
+                return strideDelta >= 0f
+                    ? "inferred: longer reach, slower envelope"
+                    : "inferred: tighter stride, slower envelope";
+            }
+
+            if (driftDelta >= 0.05f && speedDelta >= 0.10f)
+            {
+                return strideDelta >= 0f
+                    ? "inferred: longer reach, more slip"
+                    : "inferred: tighter stride, more slip";
+            }
+
+            if (driftDelta >= 0.05f)
+            {
+                return strideDelta >= 0f
+                    ? "inferred: worse drift than baseline"
+                    : "inferred: tighter stride, worse drift";
+            }
+
+            if (speedDelta >= 0.10f)
+            {
+                return strideDelta >= 0f
+                    ? "inferred: longer reach, modest speed gain"
+                    : "inferred: tighter stride, modest speed gain";
             }
 
             return "inferred: near-baseline; manual review later";

@@ -7,7 +7,8 @@ namespace PhysicsDrivenMovement.Character
     /// including explicit clearance requests for detected step-up approaches.
     /// Part of the Chapter 4 step-planning layer. Produces <see cref="StepTarget"/> values
     /// consumed by <see cref="LegAnimator"/> through <see cref="LegCommandOutput"/>.
-    /// Stateless computation unit — all decisions are derived from the inputs passed each call.
+    /// Lightweight computation unit — all decisions are derived from the inputs passed each call
+    /// plus the current stride envelope tuning.
     /// Collaborators: <see cref="LegAnimator"/> (caller during BuildPassThroughCommands),
     /// <see cref="LocomotionDirector"/> (provides observation and desired input upstream),
     /// <see cref="LegStateMachine"/> (provides per-leg phase and state for timing).
@@ -17,7 +18,7 @@ namespace PhysicsDrivenMovement.Character
         // STEP 1: Base stride geometry — how far forward and how wide a default step lands
         //         relative to the hips, scaled by current planar speed.
         private const float BaseStrideLength = 0.15f;
-        private const float MaxStrideLength = 0.30f;
+        private const float DefaultMaxStrideLength = 0.30f;
         private const float BaseStepWidth = 0.17f;
 
         // STEP 2: Speed influence — stride length scales linearly with planar speed
@@ -96,6 +97,8 @@ namespace PhysicsDrivenMovement.Character
         private const float MinimumStepUpLandingCarryDistance = 0.03f;
         private const float SevereStepCarryStartHeight = 0.06f;
         private const float SevereStepCarryFullHeight = 0.12f;
+
+        private float _maxStrideLength = DefaultMaxStrideLength;
 
         /// <summary>
         /// Computes a step target for a single leg that is currently in a swing-like state.
@@ -201,10 +204,17 @@ namespace PhysicsDrivenMovement.Character
                 || state == LegStateType.RecoveryStep;
         }
 
-        private static float ComputeStrideOffset(float planarSpeed)
+        private float ComputeStrideOffset(float planarSpeed)
         {
             // STEP 2: Stride scales with speed but saturates at high velocities.
-            return Mathf.Min(BaseStrideLength + planarSpeed * SpeedStrideScale, MaxStrideLength);
+            return Mathf.Min(BaseStrideLength + planarSpeed * SpeedStrideScale, _maxStrideLength);
+        }
+
+        internal void SetMaxStrideLengthForTesting(float maxStrideLength)
+        {
+            // STEP 2-test seam: explicit tuning sweeps can tighten or relax the stride clamp
+            // without changing prefab defaults or widening the runtime API surface.
+            _maxStrideLength = Mathf.Max(BaseStrideLength, maxStrideLength);
         }
 
         private static float ComputeLateralOffset(LocomotionLeg leg)

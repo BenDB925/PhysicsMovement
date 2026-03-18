@@ -1453,6 +1453,35 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void StepPlanner_ComputeSwingTarget_MaxStrideLengthOverride_ClampsForwardStrideAtRequestedCeiling()
+        {
+            // Arrange — compare the default planner against a tighter stride ceiling at high speed.
+            object defaultPlanner = CreateStepPlannerInstance();
+            object overriddenPlanner = CreateStepPlannerInstance();
+            SetStepPlannerMaxStrideLength(overriddenPlanner, 0.20f);
+
+            object[] args = BuildSwingTargetArgs(
+                leg: "Left", legPhase: 0.5f, legState: "Swing",
+                moveInput: new Vector2(0, 1), moveWorldDirection: Vector3.forward,
+                facingDirection: Vector3.forward, velocity: new Vector3(0, 0, 10f),
+                hipsPosition: Vector3.up, gaitReferenceDirection: Vector3.forward,
+                stepFrequency: 2f, supportQuality: 0.8f);
+
+            // Act
+            object defaultResult = InvokeComputeSwingTarget(defaultPlanner, args);
+            object overriddenResult = InvokeComputeSwingTarget(overriddenPlanner, args);
+
+            // Assert
+            Vector3 defaultLanding = GetPropertyValue<Vector3>(defaultResult, "LandingPosition");
+            Vector3 overriddenLanding = GetPropertyValue<Vector3>(overriddenResult, "LandingPosition");
+
+            Assert.That(overriddenLanding.z, Is.EqualTo(0.20f).Within(0.001f),
+                "The explicit max-stride override should clamp the forward landing distance.");
+            Assert.That(defaultLanding.z, Is.GreaterThan(overriddenLanding.z),
+                "The default stride ceiling should remain larger than the tightened override.");
+        }
+
+        [Test]
         public void StepPlanner_ComputeSwingTarget_LeftVsRight_LaterallyOpposite()
         {
             // Arrange — same state but opposite legs should land on opposite sides of hips.
@@ -2344,6 +2373,18 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         {
             Type plannerType = RequireType(StepPlannerTypeName);
             return Activator.CreateInstance(plannerType, nonPublic: true);
+        }
+
+        private static void SetStepPlannerMaxStrideLength(object planner, float maxStrideLength)
+        {
+            MethodInfo method = planner.GetType().GetMethod(
+                "SetMaxStrideLengthForTesting",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            Assert.That(method, Is.Not.Null,
+                "StepPlanner should expose a non-public max-stride override for diagnostic sweeps.");
+
+            method.Invoke(planner, new object[] { maxStrideLength });
         }
 
         private static object[] BuildSwingTargetArgs(
