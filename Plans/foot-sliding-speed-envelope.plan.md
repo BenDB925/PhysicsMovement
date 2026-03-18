@@ -3,7 +3,7 @@
 ## Status
 - State: **In Progress**
 - Acceptance target: Find the maximum honest movement speed where the character's planted feet do not visibly slide across the ground, lock that as a regression-tested quality gate, and document the parameter envelope.
-- Current next step: WP2b — add parameterized speed-sweep diagnostic test.
+- Current next step: WP3a — analyze sweep results and define the envelope.
 - Active blockers: None.
 
 ## Motivation
@@ -91,10 +91,25 @@ Create a reusable test utility that measures planted foot drift per step cycle.
   - **Threshold calibration:** Initial 0.35m threshold (same as walk) failed at sprint — sprint drift is 2.1× the walk peak. Threshold set to 0.80m as a regression gate capturing the current sprint quality level. WP3b will tighten after envelope analysis.
   - **Comparison to walk:** Walk MaxDrift=0.31m at 0.91 m/s → Sprint MaxDrift=0.74m at 3.22 m/s. Drift scales roughly linearly with speed (2.4× drift for 3.5× speed).
 
-- [ ] **WP2b: Add parameterized speed-sweep diagnostic test**
+- [x] **WP2b: Add parameterized speed-sweep diagnostic test** ✅ 2026-03-18
   - Scope: Add `FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier()` as an `[Explicit]` diagnostic test (not part of the normal regression gate). Parameterize over `_moveForce` values: `[100, 125, 150, 175, 200, 250, 300]` while keeping `_sprintSpeedMultiplier = 1.8`. For each value: override the serialized force via reflection or a test-injection seam, sprint for 5 s, record `MaxDrift`, `AverageDrift`, `PeakPlanarSpeed`, and `StepCount`. Emit all values as `[METRIC]` lines. Log a summary table at the end.
   - Done when: Running the explicit test produces a table mapping force → drift → speed. This table identifies the "knee" where drift starts exceeding the visual threshold.
   - Verification: Manual run of the explicit test; inspect metric output.
+  - Result: 1/1 explicit PlayMode test passes (`FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier`). Fresh artifacts: `TestResults/PlayMode.xml`, `TestResults/latest-summary.md`, `Logs/test_playmode_20260318_195233.log`.
+  - **Sweep results:**
+
+    | `_moveForce` | Peak Speed (m/s) | Max Drift (m) | Avg Drift (m) | StepCount | Verdict vs 0.80m sprint gate |
+    |---|---|---|---|---|---|
+    | 100 | 2.27 | 0.2271 | 0.0943 | 22 | within-gate |
+    | 125 | 2.49 | 0.3207 | 0.0888 | 20 | within-gate |
+    | 150 | 3.34 | 0.5113 | 0.1734 | 27 | within-gate |
+    | 175 | 3.61 | 0.7744 | 0.2309 | 27 | within-gate |
+    | 200 | 4.25 | 1.1266 | 0.2462 | 27 | over-gate |
+    | 250 | 4.92 | 1.1785 | 0.5599 | 21 | over-gate |
+    | 300 | 5.72 | 1.4645 | 0.4743 | 25 | over-gate |
+
+  - **Initial knee observation:** Under the current sprint regression gate (`MaxDrift < 0.80m`), the last in-gate force in this sweep is `_moveForce = 175`; drift jumps over the gate at 200 and above. WP3a will confirm whether 175 is still acceptable once walk + sprint envelope analysis is written up.
+  - **Runner note:** Fixture-level filtering of `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests` also executes the explicit sweep in this repo. Use method-level filters for the normal walk/sprint regression gate: `FootSlidingTests.WalkForward_PlantedFeetDoNotSlide;FootSlidingTests.SprintForward_PlantedFeetDoNotSlide`.
 
 ### WP3: Establish the speed envelope and lock the regression gate
 
@@ -147,3 +162,4 @@ _To be populated after WP3a._
 - 2026-03-18: Created this plan from user feedback that `_moveForce = 150` feels grounded while higher values produce visible foot gliding at sprint speed. The prefab already serializes `_moveForce: 150`. The plan focuses on measuring planted-foot drift, finding the speed envelope, and locking a regression gate.
 - 2026-03-18: **WP1 complete.** Created `PlantedFootDriftTracker` utility and wired into PlayMode `FootSlidingTests`. Walk-speed baseline: MaxDrift=0.31m, AvgDrift=0.08m at 0.91 m/s. Key finding: 0.04m threshold was unrealistic for a physics-driven character without IK foot pinning — actual stance-phase drift is ~0.08m average, ~0.31m peak. Threshold set to 0.35m as regression gate. Files added: `PlantedFootDriftTracker.cs`, `PlantedFootDriftTrackerTests.cs`, `FootSlidingTests.cs`. EditMode asmdef updated to reference PlayMode assembly for shared test utilities.
 - 2026-03-18: **WP2a complete.** Added `SprintForward_PlantedFeetDoNotSlide` to `FootSlidingTests`. Sprint baseline: MaxDrift=0.74m, AvgDrift=0.19m at PeakSpeed=3.22 m/s. Right foot is the primary sliding offender (0.74m vs left 0.21m). Drift scales roughly linearly with speed. Threshold set to 0.80m as regression gate. 2/2 FootSlidingTests green.
+- 2026-03-18: **WP2b complete.** Added the explicit diagnostic sweep `FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier`, which overrides `_moveForce` by reflection and logs a summary table for `[100, 125, 150, 175, 200, 250, 300]`. Fresh explicit verification is `1 passed, 0 failed, 1 total` via `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier`, with the knee landing between `_moveForce = 175` (`MaxDrift=0.7744m`) and `_moveForce = 200` (`MaxDrift=1.1266m`) under the current 0.80m sprint gate. A separate method-level rerun of the normal walk/sprint gate stayed green (`2 passed, 0 failed, 2 total`) without invoking the explicit test.
