@@ -365,5 +365,63 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     $"(deadline: {PostLandStabilityDeadline}).");
             }
         }
+
+        [UnityTest]
+        public IEnumerator SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()
+        {
+            // Arrange
+            LocomotionDirector director = _rig.Instance.GetComponentInChildren<LocomotionDirector>();
+            Assert.That(director, Is.Not.Null,
+                "LocomotionDirector must be present on the player prefab.");
+
+            System.Reflection.FieldInfo telemetryField = typeof(LocomotionDirector).GetField(
+                "_enableRecoveryTelemetry",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.That(telemetryField, Is.Not.Null,
+                "_enableRecoveryTelemetry field must exist.");
+
+            System.Reflection.PropertyInfo telemetryLogProperty = typeof(LocomotionDirector).GetProperty(
+                "RecoveryTelemetryLog",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.That(telemetryLogProperty, Is.Not.Null,
+                "RecoveryTelemetryLog should be accessible through LocomotionDirector.");
+
+            telemetryField.SetValue(director, true);
+
+            SprintJumpDiagnostics diag = new SprintJumpDiagnostics();
+
+            // Act
+            yield return RunSprintJumpSequence(diag);
+
+            IList telemetryLog = telemetryLogProperty.GetValue(director) as IList;
+
+            // Assert
+            Assert.That(telemetryLog, Is.Not.Null,
+                "RecoveryTelemetryLog should return the in-memory telemetry ring buffer.");
+
+            TestContext.Out.WriteLine($"[METRIC] SprintJump_Telemetry EventCount={telemetryLog.Count}");
+            for (int index = 0; index < telemetryLog.Count; index++)
+            {
+                object telemetryEvent = telemetryLog[index];
+                Assert.That(telemetryEvent, Is.Not.Null,
+                    $"Telemetry event {index} should not be null.");
+
+                System.Reflection.MethodInfo toNdjsonLineMethod = telemetryEvent.GetType().GetMethod(
+                    "ToNdjsonLine",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                Assert.That(toNdjsonLineMethod, Is.Not.Null,
+                    "Recovery telemetry entries should expose ToNdjsonLine() for structured log output.");
+
+                string ndjsonLine = toNdjsonLineMethod.Invoke(telemetryEvent, null) as string;
+                TestContext.Out.WriteLine($"[METRIC] SprintJump_Telemetry Event[{index}]={ndjsonLine}");
+            }
+
+            if (diag.EverEnteredFallen || diag.PeakUprightAngleOverall > 30f)
+            {
+                Assert.That(telemetryLog.Count, Is.GreaterThan(0),
+                    "Recovery telemetry should log at least one event when the character " +
+                    $"wobbles (peak tilt {diag.PeakUprightAngleOverall:F1}°) or enters Fallen.");
+            }
+        }
     }
 }

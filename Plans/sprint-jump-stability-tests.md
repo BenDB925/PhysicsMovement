@@ -14,9 +14,9 @@ Create a new PlayMode test fixture `SprintJumpStabilityTests` that reproduces th
 ## Current status
 
 - State: In Progress
-- Current next step: Task 6 — add `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()`.
-- Verified artifact: `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now includes `SprintJump_LandingRecovery_RegainsUprightWithinDeadline()`. The focused PlayMode fixture on 2026-03-18 now runs 4 tests and reports `Result=Failed, Total=4, Passed=2, Failed=2`: the new Task 5 test passes with `[METRIC]` values `RecoveryFrames1=45` and `RecoveryFrames2=-1`, while Task 3 still fails with `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29`, and Task 4 still fails after emitting `PeakTiltAfterJump1=95.9`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=47`, `RecoveryFrames2=-1`, `FinalTilt=86.6`, `PeakSprintSpeed=4.27`, and `EverFallen=True`.
-- Open observation: Task 5 stays green because jump 1 recovers within the 150-frame deadline and the jump-2 recovery assertions are gated behind `WasAirborneAfterJump2`. The same focused run's smoke output still ended `PeakTilt=92.7`, `PeakSpeed=4.01`, `FinalState=Fallen`, `FinalTilt=86.5`, `Airborne1=True`, and `Airborne2=False`, so the shared helper continues to collapse before a second valid airborne state emerges.
+- Current next step: Task 8 — add `SprintJump` to `ScenarioDefinitions.cs` and update the scenario-count assertion. Task 7 is skipped for now because `Tools/test-slices.json` does not exist in the live repo yet.
+- Verified artifact: `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now includes `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()`. The focused PlayMode fixture on 2026-03-18 now runs 5 tests and reports `Result=Failed, Total=5, Passed=3, Failed=2`: the new Task 6 telemetry test passes with `[METRIC] SprintJump_Telemetry EventCount=7`, Task 5 still passes with `RecoveryFrames1=45` and `RecoveryFrames2=-1`, while Task 3 still fails with `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29`, and Task 4 still fails after emitting `PeakTiltAfterJump1=96.0`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=46`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.48`, and `EverFallen=True`.
+- Open observation: The Task 6 telemetry log now captures two recovery windows. The first starts as `Slip`, escalates to `NearFall`, and exits naturally via `recovery_window_elapsed`; the second follows the same entry/escalation pattern but ends with `angle_above_ceiling` plus `recovery_surrendered` at `UprightAngle=86.56069` after `RecoveryDurationSoFar=3.649998`. That explains why the shared helper still ends `FinalState=Fallen` and never reaches a second valid airborne state.
 - Repo note: the live codebase exposes `LocomotionDirector` and `RecoveryTelemetryEvent` under `PhysicsDrivenMovement.Character`, not a separate `PhysicsDrivenMovement.Character.Locomotion` namespace.
 
 ## Location
@@ -468,6 +468,8 @@ public IEnumerator SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()
 ```
 
 **Commit gate:** Test runs. If the character faceplants, the telemetry log should be non-empty and the NDJSON lines visible in NUnit XML output.
+
+- 2026-03-18: Completed. Added `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()` to `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs`, enabling `_enableRecoveryTelemetry` through reflection so the test can stay inside the existing runtime seam without broadening runtime visibility. Focused verification via `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests"` now reports `Result=Failed, Total=5, Passed=3, Failed=2`: the new Task 6 test passes and emits `[METRIC] SprintJump_Telemetry EventCount=7` plus NDJSON entries for `Slip` entry, `NearFall` escalation, a natural `recovery_window_elapsed` exit, then a second `Slip` entry, `NearFall` escalation, `angle_above_ceiling`, and the terminal `recovery_surrendered` event (`UprightAngle=86.56069`, `RecoveryDurationSoFar=3.649998`, `WasSurrender=true`). Task 3 and Task 4 remain the same known-red proof-of-bug checks. Because `Tools/test-slices.json` is not present in the current repo state, Task 7 is skipped and the plan advances to Task 8.
 
 ---
 
