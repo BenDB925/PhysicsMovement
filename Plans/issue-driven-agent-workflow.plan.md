@@ -3,16 +3,18 @@
 ## Status
 - State: Active
 - Acceptance target: Stand up a workflow where durable reference docs stay in-repo, PRDs and execution slices live in GitHub issues, local plan files stay slim and resumable, stuck investigations split cleanly into bug issues plus bug sheets, and a fresh agent can execute one step from the plan and issue context alone.
-- Current next step: Post the prepared PRD and slice issues for the `.copilot-instructions.md` pilot, then continue with the next documentation-slimming slice.
-- Active blockers: None currently. The workflow labels are now synced to `BenDB925/PhysicsMovement`.
+- Current next step: Draft and launch the follow-on `AGENT_TEST_RUNNING.md` documentation-slimming slice under PRD #1, or pick the next bounded documentation-slimming slice if priorities change.
+- Active blockers: None currently.
 
 ## Quick Resume
-- The launch step is now backed by repo assets plus the first pilot child doc: `.copilot-instructions.md` has been slimmed into a routing entry point, and the local PRD plus slice drafts are ready.
+- The `.copilot-instructions.md` pilot is now live in GitHub as PRD #1 and slice #2, with the local parent plan and child doc still serving as the canonical resume surface.
 - The flow remains intentionally hybrid: long-lived reference stays in repo files, while GitHub issues hold queue state, ownership, and thin handoff summaries.
-- The workflow labels are now synced, so the next agent can post the prepared PRD and slice immediately, with `AGENT_TEST_RUNNING.md` as the next likely documentation-slimming slice.
+- The next useful restart point is a follow-on documentation-slimming slice, with `AGENT_TEST_RUNNING.md` still the leading candidate under the new PRD.
 
 ## Verified Artifacts
-- `Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`: child doc for the first documentation-slimming slice, including ready-to-post PRD and slice drafts.
+- `https://github.com/BenDB925/PhysicsMovement/issues/1`: live PRD for the documentation-slimming pilot.
+- `https://github.com/BenDB925/PhysicsMovement/issues/2`: live slice issue for the `.copilot-instructions.md` entry-point rewrite.
+- `Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`: child doc for the first documentation-slimming slice, including the launched PRD and slice links.
 - `.copilot-instructions.md`: slimmed workspace entry point that now routes into deeper docs only when relevant.
 - `BenDB925/PhysicsMovement` labels: `type:*`, `mode:*`, `status:*`, and initial `area:*` labels are now synced through `Tools/Sync-IssueWorkflowLabels.ps1`.
 - `Plans/issue-driven-agent-workflow/05-launch-assets.md`: implementation record for the new templates, skills, routing shim, and label bootstrap.
@@ -34,7 +36,7 @@
 - [x] Document surface audit: keep/slim/archive recommendations and thin-entry-point strategy (`Plans/issue-driven-agent-workflow/03-document-surface-audit.md`)
 - [x] Issue model and pilot decisions: launch labels, AFK or HITL semantics, link rules, and recommended first pilot slice (`Plans/issue-driven-agent-workflow/04-issue-model-and-pilot-decisions.md`)
 - [x] Launch assets: issue templates, workflow skills, routing shim, and label bootstrap (`Plans/issue-driven-agent-workflow/05-launch-assets.md`)
-- [ ] Copilot instructions slimming pilot: local execution record and prepared issue drafts for the first documentation slice (`Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`)
+- [x] Copilot instructions slimming pilot: local execution record plus launched PRD and slice for the first documentation slice (`Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`)
 
 ## Work packages
 1. [x] Define the issue model: PRD issue, local plan file, tracer-bullet slice issues, bug issues, refactor RFCs, AFK/HITL semantics, blocker links, and the stuck-issue split rules.
@@ -45,6 +47,7 @@
 6. [ ] Trim long-lived documentation back to durable reference only and document the steady-state workflow.
 
 ## Progress notes
+- 2026-03-18: Posted the prepared documentation-slimming pilot issues to `BenDB925/PhysicsMovement` as PRD #1 and slice #2, then updated the local plan tree so the GitHub queue state and repo resume surface match.
 - 2026-03-18: Synced the launch label set to `BenDB925/PhysicsMovement` after locating `gh.exe` and reusing its authenticated token for `Tools/Sync-IssueWorkflowLabels.ps1`. Issue creation is now unblocked.
 - 2026-03-18: Slimmed `.copilot-instructions.md` into a thin routing file, created the pilot child doc, and prepared the matching PRD plus slice issue drafts locally. Remote launch is now blocked only on label creation.
 - 2026-03-18: Updated the workflow assets and workspace guidance so `vscode_askQuestions` is the default before most non-trivial planning or implementation work unless the task is already fully explicit.
