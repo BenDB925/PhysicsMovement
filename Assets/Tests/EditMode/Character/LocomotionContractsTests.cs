@@ -850,6 +850,81 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
         }
 
         [Test]
+        public void BodySupportCommand_ComDampingRecoveryBlend_DefaultsToRecoveryBlend()
+        {
+            // Arrange
+            Type commandType = RequireType(BodySupportCommandTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object noneEnum = Enum.Parse(situationType, "None");
+
+            // Act
+            object command = CreateInstance(commandType,
+                Vector3.forward,
+                Vector3.up,
+                Vector3.forward,
+                0f,
+                1f,
+                1f,
+                1f,
+                0.5f,
+                0.3f,
+                1f,
+                noneEnum);
+
+            // Assert
+            float recoveryBlend = GetPropertyValue<float>(command, "RecoveryBlend");
+            float comDampingRecoveryBlend = GetPropertyValue<float>(command, "ComDampingRecoveryBlend");
+            Assert.That(comDampingRecoveryBlend, Is.EqualTo(recoveryBlend).Within(0.0001f),
+                "The legacy constructor path should preserve the recovery blend for COM damping reduction.");
+        }
+
+        [Test]
+        public void BodySupportCommand_ConstructedWithExplicitComDampingRecoveryBlend_ClampsAndPreservesValue()
+        {
+            // Arrange
+            Type commandType = RequireType(BodySupportCommandTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object noneEnum = Enum.Parse(situationType, "None");
+
+            // Act
+            object explicitBlend = CreateInstance(commandType,
+                Vector3.forward,
+                Vector3.up,
+                Vector3.forward,
+                0f,
+                1f,
+                1f,
+                1f,
+                0.5f,
+                0.3f,
+                0.2f,
+                1f,
+                noneEnum);
+
+            object clampedBlend = CreateInstance(commandType,
+                Vector3.forward,
+                Vector3.up,
+                Vector3.forward,
+                0f,
+                1f,
+                1f,
+                1f,
+                0.5f,
+                0.3f,
+                1.5f,
+                1f,
+                noneEnum);
+
+            // Assert
+            float explicitValue = GetPropertyValue<float>(explicitBlend, "ComDampingRecoveryBlend");
+            float clampedValue = GetPropertyValue<float>(clampedBlend, "ComDampingRecoveryBlend");
+            Assert.That(explicitValue, Is.EqualTo(0.2f).Within(0.0001f),
+                "Explicit COM damping reduction blend should be preserved on construction.");
+            Assert.That(clampedValue, Is.EqualTo(1f).Within(0.0001f),
+                "COM damping reduction blend should clamp into the supported 0-1 range.");
+        }
+
+        [Test]
         public void BodySupportCommand_ConstructedWithLeanDegrees_PreservesLeanValue()
         {
             // Arrange
@@ -2591,6 +2666,32 @@ namespace PhysicsDrivenMovement.Tests.EditMode.Character
             float severity = GetPropertyValue<float>(extended, "EntrySeverity");
             Assert.That(frames, Is.EqualTo(8));
             Assert.That(severity, Is.EqualTo(0.6f).Within(0.001f));
+        }
+
+        [Test]
+        public void RecoveryState_Enter_SameSituationWithoutStrongerSignal_DoesNotRefreshWindow()
+        {
+            // Arrange
+            Type stateType = RequireType(RecoveryStateTypeName);
+            Type situationType = RequireType(RecoverySituationTypeName);
+            object slip = Enum.Parse(situationType, "Slip");
+
+            // Start with a Slip recovery at 3 frames remaining out of 10.
+            object current = CreateInstance(stateType, slip, 3, 10, 0.6f, 0.3f);
+
+            // Act — re-enter the same Slip with a longer window but no stronger signal.
+            MethodInfo enterMethod = stateType.GetMethod("Enter",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            object unchanged = enterMethod.Invoke(current, new object[] { slip, 8, 0.6f, 0.3f });
+
+            // Assert — the original window should keep counting down instead of resetting.
+            int frames = GetPropertyValue<int>(unchanged, "FramesRemaining");
+            float severity = GetPropertyValue<float>(unchanged, "EntrySeverity");
+            float turnSeverity = GetPropertyValue<float>(unchanged, "EntryTurnSeverity");
+            Assert.That(frames, Is.EqualTo(3),
+                "Re-entering the same recovery situation without a stronger signal should not blindly refresh the active timer.");
+            Assert.That(severity, Is.EqualTo(0.6f).Within(0.001f));
+            Assert.That(turnSeverity, Is.EqualTo(0.3f).Within(0.001f));
         }
 
         [Test]

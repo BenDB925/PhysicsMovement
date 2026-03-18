@@ -128,9 +128,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return new WaitForFixedUpdate();
             _rig.PlayerMovement.SetJumpInputForTest(false);
             RecordContinuousState(diag);
-            diag.WasAirborneAfterJump1 = true;
 
-            bool wasAirborne1 = false;
+            bool wasAirborne1 = _rig.CharacterState.CurrentState == CharacterStateType.Airborne
+                || !_rig.BalanceController.IsGrounded;
             bool landedAfter1 = false;
             int landing1SampleCount = 0;
             for (int frame = 0; frame < PostJumpSettleFrames; frame++)
@@ -143,7 +143,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 diag.MaxUprightAngleAfterJump1 = Mathf.Max(diag.MaxUprightAngleAfterJump1, angle);
 
                 CharacterStateType state = _rig.CharacterState.CurrentState;
-                if (state == CharacterStateType.Airborne)
+                if (state == CharacterStateType.Airborne || !_rig.BalanceController.IsGrounded)
                 {
                     wasAirborne1 = true;
                 }
@@ -205,9 +205,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return new WaitForFixedUpdate();
             _rig.PlayerMovement.SetJumpInputForTest(false);
             RecordContinuousState(diag);
-            diag.WasAirborneAfterJump2 = true;
 
-            bool wasAirborne2 = false;
+            bool wasAirborne2 = _rig.CharacterState.CurrentState == CharacterStateType.Airborne
+                || !_rig.BalanceController.IsGrounded;
             bool landedAfter2 = false;
             int landing2SampleCount = 0;
             for (int frame = 0; frame < FinalSettleFrames; frame++)
@@ -220,7 +220,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 diag.MaxUprightAngleAfterJump2 = Mathf.Max(diag.MaxUprightAngleAfterJump2, angle);
 
                 CharacterStateType state = _rig.CharacterState.CurrentState;
-                if (state == CharacterStateType.Airborne)
+                if (state == CharacterStateType.Airborne || !_rig.BalanceController.IsGrounded)
                 {
                     wasAirborne2 = true;
                 }

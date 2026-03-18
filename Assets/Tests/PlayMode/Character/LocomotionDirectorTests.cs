@@ -209,6 +209,143 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenGroundedReturnsWhileStateIsStillAirborne_KeepsTouchdownLeanAttenuatedUntilLandingStabilizes()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for touchdown sprint-lean coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetSprintInputForTest(true);
+
+            for (int frame = 0; frame < 30; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object sprintSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float fullSprintLeanDegrees = GetPropertyValue<float>(sprintSupportCommand, "DesiredLeanDegrees");
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Airborne);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object touchdownSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float touchdownLeanDegrees = GetPropertyValue<float>(touchdownSupportCommand, "DesiredLeanDegrees");
+
+            for (int frame = 0; frame < 20; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object sustainedTouchdownSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float sustainedTouchdownLeanDegrees = GetPropertyValue<float>(sustainedTouchdownSupportCommand, "DesiredLeanDegrees");
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+
+            for (int frame = 0; frame < 45; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            object recoveredSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            float recoveredLeanDegrees = GetPropertyValue<float>(recoveredSupportCommand, "DesiredLeanDegrees");
+
+            // Assert
+            Assert.That(fullSprintLeanDegrees, Is.GreaterThan(1.5f),
+                "Full sprint should request a visible lean before the touchdown window is armed.");
+            Assert.That(touchdownLeanDegrees, Is.LessThan(fullSprintLeanDegrees * 0.6f),
+                "Grounded reacquisition after a real airborne phase should attenuate sprint lean even before CharacterState leaves Airborne.");
+            Assert.That(sustainedTouchdownLeanDegrees, Is.LessThan(fullSprintLeanDegrees * 0.6f),
+                "The touchdown window should stay attenuated while CharacterState still reports the landing as Airborne and the sprint posture is not yet stabilized.");
+            Assert.That(recoveredLeanDegrees, Is.GreaterThan(sustainedTouchdownLeanDegrees + 1f),
+                "Once the landing stabilizes back into locomotion, the touchdown window should ramp toward the normal sprint lean budget, even if it has to age out through the max-duration fallback.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenIntentionalJumpBegins_ClearsLowPriorityRecoveryState()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for jump-recovery ownership coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            SetActiveRecoveryStateForTest(_director, "Slip", framesRemaining: 24, totalFrames: 24, entrySeverity: 0.8f, entryTurnSeverity: 0.2f);
+            yield return new WaitForFixedUpdate();
+
+            object preJumpSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            string preJumpRecoverySituation = GetPropertyValue<object>(preJumpSupportCommand, "RecoverySituation").ToString();
+
+            _rig.PlayerMovement.SetJumpInputForTest(true);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object jumpSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            string activeSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+            string jumpRecoverySituation = GetPropertyValue<object>(jumpSupportCommand, "RecoverySituation").ToString();
+
+            // Assert
+            Assert.That(preJumpRecoverySituation, Is.EqualTo("Slip"),
+                "The precondition for the jump-recovery ownership test requires an active low-priority recovery before jump wind-up begins.");
+            Assert.That(_rig.PlayerMovement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "The scripted jump request should enter wind-up so the director can observe an intentional jump sequence.");
+            Assert.That(activeSituation, Is.EqualTo("None"),
+                "An intentional jump should clear an already-active Slip recovery instead of carrying that low-priority recovery window into touchdown.");
+            Assert.That(jumpRecoverySituation, Is.EqualTo("None"),
+                "Once jump wind-up begins, the support command should stop publishing the low-priority recovery situation on the body-support seam.");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedUpdate_WhenIntentionalJumpBegins_PreservesCriticalRecoveryState()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for jump-recovery ownership coverage.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            _rig.CharacterState.SetStateForTest(CharacterStateType.Moving);
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            SetActiveRecoveryStateForTest(_director, "NearFall", framesRemaining: 24, totalFrames: 24, entrySeverity: 0.9f, entryTurnSeverity: 0.2f);
+            yield return new WaitForFixedUpdate();
+
+            _rig.PlayerMovement.SetJumpInputForTest(true);
+
+            // Act
+            yield return new WaitForFixedUpdate();
+
+            object jumpSupportCommand = GetPropertyValue<object>(_director, "CurrentBodySupportCommand");
+            string activeSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+            float jumpRecoveryBlend = GetPropertyValue<float>(jumpSupportCommand, "RecoveryBlend");
+
+            // Assert
+            Assert.That(_rig.PlayerMovement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "The scripted jump request should enter wind-up so the director can observe an intentional jump sequence.");
+            Assert.That(activeSituation, Is.EqualTo("NearFall"),
+                "Intentional jump handling should preserve critical NearFall recovery instead of suppressing all recovery situations indiscriminately.");
+            Assert.That(jumpRecoveryBlend, Is.GreaterThan(0.1f),
+                "Critical recovery situations should continue to publish a non-zero recovery blend during jump wind-up.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenSupportCenterFallsBehindHips_MarksObservationAsComOutsideSupport()
         {
             // Arrange
@@ -441,26 +578,45 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
 
             int recoveryDurationFrames = GetPropertyValue<int>(_rig.BalanceController, "SnapRecoveryDurationFrames");
+            object exitEvent = null;
+            string finalSituation = string.Empty;
             for (int frame = 0; frame < recoveryDurationFrames + 20; frame++)
             {
                 yield return new WaitForFixedUpdate();
 
                 telemetryLog = GetPropertyValue<object>(_director, "RecoveryTelemetryLog") as IList;
-                if (telemetryLog != null && telemetryLog.Count >= 2)
+                finalSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+                if (telemetryLog == null)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < telemetryLog.Count; i++)
+                {
+                    object candidate = telemetryLog[i];
+                    string candidateReason = GetPropertyValue<string>(candidate, "Reason");
+                    if (candidateReason == "recovery_window_elapsed")
+                    {
+                        exitEvent = candidate;
+                        break;
+                    }
+                }
+
+                if (exitEvent != null && finalSituation == "None")
                 {
                     break;
                 }
             }
 
             object entryEvent = telemetryLog[0];
-            object exitEvent = telemetryLog[telemetryLog.Count - 1];
 
             string entrySituation = GetPropertyValue<object>(entryEvent, "Situation").ToString();
             string entryReason = GetPropertyValue<string>(entryEvent, "Reason");
             float entryTurnSeverity = GetPropertyValue<float>(entryEvent, "TurnSeverity");
+            Assert.That(exitEvent, Is.Not.Null,
+                "A released hard-turn scenario should eventually log a natural recovery-window exit even when intermediate situation-change events fire first.");
             string exitSituation = GetPropertyValue<object>(exitEvent, "Situation").ToString();
             string exitReason = GetPropertyValue<string>(exitEvent, "Reason");
-            string finalSituation = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
 
             // Assert
             Assert.That(telemetryLog.Count, Is.GreaterThanOrEqualTo(2),
@@ -951,6 +1107,35 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Expected type '{instance.GetType().FullName}' to expose private field '{fieldName}'.");
 
             field.SetValue(instance, value);
+        }
+
+        private static void SetActiveRecoveryStateForTest(
+            LocomotionDirector director,
+            string situationName,
+            int framesRemaining,
+            int totalFrames,
+            float entrySeverity,
+            float entryTurnSeverity)
+        {
+            Assembly characterAssembly = typeof(LocomotionDirector).Assembly;
+            Type recoverySituationType = characterAssembly.GetType("PhysicsDrivenMovement.Character.RecoverySituation");
+            Type recoveryStateType = characterAssembly.GetType("PhysicsDrivenMovement.Character.RecoveryState");
+
+            Assert.That(recoverySituationType, Is.Not.Null,
+                "RecoverySituation should exist in the character runtime assembly for jump-recovery ownership tests.");
+            Assert.That(recoveryStateType, Is.Not.Null,
+                "RecoveryState should exist in the character runtime assembly for jump-recovery ownership tests.");
+
+            object situation = Enum.Parse(recoverySituationType, situationName);
+            object recoveryState = Activator.CreateInstance(
+                recoveryStateType,
+                situation,
+                framesRemaining,
+                totalFrames,
+                entrySeverity,
+                entryTurnSeverity);
+
+            SetPrivateField(director, "_currentRecoveryState", recoveryState);
         }
 
         private static Quaternion GetTiltedRotationAtCurrentHeading(Transform hips, float tiltDegrees)

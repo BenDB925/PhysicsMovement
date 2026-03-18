@@ -1,21 +1,22 @@
 # Sprint-Jump Smoothing Plan
 
 ## Status
-- State: Active
+- State: Active, Work Package 2 attempted but still red
 - Acceptance target: Make repeated sprint -> jump -> land -> continue sprinting feel smooth enough for frequent player use, with `SprintJump_SingleJump_DoesNotFaceplant` and `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` green and no new regressions in the nearby sprint, jump, and recovery suites.
-- Current next step: Rework the immediate touchdown posture budget by attenuating sprint-derived `DesiredLeanDegrees` and, if needed, recovery-time damping reduction during the grounded `Airborne`/`Fallen` landing window. The fresh telemetry shows `LandingAbsorbBlend = 0` through the failing 0.5 s window, so `_landingAbsorbLeanDeg` is no longer the first lever to pull.
+- Current next step: Debug why the director-owned touchdown stabilization window still fails to attenuate the first grounded landing frames strongly enough after the recent jump-state bridge changes. The next pass should compare authored `CharacterState = Airborne` against raw `IsGrounded` transitions in the fresh combined slice and then retune or re-seam the touchdown overlay rather than loosening thresholds.
 - Active blockers: None.
 
 ## Quick Resume
-- Latest focused diagnostic run on 2026-03-18 is still the known-red sprint-jump slice: `3 passed, 2 failed, 5 total`.
-- Landing 1 telemetry now shows the first grounded sample already in full recovery (`RecoveryBlend = 1`, `RecoveryKdBlend = 1`) with `DesiredLeanDegrees = 6.44`, `TotalPelvisTilt = 7.39`, `LandingAbsorbBlend = 0`, and `CharacterState = Airborne`. The peak sample lands at the end of the 0.5 s window with `UprightAngle = 84.56`, `DesiredLeanDegrees = 3.90`, `TotalPelvisTilt = 3.90`, `LandingAbsorbBlend = 0`, `IsSurrendered = true`, and `CharacterState = Fallen`, so the collapse happens during full recovery and after surrender begins, not while a dedicated landing-absorb blend is active.
-- Jump 2 is currently failing before wind-up, not inside it: the diagnostic event stream records `RequestRejected` with reason `state_not_jumpable:GettingUp` while `IsGrounded = true` and `IsFallen = true`, so the follow-up jump is blocked by the post-landing state machine before any launch sequence starts.
+- Latest focused verification on 2026-03-18 broadened to `JumpTests`, `LocomotionDirectorTests`, and `SprintJumpStabilityTests`: `36 passed, 3 failed, 39 total`.
+- The remaining reds are now narrower but still unresolved: `FixedUpdate_WhenGroundedReturnsWhileStateIsStillAirborne_KeepsTouchdownLeanAttenuatedUntilLandingStabilizes`, `SprintJump_SingleJump_DoesNotFaceplant`, and `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant`.
+- The jump-path regressions that appeared during the investigation are materially better: late wind-up ground loss can still commit launch, recent jump launch can bridge `CharacterState` into `Airborne`, and low-priority `Slip`-style recovery no longer lingers indefinitely into the first jump. The unresolved problem is still the landing/posture budget after jump 1, not input gating.
+- Latest sprint-jump outcome metrics are improved from the original baseline but still red: jump 1 peak torso tilt is `79.1` (target `< 45`), and jump 2 still does not consistently produce the required airborne excursion in the dedicated two-jump outcome test.
 
 ## Verified Artifacts
 - `Plans/sprint-jump-stability-tests.md`: completed baseline test plan and fresh failure metrics.
-- `TestResults/latest-summary.md`: latest focused digest (`3 passed, 2 failed, 5 total`) for `PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests`.
-- `TestResults/PlayMode.xml`: authoritative NUnit artifact for the latest focused sprint-jump run.
-- `Logs/test_playmode_20260318_082451.log`: fresh PlayMode log backing the landing-window and jump-path diagnostics.
+- `TestResults/latest-summary.md`: latest combined digest (`36 passed, 3 failed, 39 total`) for `PhysicsDrivenMovement.Tests.PlayMode.JumpTests;PhysicsDrivenMovement.Tests.PlayMode.LocomotionDirectorTests;PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests`.
+- `TestResults/PlayMode.xml`: authoritative NUnit artifact for the latest combined PlayMode run.
+- `Logs/test_playmode_20260318_103717.log`: fresh PlayMode log backing the latest touchdown-window and sprint-jump outcome failures.
 - `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs`: current regression harness and shared diagnostics helper.
 
 ## Primary Touchpoints
@@ -45,6 +46,33 @@ That total is clamped to `_totalPelvisTiltCapDeg = 15`, but the new landing-wind
 ### 4. Telemetry points to a real control problem, not a bad threshold
 The latest telemetry run recorded two recovery windows and ended with `angle_above_ceiling` plus `recovery_surrendered`. This is useful because it means the system is already telling us the failure is severe enough to exhaust recovery. The first fix should target landing motion and support behavior, not loosen `FaceplantAngleThreshold`, `IsFallen`, or the sprint-jump test deadlines.
 
+## Attempt Summary
+
+### 1. Director-owned touchdown stabilization window
+Tried: added a touchdown subphase in `LocomotionDirector` that attenuates sprint-derived lean for a short grounded landing window, scales down recovery-time damping reduction, and suppresses the recovery-added stabilization boost while touchdown stabilization is active.
+
+Result: this improved some intermediate traces and removed several side regressions, but it is not yet strong or correctly timed enough to satisfy the direct touchdown seam test or the sprint-jump acceptance tests.
+
+### 2. Recovery lifecycle tightening
+Tried: changed `RecoveryState.Enter()` so re-entering the same recovery situation only refreshes the window when the new sample is actually stronger, instead of blindly resetting the timer every frame.
+
+Result: this removed a long-running `Slip` recovery that had been surviving into jump 1 and polluting the landing with a full recovery profile. The improvement was real, but not enough to finish Work Package 2.
+
+### 3. Intentional jump recovery suppression
+Tried: in `LocomotionDirector`, suppressed low-priority `Slip`, `Reversal`, and `HardTurn` recovery during intentional jump wind-up/launch while preserving critical `NearFall`/`Stumble` handling.
+
+Result: this stopped some jump-owned preload motion from being reclassified as generic recovery, but the landing still collapses later in the sequence.
+
+### 4. Jump launch robustness and state bridging
+Tried: in `PlayerMovement`, allowed an accepted jump wind-up to still commit launch after late transient ground loss; in `CharacterState`, added a short recent-launch airborne bridge keyed off upward hips velocity.
+
+Result: this fixed earlier jump-path false negatives and removed a misleading class of `Airborne` failures, but the remaining red still comes from landing posture and support behavior rather than launch gating.
+
+### 5. Test and contract coverage added during the investigation
+Tried: added direct contract coverage for `BodySupportCommand.ComDampingRecoveryBlend` and the new `RecoveryState.Enter()` refresh rule, direct PlayMode tests for touchdown stabilization and jump-recovery ownership in `LocomotionDirectorTests`, a sprinting jump airborne guard in `JumpTests`, and stronger airborne bookkeeping in `SprintJumpStabilityTests`.
+
+Result: the direct seams are better protected now, and the remaining failures point back at the real runtime landing problem instead of earlier harness or bookkeeping gaps.
+
 ## Non-Goals For The First Pass
 - Do not loosen the sprint-jump test thresholds first.
 - Do not widen the test's second-jump readiness window as the primary fix.
@@ -58,6 +86,9 @@ The latest telemetry run recorded two recovery windows and ended with `angle_abo
    - Result: `SprintJump_TelemetryCapture_LogsRecoveryEventsAroundLanding()` now records structured landing-window and jump-attempt telemetry. The latest bad run shows landing 1 entering the window already under `RecoveryBlend = 1` / `RecoveryKdBlend = 1`, never engaging `LandingAbsorbBlend`, peaking at sample `50/51` after surrender begins, and blocking jump 2 with `RequestRejected(state_not_jumpable:GettingUp)` before wind-up.
 
 2. [ ] Rework the landing posture budget before touching thresholds.
+   - Attempted on 2026-03-18: added a director-owned touchdown stabilization window plus touchdown-time scaling for sprint lean, COM damping reduction, and recovery-added stabilization.
+   - Attempted on 2026-03-18: re-seamed touchdown arming so authored jump-state `Airborne` can open the window even when raw `IsGrounded` lags.
+   - Current result: the direct touchdown seam test is still red, and the main sprint-jump outcome tests remain red (`PeakTiltAfterJump1 = 79.1`, `Airborne2 = false`), so Work Package 2 is still incomplete.
    - First candidate: attenuate sprint-derived `DesiredLeanDegrees` for a short touchdown window (`0.10-0.20 s`) and ramp it back in smoothly after the landing stabilizes.
    - Second candidate: if sprint lean attenuation is not enough, bypass or soften recovery-time damping reduction (`RecoveryKdBlend` / COM damping reduction) during the same grounded touchdown window.
    - Only revisit `BalanceController._landingAbsorbLeanDeg` after telemetry shows `LandingAbsorbBlend` actually participates in the failing landing window.
@@ -95,3 +126,5 @@ The latest telemetry run recorded two recovery windows and ended with `angle_abo
 ## Progress Notes
 - 2026-03-18: Created this handoff plan from the fresh sprint-jump baseline (`3 passed, 2 failed, 5 total`). Current diagnosis favors landing posture stacking and post-landing wind-up aborts over test timing or simple threshold problems.
 - 2026-03-18: Completed Work Package 1. Added `LandingWindowTelemetrySample` / `JumpTelemetryEvent` runtime diagnostics plus landing-window logging in `SprintJumpStabilityTests`. Focused verification remains `3 passed, 2 failed, 5 total` (`TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, `Logs/test_playmode_20260318_082451.log`), but the new data narrows the fix: landing 1 starts its grounded window with `DesiredLeanDegrees = 6.44`, `TotalPelvisTilt = 7.39`, `RecoveryBlend = 1`, `RecoveryKdBlend = 1`, `LandingAbsorbBlend = 0`, then peaks at sample `50/51` with `UprightAngle = 84.56` after surrender has already started; jump 2 never reaches wind-up because the request is rejected as `state_not_jumpable:GettingUp` while grounded and fallen.
+- 2026-03-18: Attempted Work Package 2 across the landing, recovery, jump, and state seams. Runtime changes now include a director-owned touchdown stabilization window, touchdown-time recovery damping/stabilization scaling, same-situation recovery refresh tightening, low-priority recovery suppression during intentional jump sequences, late-ground-loss launch commit, and a recent-launch airborne bridge from `PlayerMovement` into `CharacterState`. Test coverage was widened with new contract tests in `LocomotionContractsTests`, targeted PlayMode guards in `JumpTests` and `LocomotionDirectorTests`, and stronger airborne bookkeeping in `SprintJumpStabilityTests`.
+- 2026-03-18: Latest combined verification is still red but materially narrower: `36 passed, 3 failed, 39 total` in `PhysicsDrivenMovement.Tests.PlayMode.JumpTests;PhysicsDrivenMovement.Tests.PlayMode.LocomotionDirectorTests;PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests` (`TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, `Logs/test_playmode_20260318_103717.log`). Remaining failures are the direct touchdown seam test plus the two sprint-jump acceptance tests. Current evidence says jump launch/airborne classification is no longer the dominant blocker; the next pass should focus on why touchdown stabilization still does not reclaim enough posture/support budget on the first landing after jump 1.

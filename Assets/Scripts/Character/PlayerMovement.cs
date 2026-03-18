@@ -59,6 +59,11 @@ namespace PhysicsDrivenMovement.Character
                  "During this time the character crouches and braces legs.")]
         private float _jumpWindUpDuration = 0.2f;
 
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Normalized wind-up progress after which a transient loss of grounding still commits the jump. " +
+             "Keeps sprint-jump preload from aborting when the crouch briefly unweights the feet near takeoff.")]
+        private float _jumpWindUpGroundLossCommitProgress = 0.85f;
+
         [SerializeField, Range(0f, 0.2f)]
         [Tooltip("Metres to lower the hips height-maintenance target during wind-up. " +
                  "Creates the visible crouch before launch.")]
@@ -73,6 +78,17 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration of the leg-straighten window after the jump impulse fires. " +
                  "During this time both legs drive toward full extension.")]
         private float _jumpLaunchDuration = 0.1f;
+
+        [Header("Jump State Bridge")]
+        [SerializeField, Range(0f, 0.3f)]
+        [Tooltip("Seconds after launch during which CharacterState may classify the jump as airborne " +
+             "even if one foot sensor is still coasting grounded.")]
+        private float _jumpAirborneStateGraceDuration = 0.12f;
+
+        [SerializeField, Range(0f, 5f)]
+        [Tooltip("Minimum upward hips velocity required during the recent-launch grace window " +
+             "for CharacterState to treat the jump as airborne.")]
+        private float _jumpAirborneStateVelocityThreshold = 0.1f;
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
@@ -141,6 +157,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Remaining launch-extension time in seconds.</summary>
         private float _jumpLaunchTimer;
+
+        /// <summary>Remaining grace time used to bridge launch intent into CharacterState airborne classification.</summary>
+        private float _jumpAirborneStateGraceTimer;
 
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
@@ -223,6 +242,11 @@ namespace PhysicsDrivenMovement.Character
         /// <see cref="JumpPhase.None"/> outside of a jump.
         /// </summary>
         public JumpPhase CurrentJumpPhase => _jumpPhase;
+
+        internal bool ShouldTreatJumpLaunchAsAirborne =>
+            _jumpAirborneStateGraceTimer > 0f &&
+            _rb != null &&
+            _rb.linearVelocity.y > _jumpAirborneStateVelocityThreshold;
 
         internal IReadOnlyList<JumpTelemetryEvent> JumpTelemetryLog => _jumpTelemetryLog;
 
@@ -355,6 +379,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1b: Blend the sprint output using the latched physics-step state so
             //          downstream locomotion readers observe one stable ramp per physics tick.
             UpdateSprintNormalized();
+
+            if (_jumpAirborneStateGraceTimer > 0f)
+            {
+                _jumpAirborneStateGraceTimer = Mathf.Max(0f, _jumpAirborneStateGraceTimer - Time.fixedDeltaTime);
+            }
 
             // STEP 2: Early-out when required dependencies are missing.
             if (_rb == null || _balance == null)
@@ -522,6 +551,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 // Zero-duration wind-up: fire immediately (legacy behaviour / test override).
                 _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+                BeginJumpAirborneStateGrace();
                 EmitJumpTelemetry(attemptId, JumpTelemetryEventType.LaunchFired, "launch_without_wind_up");
                 _activeJumpAttemptId = 0;
             }
@@ -538,11 +568,25 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // Abort wind-up if the character fell or left the ground unexpectedly.
-            if (_balance.IsFallen || !_balance.IsGrounded)
+            // Abort wind-up if the character fell. If the accepted jump briefly loses
+            // grounding near the end of the crouch, commit the launch instead of
+            // cancelling the sequence — the preload itself can unweight the feet.
+            if (_balance.IsFallen)
             {
-                string abortReason = _balance.IsFallen ? "became_fallen" : "lost_grounded";
-                EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.WindUpAborted, abortReason);
+                EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.WindUpAborted, "became_fallen");
+                ClearJumpSequence();
+                return;
+            }
+
+            if (!_balance.IsGrounded)
+            {
+                if (ShouldCommitJumpAfterGroundLoss())
+                {
+                    FireJumpLaunch("wind_up_completed_after_ground_loss");
+                    return;
+                }
+
+                EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.WindUpAborted, "lost_grounded");
                 ClearJumpSequence();
                 return;
             }
@@ -554,33 +598,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // Wind-up complete — fire impulse and transition to launch phase.
-            _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
-            EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.LaunchFired, "wind_up_completed");
-
-            // Clear wind-up overrides.
-            _jumpWindUpTimer = 0f;
-            _balance.ClearJumpCrouchOffset();
-            if (_legAnimator != null)
-            {
-                _legAnimator.SetJumpWindUp(false, 0f);
-            }
-
-            // Enter launch phase for visible leg extension (C8.5b).
-            if (_jumpLaunchDuration > 0f)
-            {
-                _jumpPhase = JumpPhase.Launch;
-                _jumpLaunchTimer = _jumpLaunchDuration;
-                if (_legAnimator != null)
-                {
-                    _legAnimator.SetJumpLaunch(true);
-                }
-            }
-            else
-            {
-                _jumpPhase = JumpPhase.None;
-                _activeJumpAttemptId = 0;
-            }
+            FireJumpLaunch("wind_up_completed");
         }
 
         /// <summary>
@@ -616,6 +634,46 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private bool ShouldCommitJumpAfterGroundLoss()
+        {
+            if (_jumpWindUpDuration <= 0f)
+            {
+                return false;
+            }
+
+            float normalizedProgress = 1f - Mathf.Clamp01(_jumpWindUpTimer / _jumpWindUpDuration);
+            return normalizedProgress >= _jumpWindUpGroundLossCommitProgress;
+        }
+
+        private void FireJumpLaunch(string telemetryReason)
+        {
+            _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            BeginJumpAirborneStateGrace();
+            EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.LaunchFired, telemetryReason);
+
+            _jumpWindUpTimer = 0f;
+            _balance.ClearJumpCrouchOffset();
+            if (_legAnimator != null)
+            {
+                _legAnimator.SetJumpWindUp(false, 0f);
+            }
+
+            if (_jumpLaunchDuration > 0f)
+            {
+                _jumpPhase = JumpPhase.Launch;
+                _jumpLaunchTimer = _jumpLaunchDuration;
+                if (_legAnimator != null)
+                {
+                    _legAnimator.SetJumpLaunch(true);
+                }
+            }
+            else
+            {
+                _jumpPhase = JumpPhase.None;
+                _activeJumpAttemptId = 0;
+            }
+        }
+
         /// <summary>
         /// Aborts the entire jump sequence (wind-up or launch) and clears all overrides.
         /// Used when the character falls or loses ground during the jump preparation.
@@ -625,6 +683,7 @@ namespace PhysicsDrivenMovement.Character
             _jumpPhase = JumpPhase.None;
             _jumpWindUpTimer = 0f;
             _jumpLaunchTimer = 0f;
+            _jumpAirborneStateGraceTimer = 0f;
             _activeJumpAttemptId = 0;
             _balance.ClearJumpCrouchOffset();
             if (_legAnimator != null)
@@ -632,6 +691,11 @@ namespace PhysicsDrivenMovement.Character
                 _legAnimator.SetJumpWindUp(false, 0f);
                 _legAnimator.SetJumpLaunch(false);
             }
+        }
+
+        private void BeginJumpAirborneStateGrace()
+        {
+            _jumpAirborneStateGraceTimer = Mathf.Max(_jumpAirborneStateGraceDuration, Time.fixedDeltaTime);
         }
 
         private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)

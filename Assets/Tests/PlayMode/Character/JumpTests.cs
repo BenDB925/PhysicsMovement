@@ -329,6 +329,70 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator WindUp_WhenGroundIsLostNearCompletion_StillLaunchesJump()
+        {
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+            SetPrivateField(_movement, "_jumpForce", 15f);
+
+            _hipsBody.linearVelocity = Vector3.zero;
+            _movement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.WindUp),
+                "Wind-up should have started.");
+
+            int nearEndWindUpFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) - 2;
+            yield return WaitForPhysicsFrames(nearEndWindUpFrames);
+
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(_movement.CurrentJumpPhase, Is.EqualTo(JumpPhase.Launch),
+                "Late transient ground loss should still commit the jump instead of aborting the accepted wind-up.");
+            Assert.That(_hipsBody.linearVelocity.y, Is.GreaterThan(0.1f),
+                "A late ground-loss commit should still fire the jump impulse.");
+        }
+
+        [UnityTest]
+        public IEnumerator SprintJump_WhenLaunchCommits_EntersAirborneWithinShortBudget()
+        {
+            const int SprintRampFrames = 500;
+            const int AirborneBudgetFrames = 20;
+
+            yield return WaitForPhysicsFrames(SettleFrames);
+            yield return PrepareStandingBaseline();
+
+            // Clear the test seam so the real foot sensors drive grounded/airborne transitions.
+            SetPrivateField(_balance, "_overrideGroundState", false);
+            yield return WaitForPhysicsFrames(5);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            _movement.SetSprintInputForTest(true);
+            yield return WaitForPhysicsFrames(SprintRampFrames);
+
+            Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Moving),
+                "The sprint ramp should establish a real moving baseline before the jump request.");
+
+            _movement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+            _movement.SetJumpInputForTest(false);
+
+            int launchFrames = Mathf.CeilToInt(WindUpDuration / Time.fixedDeltaTime) + 1;
+            yield return WaitForPhysicsFrames(launchFrames);
+
+            bool wasAirborne = _characterState.CurrentState == CharacterStateType.Airborne;
+            for (int frame = 0; frame < AirborneBudgetFrames && !wasAirborne; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                wasAirborne = _characterState.CurrentState == CharacterStateType.Airborne;
+            }
+
+            Assert.That(wasAirborne, Is.True,
+                "A committed sprint jump should enter Airborne shortly after launch even if a planted foot sensor lags for a few frames.");
+        }
+
+        [UnityTest]
         public IEnumerator LandingAbsorption_LowersHipsBriefly_AfterAirborneToStanding()
         {
             yield return WaitForPhysicsFrames(SettleFrames);

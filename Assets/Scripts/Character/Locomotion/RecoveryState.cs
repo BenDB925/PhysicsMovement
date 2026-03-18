@@ -65,8 +65,9 @@ namespace PhysicsDrivenMovement.Character
         }
 
         /// <summary>
-        /// Enters a new recovery situation, or extends the current one if the new situation
-        /// is the same or higher priority with a longer window.
+        /// Enters a new recovery situation, or extends the current one when the new signal
+        /// is higher priority or the same situation arrives with a longer window plus a
+        /// stronger severity sample.
         /// </summary>
         public RecoveryState Enter(
             RecoverySituation situation,
@@ -74,16 +75,22 @@ namespace PhysicsDrivenMovement.Character
             float severity,
             float turnSeverity)
         {
+            float clampedSeverity = Mathf.Clamp01(severity);
+            float clampedTurnSeverity = Mathf.Clamp01(turnSeverity);
+
             // Higher enum value = higher priority; always upgrade.
             if (situation > Situation)
             {
-                return new RecoveryState(situation, durationFrames, durationFrames, severity, turnSeverity);
+                return new RecoveryState(situation, durationFrames, durationFrames, clampedSeverity, clampedTurnSeverity);
             }
 
-            // Same situation: extend if the new window is longer than current remaining.
-            if (situation == Situation && durationFrames > FramesRemaining)
+            // Same situation: only refresh when the new sample is actually stronger than the
+            // one that opened the active window. This prevents a marginal classification from
+            // blindly resetting the timer every frame and pinning recovery at full blend.
+            bool hasStrongerSignal = clampedSeverity > EntrySeverity || clampedTurnSeverity > EntryTurnSeverity;
+            if (situation == Situation && durationFrames > FramesRemaining && hasStrongerSignal)
             {
-                return new RecoveryState(situation, durationFrames, durationFrames, severity, turnSeverity);
+                return new RecoveryState(situation, durationFrames, durationFrames, clampedSeverity, clampedTurnSeverity);
             }
 
             // Lower priority or shorter window: keep current.

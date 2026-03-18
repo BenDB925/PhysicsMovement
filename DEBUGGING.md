@@ -139,6 +139,16 @@ Useful physics-style signals:
 - forces / torques / drive strength
 - progress through a course or task
 
+### "Landing smoothing logic never seems to engage on a jump landing"
+**Most likely issue:** the authored jump/state machine can classify a recent launch as `Airborne` before raw foot-ground sensors fully release or reacquire, so touchdown logic tied only to raw grounded edges never opens at the moment you actually need it.
+
+**Best next step:** add a direct seam test for "grounded returns while state is still Airborne" and compare authored state against raw `IsGrounded` on the exact landing frames before retuning lean or damping multipliers.
+
+### "Recovery stays pinned far longer than the visible disturbance"
+**Most likely issue:** the runtime is re-entering the same recovery situation every frame and resetting its full timer from near-identical severity samples.
+
+**Best next step:** add a small contract test around the recovery-state container and require a stronger same-situation signal before refreshing the active recovery window.
+
 ### "Step-up planning says yes, but the body still stalls on the riser"
 **Most likely issue:** the bug has moved past sensing and basic planner carry into execution or support transfer.
 

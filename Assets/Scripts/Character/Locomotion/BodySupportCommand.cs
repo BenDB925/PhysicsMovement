@@ -24,6 +24,35 @@ namespace PhysicsDrivenMovement.Character
             float recoveryKdBlend,
             float heightMaintenanceScale = 1f,
             RecoverySituation recoverySituation = RecoverySituation.None)
+            : this(
+                facingDirection,
+                uprightDirection,
+                travelDirection,
+                desiredLeanDegrees,
+                uprightStrengthScale,
+                yawStrengthScale,
+                stabilizationStrengthScale,
+                recoveryBlend,
+                recoveryKdBlend,
+                recoveryBlend,
+                heightMaintenanceScale,
+                recoverySituation)
+        {
+        }
+
+        public BodySupportCommand(
+            Vector3 facingDirection,
+            Vector3 uprightDirection,
+            Vector3 travelDirection,
+            float desiredLeanDegrees,
+            float uprightStrengthScale,
+            float yawStrengthScale,
+            float stabilizationStrengthScale,
+            float recoveryBlend,
+            float recoveryKdBlend,
+            float comDampingRecoveryBlend,
+            float heightMaintenanceScale = 1f,
+            RecoverySituation recoverySituation = RecoverySituation.None)
         {
             // STEP 1: Normalize the command frame so executors can consume a stable facing/up basis.
             FacingDirection = NormalizePlanarDirection(facingDirection, Vector3.forward);
@@ -38,6 +67,7 @@ namespace PhysicsDrivenMovement.Character
             HeightMaintenanceScale = Mathf.Max(0f, heightMaintenanceScale);
             RecoveryBlend = Mathf.Clamp01(recoveryBlend);
             RecoveryKdBlend = Mathf.Clamp01(recoveryKdBlend);
+            ComDampingRecoveryBlend = Mathf.Clamp01(comDampingRecoveryBlend);
             RecoverySituation = recoverySituation;
         }
 
@@ -64,6 +94,8 @@ namespace PhysicsDrivenMovement.Character
         public float RecoveryBlend { get; }
 
         public float RecoveryKdBlend { get; }
+
+        public float ComDampingRecoveryBlend { get; }
 
         /// <summary>The classified recovery situation driving this command, or None for normal locomotion.</summary>
         public RecoverySituation RecoverySituation { get; }

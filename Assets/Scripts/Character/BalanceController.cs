@@ -1191,9 +1191,10 @@ namespace PhysicsDrivenMovement.Character
                 // that is the natural running equilibrium. Damping reduction allows
                 // faster re-acceleration in the new direction.
                 float recoveryBlend = _currentBodySupportCommand.RecoveryBlend;
+                float comDampingRecoveryBlend = _currentBodySupportCommand.ComDampingRecoveryBlend;
                 float stabilizationScale = _currentBodySupportCommand.StabilizationStrengthScale * StabilizationScale;
                 float comSpringMul = Mathf.Lerp(1f, _snapRecoveryComSpringScale, recoveryBlend) * stabilizationScale;
-                float comDampMul = Mathf.Lerp(1f, _snapRecoveryComDampScale, recoveryBlend) * stabilizationScale;
+                float comDampMul = Mathf.Lerp(1f, _snapRecoveryComDampScale, comDampingRecoveryBlend) * stabilizationScale;
 
                 Vector3 comForce = -horizontalOffset * (_comStabilizationStrength * comSpringMul)
                                    - horizontalVel * (_comStabilizationDamping * comDampMul);

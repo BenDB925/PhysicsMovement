@@ -76,6 +76,39 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum extra forward lean angle (degrees) requested at full sprint. Scales with SprintNormalized so sprint posture ramps through the same blend window as sprint speed.")]
         private float _maxSprintLeanDegrees = 8f;
 
+        [Header("Touchdown Stabilization")]
+        [SerializeField, Range(0.05f, 0.3f)]
+        [Tooltip("Seconds to hold touchdown stabilization at full strength after grounded contact returns from a real airborne phase.")]
+        private float _touchdownStabilizationHoldDuration = 0.12f;
+
+        [SerializeField, Range(0.05f, 0.3f)]
+        [Tooltip("Seconds to blend touchdown stabilization back to the normal sprint posture after the hold window ends.")]
+        private float _touchdownStabilizationBlendOutDuration = 0.1f;
+
+        [SerializeField, Range(0.2f, 1f)]
+        [Tooltip("Maximum seconds touchdown stabilization may remain at full strength while the landing is still unsettled.")]
+        private float _touchdownStabilizationMaxDuration = 0.55f;
+
+        [SerializeField, Range(0f, 30f)]
+        [Tooltip("Upright angle (degrees) the landing must recover below before touchdown stabilization is allowed to blend out early.")]
+        private float _touchdownStabilizationExitUprightAngle = 12f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Recovery blend must fall to or below this value before touchdown stabilization is allowed to blend out early.")]
+        private float _touchdownStabilizationExitRecoveryBlend = 0.05f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum multiplier applied to sprint-derived lean at touchdown. Lower values recentre faster after landing while the window is active.")]
+        private float _touchdownSprintLeanScale = 0.25f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum multiplier applied to recovery-time damping reductions during touchdown stabilization. Lower values keep more damping on landing without removing the rest of recovery support.")]
+        private float _touchdownRecoveryDampingScale = 0f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum multiplier applied to the recovery-added stabilization boost during touchdown stabilization. Zero preserves the base support-risk stabilization while removing the extra recovery shove on landing.")]
+        private float _touchdownRecoveryStabilizationScale = 0f;
+
         [Header("Surrender Recovery Timeout")]
         [SerializeField, Range(0.2f, 3f)]
         [Tooltip("Seconds a Stumble/NearFall recovery may run with angle above the ceiling before the director forces surrender.")]
@@ -146,12 +179,19 @@ namespace PhysicsDrivenMovement.Character
         private Vector3 _currentPredictedDriftDirection;
         private string _currentObservationTelemetryLine;
         private float _nextObservationTelemetryTime;
+        private float _touchdownStabilizationTimer;
+        private float _touchdownStabilizationBlendTimer;
+        private bool _touchdownStabilizationArmed;
+        private bool _touchdownStabilizationActive;
+        private bool _touchdownStabilizationBlendingOut;
+        private bool _wasGroundedLastCommand;
         private RecoveryState _currentRecoveryState;
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
         private float _recoveryEntryTime;
         private bool _hasRecoveryEntryTime;
         private bool? _recoveryTestOverride;
+        private bool _jumpRecoverySuppressionActive;
         private readonly List<RecoveryTelemetryEvent> _recoveryTelemetryLog = new List<RecoveryTelemetryEvent>(RecoveryTelemetryCapacity);
 
         public bool HasCommandFrame { get; private set; }
@@ -269,10 +309,17 @@ namespace PhysicsDrivenMovement.Character
             _currentPredictedDriftDirection = Vector3.zero;
             _currentObservationTelemetryLine = string.Empty;
             _nextObservationTelemetryTime = 0f;
+            _touchdownStabilizationTimer = 0f;
+            _touchdownStabilizationBlendTimer = 0f;
+            _touchdownStabilizationArmed = false;
+            _touchdownStabilizationActive = false;
+            _touchdownStabilizationBlendingOut = false;
+            _wasGroundedLastCommand = false;
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
             _recoveryEntryTime = 0f;
             _hasRecoveryEntryTime = false;
+            _jumpRecoverySuppressionActive = false;
             _recoveryTelemetryLog.Clear();
             LastRecoveryDuration = 0f;
             LastRecoveryEndedInSurrender = false;
@@ -421,6 +468,90 @@ namespace PhysicsDrivenMovement.Character
             Debug.Log(_currentObservationTelemetryLine, this);
         }
 
+        private float UpdateTouchdownStabilizationWindow(float recoveryBlend)
+        {
+            bool isAirborneState = _currentObservation.CharacterState == CharacterStateType.Airborne;
+            bool jumpTouchdownCandidate = isAirborneState && _jumpRecoverySuppressionActive;
+
+            // STEP 1: Arm the touchdown window only after a real airborne phase so contact
+            // chatter during normal sprinting does not retrigger the landing posture budget.
+            // Intentional jump launch can briefly classify the character as Airborne before
+            // both foot sensors have fully released, so arm the touchdown window from that
+            // authored airborne state as well instead of requiring raw ground loss first.
+            if (isAirborneState &&
+                (!_currentObservation.IsGrounded || jumpTouchdownCandidate))
+            {
+                _touchdownStabilizationArmed = true;
+            }
+
+            // STEP 2: Start the window on the first grounded frame after that airborne phase,
+            // even when CharacterState has not yet left Airborne. This bridges the launch-
+            // classified airborne window where raw foot grounding may still be coasting true.
+            bool groundedAfterAirborne = _currentObservation.IsGrounded && !_wasGroundedLastCommand;
+            bool groundedDuringAirborneLanding = _currentObservation.IsGrounded && isAirborneState;
+            if (_touchdownStabilizationArmed &&
+                !_touchdownStabilizationActive &&
+                !_touchdownStabilizationBlendingOut &&
+                (groundedAfterAirborne || groundedDuringAirborneLanding))
+            {
+                _touchdownStabilizationTimer = 0f;
+                _touchdownStabilizationBlendTimer = _touchdownStabilizationBlendOutDuration;
+                _touchdownStabilizationActive = true;
+                _touchdownStabilizationBlendingOut = false;
+                _touchdownStabilizationArmed = false;
+            }
+
+            // STEP 3: Hold full attenuation until the landing actually settles, then blend
+            // back toward the normal sprint posture. A max duration keeps the overlay from
+            // sticking indefinitely if the landing never recovers cleanly.
+            float touchdownBlend = 0f;
+            if (_touchdownStabilizationActive)
+            {
+                _touchdownStabilizationTimer += Time.fixedDeltaTime;
+
+                if (!_touchdownStabilizationBlendingOut)
+                {
+                    bool holdElapsed = _touchdownStabilizationTimer >= _touchdownStabilizationHoldDuration;
+                    bool landingStabilized = HasTouchdownStabilized(recoveryBlend);
+                    bool maxDurationReached = _touchdownStabilizationTimer >= _touchdownStabilizationMaxDuration;
+
+                    if (maxDurationReached || (holdElapsed && landingStabilized))
+                    {
+                        _touchdownStabilizationBlendingOut = true;
+                    }
+                }
+
+                if (_touchdownStabilizationBlendingOut)
+                {
+                    touchdownBlend = _touchdownStabilizationBlendTimer / Mathf.Max(0.001f, _touchdownStabilizationBlendOutDuration);
+                    _touchdownStabilizationBlendTimer = Mathf.Max(0f, _touchdownStabilizationBlendTimer - Time.fixedDeltaTime);
+
+                    if (_touchdownStabilizationBlendTimer <= 0f)
+                    {
+                        _touchdownStabilizationActive = false;
+                    }
+                }
+                else
+                {
+                    touchdownBlend = 1f;
+                }
+            }
+
+            _wasGroundedLastCommand = _currentObservation.IsGrounded;
+            return touchdownBlend;
+        }
+
+        private bool HasTouchdownStabilized(float recoveryBlend)
+        {
+            return _currentObservation.IsGrounded &&
+                   !_currentObservation.IsFallen &&
+                   _currentObservation.CharacterState != CharacterStateType.Airborne &&
+                   _currentObservation.CharacterState != CharacterStateType.Fallen &&
+                   _currentObservation.CharacterState != CharacterStateType.GettingUp &&
+                   _currentObservation.UprightAngleDegrees <= _touchdownStabilizationExitUprightAngle &&
+                   recoveryBlend <= _touchdownStabilizationExitRecoveryBlend;
+        }
+
         private void EmitObservationDrivenCommands()
         {
             // STEP 1: Classify the current locomotion risk directly from the promoted observation model.
@@ -441,6 +572,12 @@ namespace PhysicsDrivenMovement.Character
             int recoveryFramesAfterSupport = recoveryFramesThisStep > 0 ? recoveryFramesThisStep - 1 : 0;
             int kdFrames = recoveryFramesAfterSupport - kdStartOffset;
             float recoveryKdBlend = ComputeRecoveryBlend(kdFrames) * rampInBlend;
+            float touchdownBlend = UpdateTouchdownStabilizationWindow(recoveryBlend);
+            float touchdownSprintLeanScale = Mathf.Lerp(1f, _touchdownSprintLeanScale, touchdownBlend);
+            float touchdownRecoveryDampingScale = Mathf.Lerp(1f, _touchdownRecoveryDampingScale, touchdownBlend);
+            float touchdownRecoveryStabilizationScale = Mathf.Lerp(1f, _touchdownRecoveryStabilizationScale, touchdownBlend);
+            recoveryKdBlend *= touchdownRecoveryDampingScale;
+            float comDampingRecoveryBlend = recoveryBlend * touchdownRecoveryDampingScale;
 
             // STEP 3: Map observation severity onto the support-command surface, with per-situation
             // response profiles blended in while recovery is active.
@@ -458,7 +595,7 @@ namespace PhysicsDrivenMovement.Character
                 ? _currentObservation.TurnSeverity * _maxTurnLeanDegrees
                 : 0f;
             float sprintLeanDegrees = _currentDesiredInput.HasMoveIntent
-                ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees
+                ? _currentDesiredInput.SprintNormalized * _maxSprintLeanDegrees * touchdownSprintLeanScale
                 : 0f;
 
             // Apply per-situation response profile blended by the current recovery envelope.
@@ -470,6 +607,9 @@ namespace PhysicsDrivenMovement.Character
                 profile.MinYawStrengthScale * recoveryBlend);
             float stabilizationStrengthScale = Mathf.Lerp(baseStabilizationStrengthScale,
                 baseStabilizationStrengthScale * profile.StabilizationBoostMultiplier, recoveryBlend);
+            float recoveryAddedStabilizationStrength = stabilizationStrengthScale - baseStabilizationStrengthScale;
+            stabilizationStrengthScale = baseStabilizationStrengthScale
+                + recoveryAddedStabilizationStrength * touchdownRecoveryStabilizationScale;
 
             // Keep sprint posture independent so recovery-specific turn attenuation does not
             // erase the straight-line sprint silhouette on otherwise stable runs.
@@ -487,6 +627,7 @@ namespace PhysicsDrivenMovement.Character
                 stabilizationStrengthScale,
                 recoveryBlend,
                 recoveryKdBlend,
+                comDampingRecoveryBlend,
                 heightMaintenanceScale: heightMaintenanceScale,
                 recoverySituation: _currentRecoveryState.Situation);
 
@@ -592,6 +733,17 @@ namespace PhysicsDrivenMovement.Character
 
         private void UpdateObservationRecoveryState(float supportRisk)
         {
+            bool suppressLowPriorityRecovery = UpdateJumpRecoverySuppressionState();
+            if (suppressLowPriorityRecovery && IsJumpSuppressibleRecoverySituation(_currentRecoveryState.Situation))
+            {
+                RecoverySituation clearedSituation = _currentRecoveryState.Situation;
+                float recoveryDuration = GetRecoveryDurationSoFar();
+                _currentRecoveryState = RecoveryState.Inactive;
+                _recoveryAngleStuckTimer = 0f;
+                CompleteRecovery(recoveryDuration, endedInSurrender: false);
+                EmitRecoveryTelemetry(clearedSituation, "jump_sequence_suppressed", recoveryDuration);
+            }
+
             // STEP 1: Skip recovery escalation when the current locomotion state cannot execute a support response.
             CharacterStateType state = _currentObservation.CharacterState;
             if (!_currentDesiredInput.HasMoveIntent ||
@@ -656,6 +808,34 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private bool UpdateJumpRecoverySuppressionState()
+        {
+            bool isIntentionalJumpSequence = _playerMovement != null &&
+                                             _playerMovement.CurrentJumpPhase != JumpPhase.None;
+
+            if (isIntentionalJumpSequence)
+            {
+                _jumpRecoverySuppressionActive = true;
+            }
+            else if (_jumpRecoverySuppressionActive &&
+                     _currentObservation.IsGrounded &&
+                     !_touchdownStabilizationArmed &&
+                     !_touchdownStabilizationActive &&
+                     !_touchdownStabilizationBlendingOut)
+            {
+                _jumpRecoverySuppressionActive = false;
+            }
+
+            return _jumpRecoverySuppressionActive;
+        }
+
+        private static bool IsJumpSuppressibleRecoverySituation(RecoverySituation situation)
+        {
+            return situation == RecoverySituation.HardTurn ||
+                   situation == RecoverySituation.Reversal ||
+                   situation == RecoverySituation.Slip;
+        }
+
         /// <summary>
         /// Classifies the current observation into a named recovery situation.
         /// Returns <see cref="RecoverySituation.None"/> when no recovery is needed.
@@ -664,6 +844,9 @@ namespace PhysicsDrivenMovement.Character
         private RecoverySituation ClassifyRecoverySituation(float supportRisk)
         {
             LocomotionObservation obs = _currentObservation;
+            bool isIntentionalJumpSequence = _playerMovement != null &&
+                                             _playerMovement.CurrentJumpPhase != JumpPhase.None;
+            bool suppressLowPriorityRecovery = _jumpRecoverySuppressionActive || isIntentionalJumpSequence;
 
             // STEP 1: Confirmed collapse watchdog → Stumble (highest priority).
             if (obs.IsLocomotionCollapsed)
@@ -681,15 +864,22 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // STEP 3: High slip estimate while support is compromised → Slip.
+            // Intentional jump wind-up/launch can drag the planted feet relative to the
+            // ground sensors while the body crouches. Treat that authored jump preload as
+            // non-recovery motion so the director does not re-arm Slip immediately before
+            // takeoff and carry a full recovery profile into the landing.
             const float SlipThreshold = 0.4f;
-            if (obs.SlipEstimate >= SlipThreshold && supportRisk >= _supportRiskRecoveryThreshold)
+            if (!suppressLowPriorityRecovery &&
+                obs.SlipEstimate >= SlipThreshold &&
+                supportRisk >= _supportRiskRecoveryThreshold)
             {
                 return RecoverySituation.Slip;
             }
 
             // STEP 4: Near-180° reversal with degraded support → Reversal.
             const float ReversalTurnSeverityThreshold = 0.85f;
-            if (obs.TurnSeverity >= ReversalTurnSeverityThreshold &&
+            if (!suppressLowPriorityRecovery &&
+                obs.TurnSeverity >= ReversalTurnSeverityThreshold &&
                 supportRisk >= _supportRiskRecoveryThreshold)
             {
                 return RecoverySituation.Reversal;
@@ -699,14 +889,16 @@ namespace PhysicsDrivenMovement.Character
             bool turnRiskExceedsThreshold = obs.TurnSeverity >= _turnRecoveryThreshold;
             bool supportRiskExceedsThreshold = supportRisk >= _supportRiskRecoveryThreshold;
 
-            if (obs.IsComOutsideSupport &&
+            if (!suppressLowPriorityRecovery &&
+                obs.IsComOutsideSupport &&
                 obs.ContactConfidence > 0f &&
                 turnRiskExceedsThreshold)
             {
                 return RecoverySituation.HardTurn;
             }
 
-            if (turnRiskExceedsThreshold && supportRiskExceedsThreshold)
+            if (!suppressLowPriorityRecovery &&
+                turnRiskExceedsThreshold && supportRiskExceedsThreshold)
             {
                 return RecoverySituation.HardTurn;
             }

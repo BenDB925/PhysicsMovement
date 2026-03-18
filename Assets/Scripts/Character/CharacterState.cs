@@ -154,6 +154,8 @@ namespace PhysicsDrivenMovement.Character
             bool isLocomotionCollapsed = _collapseDetector != null && _collapseDetector.IsCollapseConfirmed;
             bool wantsMove = moveMagnitude >= _moveEnterThreshold;
             bool stoppedMove = moveMagnitude <= _moveExitThreshold;
+            bool shouldTreatJumpLaunchAsAirborne = _playerMovement.ShouldTreatJumpLaunchAsAirborne;
+            bool shouldBeAirborne = !isGrounded || shouldTreatJumpLaunchAsAirborne;
 
             // STEP 0.5: Collapse deferral — when the collapse detector fires but
             // the director has an active recovery strategy, defer the Fallen
@@ -213,7 +215,7 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Fallen;
                     }
-                    else if (!isGrounded)
+                    else if (shouldBeAirborne)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -228,7 +230,7 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Fallen;
                     }
-                    else if (!isGrounded)
+                    else if (shouldBeAirborne)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -243,7 +245,7 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Fallen;
                     }
-                    else if (isGrounded)
+                    else if (!shouldBeAirborne && isGrounded)
                     {
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
                     }
