@@ -6,6 +6,7 @@
         "PhysicsDrivenMovement.Character",
         "PhysicsDrivenMovement.Environment",
         "PhysicsDrivenMovement.Input",
+        "PhysicsDrivenMovement.Tests.PlayMode",
         "Unity.InputSystem"
     ],
     "includePlatforms": [
