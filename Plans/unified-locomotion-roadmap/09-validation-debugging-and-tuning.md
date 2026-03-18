@@ -34,6 +34,7 @@ Prevent the unified system from becoming a black box.
 
 - [LOCOMOTION_BASELINES.md](../../LOCOMOTION_BASELINES.md)
 - [DEBUGGING.md](../../DEBUGGING.md)
+- [Sprint-jump stability child plan](../sprint-jump-stability-tests.md)
 
 ## Status
 
@@ -97,6 +98,11 @@ Add structured per-event logging to `LocomotionDirector` so recovery decisions a
 ### C9.3 Outcome dashboards
 
 Expand the PowerShell summary pipeline so post-run output includes quantitative locomotion metrics, not just pass/fail counts.
+
+- 2026-03-18: Started the sprint-jump landing regression child slice in `Plans/sprint-jump-stability-tests.md`. Task 1 scaffold landed in `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` and the focused PlayMode fixture passed `1/1`; next step in the child plan is Task 2 (`RunSprintJumpSequence()` plus diagnostics capture).
+- 2026-03-18: Completed sprint-jump Task 2. `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now contains the `SprintJumpDiagnostics` carrier plus the shared `RunSprintJumpSequence()` / `RecordContinuousState()` helper, and the upgraded smoke test completed the full sprint → jump → land → sprint → jump → land sequence in a focused PlayMode run (`1/1` passed). Next step in the child plan is Task 3 (`SprintJump_SingleJump_DoesNotFaceplant`).
+- 2026-03-18: Completed sprint-jump Task 3. `Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs` now adds `SprintJump_SingleJump_DoesNotFaceplant()`, and the focused PlayMode fixture passed `2/2` with `[METRIC]` output `PeakTiltAfterJump1=31.5`, `RecoveryFrames1=45`, and `PeakSprintSpeed=3.96`. The expected known-red proof-of-bug did not reproduce on that run, although the companion smoke-test output from the same fixture still logged `PeakTilt=94.3`, `FinalState=Fallen`, `Airborne1=False`, and `Airborne2=False`, so the child plan now advances to Task 4 with helper-sequence consistency still under observation.
+- 2026-03-18: Increased the sprint-jump helper to 5.0 s approach windows before both jumps (`SprintRampFrames = 500`, `SecondSprintFrames = 500`) after the 3.0 s ramp proved too mild and only reached `PeakSprintSpeed=3.96`. With the longer approach, two consecutive focused PlayMode runs reproduced the intended Task 3 red: `SprintJump_SingleJump_DoesNotFaceplant` failed with `PeakTiltAfterJump1=91.2`, `RecoveryFrames1=45`, and `PeakSprintSpeed=4.30`. The smoke run now agrees on the first-jump faceplant (`PeakTilt=96.2`, `FinalState=Fallen`, `Airborne1=True`), while `Airborne2=False` remains the next structural issue for Task 4.
 
 - [ ] **C9.3a Emit tagged metric lines from PlayMode tests**
   - Scope: In `MovementQualityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `GaitOutcomeTests`, after each assertion block emit a `TestContext.Out.WriteLine` line with the format `[METRIC] <TestName> <MetricName>=<Value>`. Metrics to emit:
