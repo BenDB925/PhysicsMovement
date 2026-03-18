@@ -3,15 +3,19 @@
 ## Status
 - State: Active
 - Acceptance target: Stand up a workflow where durable reference docs stay in-repo, PRDs and execution slices live in GitHub issues, local plan files stay slim and resumable, stuck investigations split cleanly into bug issues plus bug sheets, and a fresh agent can execute one step from the plan and issue context alone.
-- Current next step: Draft and launch the follow-on `LOCOMOTION_BASELINES.md` documentation-slimming slice under PRD #1, or switch to `DEBUGGING.md` if priorities change.
+- Current next step: Draft and launch the follow-on `DEBUGGING.md` documentation-slimming slice under PRD #1, unless priorities change.
 - Active blockers: None currently.
 
 ## Quick Resume
-- The documentation-slimming pilot now has live GitHub slice issues for `.copilot-instructions.md`, `AGENT_TEST_RUNNING.md`, and `CODING_STANDARDS.md`, with child docs `06` through `08` serving as the canonical local resume surface.
-- The flow remains intentionally hybrid: long-lived reference stays in repo files, while GitHub issues hold queue state, ownership, and thin handoff summaries.
-- The next useful restart point is a follow-on documentation-slimming slice, with `LOCOMOTION_BASELINES.md` now the leading candidate under PRD #1 unless priorities change.
+- The documentation-slimming pilot now has live GitHub slice issues for `.copilot-instructions.md`, `AGENT_TEST_RUNNING.md`, `CODING_STANDARDS.md`, and `LOCOMOTION_BASELINES.md`, with child docs `06` through `09` serving as the canonical local resume surface.
+- `LOCOMOTION_BASELINES.md` is now a current-baseline index, while the detailed Chapter 1 and Chapter 8 baseline history lives in `Plans/archive/locomotion-baselines-history.md`.
+- The next useful restart point is a follow-on documentation-slimming slice for `DEBUGGING.md` under PRD #1 unless priorities change.
 
 ## Verified Artifacts
+- `https://github.com/BenDB925/PhysicsMovement/issues/6`: live slice issue for the `LOCOMOTION_BASELINES.md` slimming pass.
+- `Plans/issue-driven-agent-workflow/09-locomotion-baselines-slimming.md`: child doc for the fourth documentation-slimming slice, including the launched slice link and next restart point.
+- `LOCOMOTION_BASELINES.md`: slimmed current-baseline index that now keeps only the latest baseline reference, active known reds, and first-open artifact links.
+- `Plans/archive/locomotion-baselines-history.md`: archived Chapter 1 and Chapter 8 baseline detail moved out of the root read path.
 - `https://github.com/BenDB925/PhysicsMovement/issues/4`: live slice issue for the `CODING_STANDARDS.md` slimming pass.
 - `Plans/issue-driven-agent-workflow/08-coding-standards-slimming.md`: child doc for the third documentation-slimming slice, including the launched slice link and next restart point.
 - `CODING_STANDARDS.md`: slimmed rulebook that now exposes `Quick Load` and `Read More When` while leaving detailed unattended test-running procedure in `AGENT_TEST_RUNNING.md`.
@@ -45,6 +49,7 @@
 - [x] Copilot instructions slimming pilot: local execution record plus launched PRD and slice for the first documentation slice (`Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`)
 - [x] AGENT_TEST_RUNNING slimming slice: local execution record plus launched slice for the second documentation pass (`Plans/issue-driven-agent-workflow/07-agent-test-running-slimming.md`)
 - [x] CODING_STANDARDS slimming slice: local execution record plus launched slice for the third documentation pass (`Plans/issue-driven-agent-workflow/08-coding-standards-slimming.md`)
+- [x] LOCOMOTION_BASELINES slimming slice: local execution record plus launched slice for the fourth documentation pass (`Plans/issue-driven-agent-workflow/09-locomotion-baselines-slimming.md`)
 
 ## Work packages
 1. [x] Define the issue model: PRD issue, local plan file, tracer-bullet slice issues, bug issues, refactor RFCs, AFK/HITL semantics, blocker links, and the stuck-issue split rules.
@@ -55,6 +60,7 @@
 6. [ ] Trim long-lived documentation back to durable reference only and document the steady-state workflow.
 
 ## Progress notes
+- 2026-03-18: Slimmed `LOCOMOTION_BASELINES.md` into a current baseline index, moved the detailed baseline history to `Plans/archive/locomotion-baselines-history.md`, launched slice #6 under PRD #1, and updated the local plan tree so `DEBUGGING.md` is now the leading documentation-slimming candidate.
 - 2026-03-18: Slimmed `CODING_STANDARDS.md` into a tighter rulebook, launched slice #4 under PRD #1, closed retry duplicate #5, and updated the local plan tree so `LOCOMOTION_BASELINES.md` is now the leading documentation-slimming candidate.
 - 2026-03-18: Slimmed `AGENT_TEST_RUNNING.md` to the repo-primary unattended test path, launched slice #3 under PRD #1, and updated the local plan tree so the next documentation-slimming candidate is now `CODING_STANDARDS.md`.
 - 2026-03-18: Posted the prepared documentation-slimming pilot issues to `BenDB925/PhysicsMovement` as PRD #1 and slice #2, then updated the local plan tree so the GitHub queue state and repo resume surface match.
