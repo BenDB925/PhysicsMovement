@@ -3,17 +3,18 @@
 ## Status
 - State: Active
 - Acceptance target: Stand up a workflow where durable reference docs stay in-repo, PRDs and execution slices live in GitHub issues, local plan files stay slim and resumable, stuck investigations split cleanly into bug issues plus bug sheets, and a fresh agent can execute one step from the plan and issue context alone.
-- Current next step: Create the workflow labels through an authenticated write path, then post the prepared PRD and slice issues for the `.copilot-instructions.md` pilot and continue with the next documentation-slimming slice.
-- Active blockers: GitHub repo access works through the GitHub toolset, but this environment still has no label-creation path because `gh` is missing, no GitHub token is present in the terminal, and the available GitHub tools expose label reads but not label writes.
+- Current next step: Post the prepared PRD and slice issues for the `.copilot-instructions.md` pilot, then continue with the next documentation-slimming slice.
+- Active blockers: None currently. The workflow labels are now synced to `BenDB925/PhysicsMovement`.
 
 ## Quick Resume
 - The launch step is now backed by repo assets plus the first pilot child doc: `.copilot-instructions.md` has been slimmed into a routing entry point, and the local PRD plus slice drafts are ready.
 - The flow remains intentionally hybrid: long-lived reference stays in repo files, while GitHub issues hold queue state, ownership, and thin handoff summaries.
-- Remote progress is now blocked only on label creation. Once a writable path exists, the prepared PRD and slice can be posted immediately, with `AGENT_TEST_RUNNING.md` as the next likely documentation-slimming slice.
+- The workflow labels are now synced, so the next agent can post the prepared PRD and slice immediately, with `AGENT_TEST_RUNNING.md` as the next likely documentation-slimming slice.
 
 ## Verified Artifacts
 - `Plans/issue-driven-agent-workflow/06-copilot-instructions-slimming-pilot.md`: child doc for the first documentation-slimming slice, including ready-to-post PRD and slice drafts.
 - `.copilot-instructions.md`: slimmed workspace entry point that now routes into deeper docs only when relevant.
+- `BenDB925/PhysicsMovement` labels: `type:*`, `mode:*`, `status:*`, and initial `area:*` labels are now synced through `Tools/Sync-IssueWorkflowLabels.ps1`.
 - `Plans/issue-driven-agent-workflow/05-launch-assets.md`: implementation record for the new templates, skills, routing shim, and label bootstrap.
 - `.github/instructions/issue-driven-agent-workflow.instructions.md`: thin router for PRD, slice, bug, and workflow-asset tasks.
 - `.github/ISSUE_TEMPLATE/prd.yml`: parent issue form for PRDs.
@@ -44,6 +45,7 @@
 6. [ ] Trim long-lived documentation back to durable reference only and document the steady-state workflow.
 
 ## Progress notes
+- 2026-03-18: Synced the launch label set to `BenDB925/PhysicsMovement` after locating `gh.exe` and reusing its authenticated token for `Tools/Sync-IssueWorkflowLabels.ps1`. Issue creation is now unblocked.
 - 2026-03-18: Slimmed `.copilot-instructions.md` into a thin routing file, created the pilot child doc, and prepared the matching PRD plus slice issue drafts locally. Remote launch is now blocked only on label creation.
 - 2026-03-18: Updated the workflow assets and workspace guidance so `vscode_askQuestions` is the default before most non-trivial planning or implementation work unless the task is already fully explicit.
 - 2026-03-18: Attempted to create the launch labels remotely. The environment does not have `gh` or a GitHub token, so the sync is still blocked pending auth; the bootstrap script now supports either path.

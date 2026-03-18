@@ -6,8 +6,8 @@ Prove the first documentation-slimming slice by turning `.copilot-instructions.m
 
 ## Current status
 - State: Active
-- Current next step: Create the workflow labels through an authenticated write path, then post the prepared PRD and slice issues for this pilot.
-- Blockers: GitHub repo access works through the GitHub toolset, but this environment still has no label-creation path because `gh` is missing, no GitHub token is present in the terminal, and the available GitHub tools expose label reads but not label writes.
+- Current next step: Post the prepared PRD and slice issues for this pilot in `BenDB925/PhysicsMovement`.
+- Blockers: None currently. The workflow labels are now synced.
 
 ## Decisions
 - 2026-03-18: Keep this slice narrow. `.copilot-instructions.md` is the pilot target; `AGENT_TEST_RUNNING.md` remains a likely follow-on slice unless a tiny supporting edit becomes unavoidable.
@@ -19,6 +19,7 @@ Prove the first documentation-slimming slice by turning `.copilot-instructions.m
 - `Plans/issue-driven-agent-workflow.plan.md`: parent plan that tracks the overall workflow migration.
 - `Plans/issue-driven-agent-workflow/03-document-surface-audit.md`: audit that justified this pilot.
 - `Plans/issue-driven-agent-workflow/04-issue-model-and-pilot-decisions.md`: issue model and pilot acceptance target.
+- `BenDB925/PhysicsMovement` labels: the launch taxonomy now exists remotely and matches `Tools/Sync-IssueWorkflowLabels.ps1`.
 
 ## Prepared issue drafts
 
@@ -54,6 +55,7 @@ Prove the first documentation-slimming slice by turning `.copilot-instructions.m
   - Verification confirms the routed files and resume surfaces exist.
 
 ## Progress notes
+- 2026-03-18: Synced the launch label set to `BenDB925/PhysicsMovement`, so the prepared PRD and slice issues can now be created without violating the label contract.
 - 2026-03-18: User confirmed the next step should attempt the remote GitHub launch if auth works, commit the full workflow-documentation batch, and include `AGENT_TEST_RUNNING.md` only if it fits without widening the slice.
 - 2026-03-18: Confirmed GitHub repo access through the GitHub toolset, but label creation is still blocked in this environment because the terminal has neither `gh` nor a GitHub token, and the available GitHub tools expose label reads but not label writes.
 - 2026-03-18: Slimmed `.copilot-instructions.md` into a thin routing file. Left `AGENT_TEST_RUNNING.md` for a follow-on slice so this pilot stays one acceptance target.
