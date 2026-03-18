@@ -889,6 +889,8 @@ MonoBehaviour:
   _kDYaw: 40
   _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
+  _jumpAirborneMultiplier: 0.85
+  _jumpLandingGainBoost: 3
   _snapRecoveryKdScale: 0.6
   _snapRecoveryComDampScale: 0.4
   _snapRecoveryComSpringScale: 1
@@ -1072,11 +1074,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d8a48dadac0ad774cbf1658bd2cb2db0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.PlayerMovement
-  _moveForce: 200
+  _moveForce: 150
   _maxSpeed: 5
   _sprintSpeedMultiplier: 1.8
   _sprintBlendDuration: 0.25
-  _jumpForce: 100
+  _jumpForce: 175
   _jumpWindUpDuration: 0.2
   _jumpWindUpGroundLossCommitProgress: 0.85
   _jumpCrouchHeightOffset: 0.07
@@ -1084,6 +1086,7 @@ MonoBehaviour:
   _jumpLaunchDuration: 0.1
   _jumpAirborneStateGraceDuration: 0.12
   _jumpAirborneStateVelocityThreshold: 0.1
+  _jumpPostLandingGraceDuration: 0.5
   _maxFacingTurnRateDegPerSecond: 540
   _leanReductionStartAngle: 10
   _leanReductionFullAngle: 35
@@ -1149,6 +1152,7 @@ MonoBehaviour:
   _touchdownSprintLeanScale: 0.25
   _touchdownRecoveryDampingScale: 0
   _touchdownRecoveryStabilizationScale: 1
+  _jumpAirborneSprintLeanScale: 0
   _surrenderRecoveryTimeout: 0.8
   _surrenderRecoveryAngleCeiling: 50
   _recoveryEntryDebounceFrames: 3
@@ -1257,11 +1261,17 @@ MonoBehaviour:
   _armPushTargetHeight: 0.25
   _armPushFailHeight: 0.1
   _armPushTimeout: 0.8
+  _armPushHeightSupportScale: 0.35
+  _armPushUprightSupportScale: 0.25
+  _armPushStabilizationSupportScale: 0.15
   _legTuckSpringMultiplier: 1.2
   _legTuckAssistForce: 80
   _legTuckTargetHeight: 0.2
   _legTuckFailHeight: 0.12
   _legTuckTimeout: 0.7
+  _legTuckHeightSupportScale: 0.55
+  _legTuckUprightSupportScale: 0.5
+  _legTuckStabilizationSupportScale: 0.35
   _standSpringMultiplier: 2
   _standUprightRampDuration: 0.4
   _standHeightRampDuration: 0.3
@@ -1272,6 +1282,7 @@ MonoBehaviour:
   _maxStandUpAttempts: 3
   _forcedStandImpulse: 350
   _completionSpringResetDuration: 0.2
+  _phaseSupportRampDuration: 0.15
   _balanceController: {fileID: 8927490194607149143}
   _ragdollSetup: {fileID: 6052766930640939594}
 --- !u!1 &1889336342083505185

@@ -787,6 +787,49 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator FixedUpdate_WhenStateIsGettingUp_ClearsStaleNearFallRecoveryBeforeTimeoutSurrender()
+        {
+            // Arrange
+            Assert.That(_director, Is.Not.Null,
+                "PlayerRagdoll prefab should include LocomotionDirector for the GettingUp recovery-timeout regression.");
+
+            yield return _rig.WarmUp(SettleFrames);
+
+            SetPrivateField(_director, "_surrenderRecoveryTimeout", 0.12f);
+            SetPrivateField(_director, "_surrenderRecoveryAngleCeiling", 10f);
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+            _rig.BalanceController.SetGroundStateForTest(isGrounded: true, isFallen: true);
+            _rig.CharacterState.SetStateForTest(CharacterStateType.GettingUp);
+
+            Quaternion stuckTiltRotation = GetTiltedRotationAtCurrentHeading(_rig.Hips, 20f);
+            SetActiveRecoveryStateForTest(_director, "NearFall", framesRemaining: 60, totalFrames: 60, entrySeverity: 0.9f, entryTurnSeverity: 0.2f);
+            int surrenderCountAtEntry = _rig.BalanceController.SurrenderTriggerCount;
+
+            // Act
+            HoldHipsAtTilt(_rig.HipsBody, stuckTiltRotation);
+            yield return new WaitForFixedUpdate();
+
+            string activeSituationAfterGettingUp = GetPropertyValue<object>(_director, "ActiveRecoverySituation").ToString();
+
+            for (int frame = 0; frame < 20; frame++)
+            {
+                HoldHipsAtTilt(_rig.HipsBody, stuckTiltRotation);
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Assert
+            Assert.That(activeSituationAfterGettingUp, Is.EqualTo("None"),
+                "Entering GettingUp should clear a stale NearFall recovery instead of leaving timeout logic armed during stand-up.");
+            Assert.That(_rig.BalanceController.IsSurrendered, Is.False,
+                "Recovery timeout should not trigger a new surrender while CharacterState is already GettingUp.");
+            Assert.That(_rig.BalanceController.SurrenderTriggerCount, Is.EqualTo(surrenderCountAtEntry),
+                "No new surrender should be counted during GettingUp when there was no fresh external hit.");
+            Assert.That(_rig.CharacterState.CurrentState, Is.EqualTo(CharacterStateType.GettingUp),
+                "CharacterState should remain in GettingUp during the held test window instead of bouncing back to Fallen from stale recovery timeout.");
+        }
+
+        [UnityTest]
         public IEnumerator FixedUpdate_WhenStandingSupportIsStable_KeepsLowRiskSupportCommandScales()
         {
             // Arrange

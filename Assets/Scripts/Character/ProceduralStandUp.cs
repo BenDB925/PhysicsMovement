@@ -39,6 +39,15 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Tooltip("Max time (s) before failure check.")]
         private float _armPushTimeout = 0.8f;
 
+        [SerializeField, Range(0f, 1f), Tooltip("Partial height-maintenance scale restored during arm push so flat recoveries can lift before the final stand ramp.")]
+        private float _armPushHeightSupportScale = 0.35f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("Partial upright-strength scale restored during arm push so lift does not lever the body farther onto its back.")]
+        private float _armPushUprightSupportScale = 0.25f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("Partial COM stabilization restored during arm push to keep early lift centered over the support base.")]
+        private float _armPushStabilizationSupportScale = 0.15f;
+
         // ─── Phase 2: Leg Tuck ──────────────────────────────────────────────
         [Header("Phase 2 — Leg Tuck")]
         [SerializeField, Tooltip("Leg spring multiplier during tuck.")]
@@ -55,6 +64,15 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Tooltip("Max time (s) before failure check.")]
         private float _legTuckTimeout = 0.7f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("Height-maintenance scale restored during leg tuck while surrender is still active.")]
+        private float _legTuckHeightSupportScale = 0.55f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("Upright-strength scale restored during leg tuck while surrender is still active.")]
+        private float _legTuckUprightSupportScale = 0.5f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("COM stabilization restored during leg tuck while surrender is still active.")]
+        private float _legTuckStabilizationSupportScale = 0.35f;
 
         // ─── Phase 3: Stand ─────────────────────────────────────────────────
         [Header("Phase 3 — Stand")]
@@ -89,6 +107,9 @@ namespace PhysicsDrivenMovement.Character
 
         [SerializeField, Tooltip("Duration (s) for spring profile reset after stand completes.")]
         private float _completionSpringResetDuration = 0.2f;
+
+        [SerializeField, Tooltip("Duration (s) for early-phase height support ramps before the final stand phase clears surrender.")]
+        private float _phaseSupportRampDuration = 0.15f;
 
         // ─── References ─────────────────────────────────────────────────────
         [Header("References")]
@@ -199,6 +220,10 @@ namespace PhysicsDrivenMovement.Character
                 case StandUpPhase.ArmPush:
                     _ragdollSetup.SetSpringProfile(
                         _armPushSpringMultiplier, 0.25f, 0.25f, 0.1f);
+                    RestorePhaseSupport(
+                        _armPushUprightSupportScale,
+                        _armPushHeightSupportScale,
+                        _armPushStabilizationSupportScale);
                     break;
 
                 case StandUpPhase.LegTuck:
@@ -207,6 +232,10 @@ namespace PhysicsDrivenMovement.Character
                         _legTuckSpringMultiplier,
                         0.5f,
                         0.1f);
+                    RestorePhaseSupport(
+                        _legTuckUprightSupportScale,
+                        _legTuckHeightSupportScale,
+                        _legTuckStabilizationSupportScale);
                     break;
 
                 case StandUpPhase.Stand:
@@ -445,6 +474,21 @@ namespace PhysicsDrivenMovement.Character
                     }
                 }
             }
+        }
+
+        private void RestorePhaseSupport(
+            float uprightSupportScale,
+            float heightSupportScale,
+            float stabilizationSupportScale)
+        {
+            if (_balanceController == null)
+            {
+                return;
+            }
+
+            _balanceController.RampUprightStrength(uprightSupportScale, _phaseSupportRampDuration);
+            _balanceController.RampHeightMaintenance(heightSupportScale, _phaseSupportRampDuration);
+            _balanceController.RampStabilization(stabilizationSupportScale, _phaseSupportRampDuration);
         }
 
         private void ApplyForcedStand()

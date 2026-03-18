@@ -239,6 +239,77 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         /// <summary>
+        /// Regression: early stand-up phases must restore some height support before
+        /// the final Stand phase. Without this, flat post-landing recoveries can sit
+        /// in ArmPush until timeout and churn GettingUp -> Fallen.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ArmPush_RestoresHeightSupportBeforeStandPhase()
+        {
+            _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
+            {
+                TestOrigin = TestOrigin + new Vector3(250f, 0f, 0f),
+                SpawnOffset = new Vector3(0f, 0.5f, 0f),
+            });
+            yield return _rig.WarmUp(WarmUpFrames);
+
+            ProceduralStandUp standUp = _rig.Instance.GetComponentInChildren<ProceduralStandUp>();
+            Assert.That(standUp, Is.Not.Null);
+
+            yield return TriggerSurrenderAndWaitForGettingUp(0.5f);
+            Assert.That(_rig.CharacterState.CurrentState, Is.EqualTo(CharacterStateType.GettingUp));
+
+            bool reachedArmPush = false;
+            float maxHeightSupport = 0f;
+            float maxUprightSupport = 0f;
+            float maxStabilizationSupport = 0f;
+            int observationFrames = Mathf.CeilToInt(0.3f / Time.fixedDeltaTime);
+
+            for (int i = 0; i < 200; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (standUp.CurrentPhase != StandUpPhase.ArmPush)
+                {
+                    continue;
+                }
+
+                reachedArmPush = true;
+                for (int frame = 0; frame < observationFrames; frame++)
+                {
+                    yield return new WaitForFixedUpdate();
+                    maxHeightSupport = Mathf.Max(
+                        maxHeightSupport,
+                        _rig.BalanceController.HeightMaintenanceScale);
+                    maxUprightSupport = Mathf.Max(
+                        maxUprightSupport,
+                        _rig.BalanceController.UprightStrengthScale);
+                    maxStabilizationSupport = Mathf.Max(
+                        maxStabilizationSupport,
+                        _rig.BalanceController.StabilizationScale);
+
+                    if (standUp.CurrentPhase == StandUpPhase.Stand ||
+                        standUp.CurrentPhase == StandUpPhase.Inactive)
+                    {
+                        break;
+                    }
+                }
+
+                break;
+            }
+
+            Assert.That(reachedArmPush, Is.True, "Stand-up should reach ArmPush phase.");
+            Assert.That(maxHeightSupport, Is.GreaterThan(0.05f),
+                $"ArmPush should restore partial height support before Stand " +
+                $"(actual max: {maxHeightSupport:F3}).");
+            Assert.That(maxUprightSupport, Is.GreaterThan(0.05f),
+                $"ArmPush should restore partial upright support before Stand " +
+                $"(actual max: {maxUprightSupport:F3}).");
+            Assert.That(maxStabilizationSupport, Is.GreaterThan(0.05f),
+                $"ArmPush should restore partial stabilization before Stand " +
+                $"(actual max: {maxStabilizationSupport:F3}).");
+        }
+
+        /// <summary>
         /// Test 4: External impact during a stand-up phase → full reset to Fallen.
         /// Use a projectile hit during GettingUp to trigger SurrenderTriggerCount
         /// increment, which makes CharacterState re-enter Fallen.

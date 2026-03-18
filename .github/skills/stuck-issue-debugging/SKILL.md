@@ -18,6 +18,7 @@ Use this skill when an investigation is no longer converging quickly and needs a
 4. Never relax thresholds, acceptance criteria, or behavior guarantees silently.
 5. Keep the parent slice open only if unrelated acceptance work can still proceed independently.
 6. Before most non-trivial investigation or escalation planning, use `vscode_askQuestions` if the expected behavior, symptom boundary, or escalation preference is not already explicit.
+7. Update your task record as you go with failed hypotheses, artifact paths, and thoughts on next steps instead of keeping them in your head or in long-lived root docs or GitHub issue bodies.
 
 ## Investigation loop
 

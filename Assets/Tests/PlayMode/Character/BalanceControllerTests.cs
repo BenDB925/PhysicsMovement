@@ -249,6 +249,61 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator OnCharacterStateChanged_WhenLandingBouncesDuringActiveAbsorption_DoesNotRestartBlend()
+        {
+            SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
+            yield return WaitPhysicsFrames(1);
+
+            float landingAbsorbDuration = GetPrivateFloat("_landingAbsorbDuration");
+            float landingAbsorbBlendOutDuration = GetPrivateFloat("_landingAbsorbBlendOutDuration");
+            int framesBeforeBounce = Mathf.Max(
+                1,
+                Mathf.CeilToInt(
+                    (landingAbsorbDuration + landingAbsorbBlendOutDuration - landingAbsorbBlendOutDuration * 0.25f)
+                    / Time.fixedDeltaTime));
+            int framesUntilOriginalWindowExpires = Mathf.CeilToInt(landingAbsorbBlendOutDuration / Time.fixedDeltaTime) + 2;
+
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
+            yield return WaitPhysicsFrames(1);
+
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            yield return WaitPhysicsFrames(1);
+
+            float initialBlend = GetCurrentLandingAbsorbBlend();
+
+            yield return WaitPhysicsFrames(framesBeforeBounce);
+
+            float agedBlend = GetCurrentLandingAbsorbBlend();
+
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
+            yield return WaitPhysicsFrames(1);
+
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Standing);
+            yield return WaitPhysicsFrames(1);
+
+            float postBounceBlend = GetCurrentLandingAbsorbBlend();
+
+            yield return WaitPhysicsFrames(framesUntilOriginalWindowExpires);
+
+            float resolvedBlend = GetCurrentLandingAbsorbBlend();
+
+            Assert.That(initialBlend, Is.GreaterThan(0.9f),
+                "Landing absorption should begin at full blend on the first clean touchdown.");
+            Assert.That(agedBlend, Is.LessThan(0.4f),
+                "This regression should age the first landing window deep into blend-out before bounce chatter is introduced.");
+            Assert.That(postBounceBlend, Is.LessThan(0.6f),
+                "A brief bounce during an active landing absorption window should keep the existing blend decaying instead of restarting at full strength.");
+            Assert.That(postBounceBlend, Is.LessThan(agedBlend + 0.15f),
+                "Landing bounce chatter should not materially extend the active landing absorption window.");
+            Assert.That(resolvedBlend, Is.LessThan(0.05f),
+                "Once the original landing window should have expired, bounce chatter should not keep landing absorption alive.");
+        }
+
+        [UnityTest]
         public IEnumerator CancelAllRamps_WhenRampIsActive_SnapsEachScaleToItsTarget()
         {
             SpawnCharacter(TestOrigin + new Vector3(0f, 6f, 0f), Quaternion.identity);
@@ -328,6 +383,27 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"{fieldName} field must exist in BalanceController. If it was renamed, update this test.");
 
             return (float)field.GetValue(_balance);
+        }
+
+        private float GetCurrentLandingAbsorbBlend()
+        {
+            PropertyInfo sampleProperty = typeof(BalanceController).GetProperty(
+                "CurrentLandingWindowTelemetrySample",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(sampleProperty, Is.Not.Null,
+                "BalanceController should expose the current landing telemetry sample for regression coverage.");
+
+            object sample = sampleProperty.GetValue(_balance);
+            Assert.That(sample, Is.Not.Null,
+                "Landing telemetry sample should be populated after FixedUpdate runs.");
+
+            PropertyInfo blendProperty = sample.GetType().GetProperty(
+                "LandingAbsorbBlend",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(blendProperty, Is.Not.Null,
+                "Landing telemetry sample should expose LandingAbsorbBlend.");
+
+            return (float)blendProperty.GetValue(sample);
         }
 
         private static bool[,] CaptureLayerCollisionMatrix()

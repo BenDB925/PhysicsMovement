@@ -36,13 +36,15 @@ Prevent the unified system from becoming a black box.
 - [DEBUGGING.md](../../DEBUGGING.md)
 - [Sprint-jump stability child plan](../archive/sprint-jump-stability-tests.md)
 - [Sprint-jump smoothing handoff plan](../sprint-jump-smoothing.plan.md)
+- [Sprint-jump post-touchdown follow-up](../sprint-jump-smoothing/03-post-touchdown-stability.md)
+- [Foot sliding detection & speed envelope tuning](../foot-sliding-speed-envelope.plan.md)
 
 ## Status
 
 - State: In Progress.
-- Current next step: resume C9.3a by emitting tagged metric lines from `MovementQualityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `GaitOutcomeTests`. The sprint-jump child plan is complete, and its deferred Task 7 slice entry can wait until `Tools/test-slices.json` exists.
+- Current next step: resume C9.3a by emitting tagged metric lines from `MovementQualityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `GaitOutcomeTests`. The sprint-jump regression proof is green again; any remaining landing-feel and `Fallen`/`GettingUp` follow-up now lives in the sprint-jump handoff child docs.
 - Active blockers: None.
-- Active chapter reds: `SprintJump_SingleJump_DoesNotFaceplant`, `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` remain the known-red sprint-jump regression proof (`3 passed, 2 failed, 5 total` in the focused baseline run on 2026-03-18).
+- Active chapter reds: None newly tracked inside Chapter 9; the sprint-jump focused slice is green again and the remaining work is handoff follow-up, not a chapter-red proof case.
 - Known pre-existing failures: `MovementQualityTests.WalkStraight_NoFalls`, `MovementQualityTests.SustainedLocomotionCollapse_TransitionsIntoFallen` (fail on baseline since C1, unrelated to C9 scope).
 
 ## Work packages
@@ -113,6 +115,7 @@ Expand the PowerShell summary pipeline so post-run output includes quantitative 
 - 2026-03-18: Completed sprint-jump Task 8. `Assets/Tests/PlayMode/Utilities/ScenarioDefinitions.cs` now includes `ScenarioDefinitions.SprintJump`, and `Assets/Tests/EditMode/Character/ScenarioDefinitionsTests.cs` now asserts 10 total scenarios including `SprintJump`. Focused verification of `PhysicsDrivenMovement.Tests.EditMode.Character.ScenarioDefinitionsTests` followed the intended red → green path and finished `1/1` green. The child plan now advances to Task 9 for the known-red PlayMode baseline capture and commit.
 - 2026-03-18: Completed sprint-jump Task 9. Fresh focused PlayMode verification via `Tools/Run-UnityTests.ps1 -Platform PlayMode -TestFilter "PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests"` compiled successfully and produced `TestResults/latest-summary.md`, `TestResults/PlayMode.xml`, and `Logs/test_playmode_20260318_075506.log` with the known-red baseline `3 passed, 2 failed, 5 total`. `SprintJump_SingleJump_DoesNotFaceplant` failed with `PeakTiltAfterJump1=95.7`, `RecoveryFrames1=50`, and `PeakSprintSpeed=4.29`; `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` failed on the missing second airborne state after emitting `PeakTiltAfterJump1=96.8`, `PeakTiltAfterJump2=86.6`, `RecoveryFrames1=47`, `RecoveryFrames2=-1`, `FinalTilt=86.5`, `PeakSprintSpeed=4.28`, and `EverFallen=True`. The other three sprint-jump tests passed, including the telemetry capture (`EventCount=7`) and recovery-deadline coverage (`RecoveryFrames1=45`, `RecoveryFrames2=-1`). The child plan is now complete, so Chapter 9 can resume C9.3a while leaving the deferred `test-slices.json` entry for later.
 - 2026-03-18: Added the follow-up runtime handoff plan `Plans/sprint-jump-smoothing.plan.md` so the next agent can work from a focused diagnosis instead of reopening the whole sprint-jump investigation. The current best leads are landing posture stacking in `BalanceController`, landing-time sprint lean from `LocomotionDirector`, and jump-2 wind-up aborts in `PlayerMovement` after the first landing destabilizes.
+- 2026-03-18: The focused sprint-jump runtime slice later went green at `40 passed, 0 failed, 40 total` across `JumpTests`, `LocomotionDirectorTests`, and `SprintJumpStabilityTests`. Remaining sprint-jump work is now follow-up feel tuning and a targeted `Fallen`/`GettingUp` state-loop investigation, tracked in `Plans/sprint-jump-smoothing/03-post-touchdown-stability.md` and `Plans/sprint-jump-smoothing/bugs/fallen-getting-up-state-loop.md`.
 
 - [ ] **C9.3a Emit tagged metric lines from PlayMode tests**
   - Scope: In `MovementQualityTests`, `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `GaitOutcomeTests`, after each assertion block emit a `TestContext.Out.WriteLine` line with the format `[METRIC] <TestName> <MetricName>=<Value>`. Metrics to emit:

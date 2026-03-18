@@ -1846,8 +1846,13 @@ namespace PhysicsDrivenMovement.Character
                 // C8.5d: Start landing absorption knee-bend boost on clean landings.
                 if (newState == CharacterStateType.Standing || newState == CharacterStateType.Moving)
                 {
-                    _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
-                    _landingAbsorbTimer = _landingAbsorbTotalDuration;
+                    // Keep the active landing window alive through brief bounce chatter
+                    // instead of rearming the knee-bend budget on every same-landing contact.
+                    if (_landingAbsorbTimer <= 0f)
+                    {
+                        _landingAbsorbTotalDuration = _landingAbsorbDuration + _landingAbsorbBlendOutDuration;
+                        _landingAbsorbTimer = _landingAbsorbTotalDuration;
+                    }
                 }
             }
 

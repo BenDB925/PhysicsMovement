@@ -3,7 +3,7 @@
 ## Status
 - State: **In Progress**
 - Acceptance target: Find the maximum honest movement speed where the character's planted feet do not visibly slide across the ground, lock that as a regression-tested quality gate, and document the parameter envelope.
-- Current next step: WP3a — analyze sweep results and define the envelope.
+- Current next step: WP3b — lock the regression gate with the confirmed thresholds.
 - Active blockers: None.
 
 ## Motivation
@@ -113,9 +113,10 @@ Create a reusable test utility that measures planted foot drift per step cycle.
 
 ### WP3: Establish the speed envelope and lock the regression gate
 
-- [ ] **WP3a: Analyze sweep results and define the envelope**
+- [x] **WP3a: Analyze sweep results and define the envelope** ✅ 2026-03-18
   - Scope: From WP2b results, identify the highest `_moveForce` where `MaxDrift` stays below the visual threshold at both walk and sprint. Document the results in a table in this plan. If `_stepFrequencyScale` or `MaxStrideLength` adjustments could extend the envelope, note them as follow-up candidates.
   - Done when: This plan's "Envelope Results" section is populated with the sweep data and the recommended parameter set.
+  - Result: The highest fully verified parameter set across both existing regression gates remains `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, `_stepFrequencyScale = 0.10`, `MaxStrideLength = 0.30`. `_moveForce = 175` still passes the sprint gate (`MaxDrift = 0.7744m < 0.80m`) but has only `0.0256m` headroom and no matching walk-speed verification, so it is a sprint-only candidate rather than the honest whole-envelope ceiling. The knee remains between `_moveForce = 175` and `_moveForce = 200`, where peak speed rises only `0.64 m/s` (`3.61 -> 4.25`) while max drift jumps `0.3522 m` (`0.7744 -> 1.1266`). Follow-up envelope-extension candidates remain `_stepFrequencyScale` and `MaxStrideLength` (WP4).
 
 - [ ] **WP3b: Lock the regression gate**
   - Scope: Update the walk and sprint drift tests from WP1b/WP2a to use the confirmed threshold from WP3a. Add them to the `gait-core` test slice in `Tools/test-slices.json` (if it exists by then) or document the filter string here. These tests become part of the normal regression gate — any future `_moveForce` or stride tuning that introduces sliding will fail.
@@ -144,11 +145,24 @@ Only pursue after WP3 is complete and the baseline is locked.
 
 ## Envelope Results
 
-_To be populated after WP3a._
+The current honest envelope is bounded by the data already captured in WP1-WP2:
+
+- **Recommended full-envelope ceiling:** `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, `_stepFrequencyScale = 0.10`, `MaxStrideLength = 0.30`.
+- **Why 150 stays recommended:** It is the highest force with explicit green evidence at both walk (`0.3076m < 0.35m`) and sprint (`0.5113m < 0.80m`).
+- **Why 175 is not promoted yet:** It passes the sprint sweep but sits only `0.0256m` under the sprint gate and has no companion walk-speed measurement, so promoting it would be extrapolation rather than a verified envelope.
+- **Observed knee:** The drift curve bends sharply between `_moveForce = 175` and `_moveForce = 200`. That step adds only `17.7%` more peak speed (`3.61 -> 4.25 m/s`) but `45.5%` more max drift (`0.7744 -> 1.1266 m`), which is consistent with the hips force outrunning the current cadence/stride ceiling.
+- **Follow-up candidates:** WP4 should test whether raising `_stepFrequencyScale` above `0.10` or `MaxStrideLength` above `0.30` can move that knee without making the gait look unnatural.
 
 | `_moveForce` | `_sprintMultiplier` | `_stepFreqScale` | `MaxStride` | Peak Speed (m/s) | Max Drift (m) | Avg Drift (m) | Verdict |
 |---|---|---|---|---|---|---|---|
-| ... | ... | ... | ... | ... | ... | ... | ... |
+| 150 | 1.0 | 0.10 | 0.30 | 0.91 | 0.3076 | 0.0789 | Verified walk baseline; within `0.35m` walk gate |
+| 100 | 1.8 | 0.10 | 0.30 | 2.27 | 0.2271 | 0.0943 | Sprint-only diagnostic; within `0.80m` sprint gate |
+| 125 | 1.8 | 0.10 | 0.30 | 2.49 | 0.3207 | 0.0888 | Sprint-only diagnostic; within `0.80m` sprint gate |
+| 150 | 1.8 | 0.10 | 0.30 | 3.34 | 0.5113 | 0.1734 | Verified sprint baseline; recommended full-envelope ceiling |
+| 175 | 1.8 | 0.10 | 0.30 | 3.61 | 0.7744 | 0.2309 | Sprint-only near-ceiling; passes gate but only `0.0256m` headroom and no walk proof |
+| 200 | 1.8 | 0.10 | 0.30 | 4.25 | 1.1266 | 0.2462 | Over sprint gate; knee crossed |
+| 250 | 1.8 | 0.10 | 0.30 | 4.92 | 1.1785 | 0.5599 | Over sprint gate |
+| 300 | 1.8 | 0.10 | 0.30 | 5.72 | 1.4645 | 0.4743 | Over sprint gate |
 
 ## Verification Gate
 
@@ -163,3 +177,4 @@ _To be populated after WP3a._
 - 2026-03-18: **WP1 complete.** Created `PlantedFootDriftTracker` utility and wired into PlayMode `FootSlidingTests`. Walk-speed baseline: MaxDrift=0.31m, AvgDrift=0.08m at 0.91 m/s. Key finding: 0.04m threshold was unrealistic for a physics-driven character without IK foot pinning — actual stance-phase drift is ~0.08m average, ~0.31m peak. Threshold set to 0.35m as regression gate. Files added: `PlantedFootDriftTracker.cs`, `PlantedFootDriftTrackerTests.cs`, `FootSlidingTests.cs`. EditMode asmdef updated to reference PlayMode assembly for shared test utilities.
 - 2026-03-18: **WP2a complete.** Added `SprintForward_PlantedFeetDoNotSlide` to `FootSlidingTests`. Sprint baseline: MaxDrift=0.74m, AvgDrift=0.19m at PeakSpeed=3.22 m/s. Right foot is the primary sliding offender (0.74m vs left 0.21m). Drift scales roughly linearly with speed. Threshold set to 0.80m as regression gate. 2/2 FootSlidingTests green.
 - 2026-03-18: **WP2b complete.** Added the explicit diagnostic sweep `FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier`, which overrides `_moveForce` by reflection and logs a summary table for `[100, 125, 150, 175, 200, 250, 300]`. Fresh explicit verification is `1 passed, 0 failed, 1 total` via `PhysicsDrivenMovement.Tests.PlayMode.FootSlidingTests.SpeedSweep_MeasureDriftAtEachTier`, with the knee landing between `_moveForce = 175` (`MaxDrift=0.7744m`) and `_moveForce = 200` (`MaxDrift=1.1266m`) under the current 0.80m sprint gate. A separate method-level rerun of the normal walk/sprint gate stayed green (`2 passed, 0 failed, 2 total`) without invoking the explicit test.
+- 2026-03-18: **WP3a complete.** Analyzed the recorded walk baseline plus the sprint sweep and locked the honest full-envelope recommendation at `_moveForce = 150`, `_sprintSpeedMultiplier = 1.8`, `_stepFrequencyScale = 0.10`, `MaxStrideLength = 0.30`. `_moveForce = 175` remains a sprint-only candidate because it is only `0.0256m` under the sprint gate and lacks a matching walk-speed verification. The meaningful drift knee stays between 175 and 200, so WP3b can now lock the regression thresholds around the confirmed `150 / 1.8 / 0.10 / 0.30` baseline.

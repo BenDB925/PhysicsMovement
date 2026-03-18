@@ -251,6 +251,64 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Baseline={baseLR:F2} Restored={restoredLR:F2}.");
         }
 
+        [UnityTest]
+        public IEnumerator WhenLandingBounces_LandingAbsorptionDoesNotRestart()
+        {
+            yield return null;
+
+            float landingAbsorbDuration = (float)GetPrivateField(_legAnimator, "_landingAbsorbDuration");
+            float landingAbsorbBlendOutDuration = (float)GetPrivateField(_legAnimator, "_landingAbsorbBlendOutDuration");
+            int framesBeforeBounce = Mathf.Max(
+                1,
+                Mathf.CeilToInt(
+                    (landingAbsorbDuration + landingAbsorbBlendOutDuration - landingAbsorbBlendOutDuration * 0.25f)
+                    / Time.fixedDeltaTime));
+            int framesUntilOriginalWindowExpires = Mathf.CeilToInt(landingAbsorbBlendOutDuration / Time.fixedDeltaTime) + 2;
+
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
+            yield return new WaitForFixedUpdate();
+
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            yield return new WaitForFixedUpdate();
+
+            float initialTimer = (float)GetPrivateField(_legAnimator, "_landingAbsorbTimer");
+            Assert.That(initialTimer, Is.GreaterThan(0f),
+                "A clean Airborne -> Moving landing should start the landing absorption timer.");
+
+            for (int frame = 0; frame < framesBeforeBounce; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            float agedTimer = (float)GetPrivateField(_legAnimator, "_landingAbsorbTimer");
+            Assert.That(agedTimer, Is.GreaterThan(0f).And.LessThan(initialTimer),
+                "The landing absorption timer should still be active but already decaying before the bounce.");
+
+            _balance.SetGroundStateForTest(isGrounded: false, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Airborne);
+            yield return new WaitForFixedUpdate();
+
+            _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
+            _characterState.SetStateForTest(CharacterStateType.Moving);
+            yield return new WaitForFixedUpdate();
+
+            float postBounceTimer = (float)GetPrivateField(_legAnimator, "_landingAbsorbTimer");
+            Assert.That(postBounceTimer, Is.LessThan(agedTimer + Time.fixedDeltaTime * 1.5f),
+                $"A same-landing bounce must not restart the leg landing absorption timer. " +
+                $"Aged={agedTimer:F3}s PostBounce={postBounceTimer:F3}s.");
+
+            for (int frame = 0; frame < framesUntilOriginalWindowExpires; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            float resolvedTimer = (float)GetPrivateField(_legAnimator, "_landingAbsorbTimer");
+            Assert.That(resolvedTimer, Is.LessThan(0.0001f),
+                "The original landing absorption window should still expire without extra bounce time being added.");
+        }
+
         // ── Test 3: Gait phase does not advance while Airborne ───────────────
 
         /// <summary>

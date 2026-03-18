@@ -131,6 +131,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             bool wasAirborne1 = _rig.CharacterState.CurrentState == CharacterStateType.Airborne
                 || !_rig.BalanceController.IsGrounded;
+            bool observedUngrounded1 = !_rig.BalanceController.IsGrounded;
             bool landedAfter1 = false;
             int landing1SampleCount = 0;
             for (int frame = 0; frame < PostJumpSettleFrames; frame++)
@@ -148,7 +149,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     wasAirborne1 = true;
                 }
 
-                if (wasAirborne1 && _rig.BalanceController.IsGrounded)
+                if (!_rig.BalanceController.IsGrounded)
+                {
+                    observedUngrounded1 = true;
+                }
+
+                if (observedUngrounded1 && _rig.BalanceController.IsGrounded)
                 {
                     landedAfter1 = true;
                 }
@@ -208,6 +214,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             bool wasAirborne2 = _rig.CharacterState.CurrentState == CharacterStateType.Airborne
                 || !_rig.BalanceController.IsGrounded;
+            bool observedUngrounded2 = !_rig.BalanceController.IsGrounded;
             bool landedAfter2 = false;
             int landing2SampleCount = 0;
             for (int frame = 0; frame < FinalSettleFrames; frame++)
@@ -225,7 +232,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     wasAirborne2 = true;
                 }
 
-                if (wasAirborne2 && _rig.BalanceController.IsGrounded)
+                if (!_rig.BalanceController.IsGrounded)
+                {
+                    observedUngrounded2 = true;
+                }
+
+                if (observedUngrounded2 && _rig.BalanceController.IsGrounded)
                 {
                     landedAfter2 = true;
                 }
