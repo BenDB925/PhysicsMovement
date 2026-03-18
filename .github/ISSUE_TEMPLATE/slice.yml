@@ -1,0 +1,83 @@
+name: Slice
+description: Create one narrow AFK or HITL execution issue linked to exactly one parent issue and one local plan or child doc.
+title: "[Slice] "
+labels:
+  - "type:slice"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue should be small enough that a fresh agent can execute it from the issue plus the linked plan context alone.
+  - type: input
+    id: parent_issue
+    attributes:
+      label: Parent issue
+      description: Link the owning PRD, refactor RFC, or parent issue.
+      placeholder: "#123"
+    validations:
+      required: true
+  - type: dropdown
+    id: execution_mode
+    attributes:
+      label: Execution mode
+      description: Choose the mode, then add the matching GitHub label after opening the issue.
+      options:
+        - AFK
+        - HITL
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_target
+    attributes:
+      label: Acceptance target
+      description: Define the one narrow outcome this slice owns.
+      placeholder: |
+        - .copilot-instructions.md becomes a thin routing file.
+        - The linked child doc captures execution detail.
+        - The verification path is explicit.
+    validations:
+      required: true
+  - type: input
+    id: local_plan_path
+    attributes:
+      label: Local parent plan path
+      description: Path to the canonical parent plan.
+      placeholder: Plans/issue-driven-agent-workflow.plan.md
+    validations:
+      required: true
+  - type: input
+    id: owning_child_doc
+    attributes:
+      label: Owning child-doc path
+      description: Path to the child work-package doc that will hold the detailed execution record.
+      placeholder: Plans/issue-driven-agent-workflow/05-launch-assets.md
+    validations:
+      required: true
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blockers or dependencies
+      description: List the blockers, dependencies, or prerequisite issues.
+      placeholder: Note any user decisions, linked bugs, or repo prerequisites.
+  - type: textarea
+    id: definition_of_done
+    attributes:
+      label: Definition of done
+      description: State what must be true before this slice can close.
+      placeholder: |
+        - Required files are updated.
+        - Focused verification is recorded.
+        - The parent plan and issue summary are current.
+    validations:
+      required: true
+  - type: checkboxes
+    id: label_contract
+    attributes:
+      label: Label and scope contract
+      options:
+        - label: I will add exactly one mode label (`mode:afk` or `mode:hitl`) after opening the issue.
+          required: true
+        - label: I will add the relevant `area:*` label and either `status:ready` or `status:blocked`.
+          required: true
+        - label: This slice is narrow enough that it does not need multiple acceptance targets or multiple owning child docs.
+          required: true

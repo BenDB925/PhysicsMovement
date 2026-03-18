@@ -1,0 +1,75 @@
+name: Bug escalation
+description: Create a dedicated bug issue when a slice hits a reproduced symptom or exhausts its failed-hypothesis budget.
+title: "[Bug] "
+labels:
+  - "type:bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for one narrow unresolved symptom. Keep raw logs, attempt history, and telemetry in the linked bug sheet instead of pasting them into this issue body.
+  - type: input
+    id: parent_slice_issue
+    attributes:
+      label: Parent slice issue
+      description: Link the slice issue this bug blocks or spun out from.
+      placeholder: "#124"
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Visible symptom
+      description: Describe the reproduced symptom in player-visible or workflow-visible terms.
+      placeholder: The issue-writing skill keeps widening slice scope instead of producing one narrow acceptance target.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Best failing test or focused reproduction path
+      description: Name the strongest failing test, reproduction path, or command.
+      placeholder: Reproduce through the linked slice issue and child doc, or point to the failing verification path.
+    validations:
+      required: true
+  - type: textarea
+    id: failed_hypotheses
+    attributes:
+      label: Failed hypotheses so far
+      description: Record the concrete explanations or fix directions already ruled out.
+      placeholder: |
+        - Hypothesis 1: The missing link path was only a template wording problem.
+        - Hypothesis 2: The issue body alone could safely absorb the execution log.
+    validations:
+      required: true
+  - type: textarea
+    id: next_best_hypothesis
+    attributes:
+      label: Next best hypothesis
+      description: State the highest-value next investigation direction.
+      placeholder: The link contract is missing from the execution skill and needs explicit enforcement.
+    validations:
+      required: true
+  - type: input
+    id: local_bug_sheet
+    attributes:
+      label: Local bug-sheet path
+      description: Path to the local bug sheet that owns the detailed evidence log.
+      placeholder: Plans/issue-driven-agent-workflow/bugs/<bug-slug>.md
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Telemetry or artifact links
+      description: Link the minimum artifacts worth opening first.
+      placeholder: List the failing test artifact, bug sheet, or other focused evidence.
+  - type: checkboxes
+    id: escalation_contract
+    attributes:
+      label: Escalation contract
+      options:
+        - label: I will link this bug back to the parent slice and mark the slice blocked if it cannot proceed independently.
+          required: true
+        - label: I will keep the attempt log in the bug sheet so this issue stays a thin queue and handoff surface.
+          required: true

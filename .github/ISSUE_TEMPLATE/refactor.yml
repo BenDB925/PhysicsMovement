@@ -1,0 +1,72 @@
+name: Refactor RFC
+description: Create an architecture-first cleanup issue where the design or ownership discussion matters as much as the implementation.
+title: "[Refactor] "
+labels:
+  - "type:refactor"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the main risk is design drift, unclear ownership, or a multi-slice cleanup that needs an explicit architecture discussion first.
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: State the system or workflow outcome this refactor should produce.
+      placeholder: Establish a thin routing surface for issue-driven execution without duplicating repo docs.
+    validations:
+      required: true
+  - type: textarea
+    id: ownership_problem
+    attributes:
+      label: Current design or ownership problem
+      description: Explain what is currently ambiguous, duplicated, oversized, or incorrectly owned.
+      placeholder: The current flow spreads issue-writing rules across plan notes instead of durable workflow assets.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_target
+    attributes:
+      label: Acceptance target
+      description: Define what evidence will show the refactor is complete.
+      placeholder: |
+        - Repo-local workflow assets exist.
+        - The routing docs point to them.
+        - A fresh agent can follow the new structure without old chat context.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: List work that should stay out of scope.
+      placeholder: Do not fold unrelated runtime behavior changes into this refactor.
+    validations:
+      required: true
+  - type: input
+    id: local_parent_plan
+    attributes:
+      label: Local parent plan path
+      description: Path to the parent plan that will stay as the canonical resume surface.
+      placeholder: Plans/issue-driven-agent-workflow.plan.md
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_direction
+    attributes:
+      label: Proposed direction
+      description: Summarize the intended design or ownership shift.
+      placeholder: Move issue-shape rules into templates and skills while keeping long execution detail in Plans/.
+    validations:
+      required: true
+  - type: textarea
+    id: checkpoints
+    attributes:
+      label: Planned slices or decision checkpoints
+      description: List the follow-up slices, checkpoints, or review gates.
+      placeholder: |
+        - Add issue templates
+        - Add repo-local skills
+        - Run the first pilot slice
+    validations:
+      required: true

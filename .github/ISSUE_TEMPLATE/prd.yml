@@ -1,0 +1,70 @@
+name: PRD
+description: Create a parent issue for a feature, initiative, or pilot track that owns the goal, acceptance target, and linked local plan.
+title: "[PRD] "
+labels:
+  - "type:prd"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this issue thin. Put detailed execution notes, progress logs, and experiment history in the linked plan tree under `Plans/`.
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: State the repo-level or user-visible outcome this parent issue owns.
+      placeholder: Slim .copilot-instructions.md into a thin routing entry point.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_target
+    attributes:
+      label: Acceptance target
+      description: Define the finish line in concrete terms.
+      placeholder: |
+        - .copilot-instructions.md no longer duplicates architecture and phase history.
+        - The linked local plan stays the canonical resume surface.
+        - Follow-on slice issues can execute from bounded context only.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: List work this parent issue does not own.
+      placeholder: Do not widen this PRD into unrelated runtime cleanup or broad documentation rewrites.
+    validations:
+      required: true
+  - type: input
+    id: local_parent_plan
+    attributes:
+      label: Local parent plan path
+      description: Path to the canonical in-repo parent plan.
+      placeholder: Plans/issue-driven-agent-workflow.plan.md
+    validations:
+      required: true
+  - type: textarea
+    id: planned_slices
+    attributes:
+      label: Planned slices or placeholders
+      description: List the narrow slice issues you expect to spin out from this parent.
+      placeholder: |
+        - Slice 1: slim .copilot-instructions.md into a routing entry point
+        - Slice 2: trim AGENT_TEST_RUNNING.md to the repo-primary path
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies or blockers
+      description: Link related issues, docs, or approvals that gate this parent issue.
+      placeholder: Mention open blockers, related plans, or required user decisions.
+  - type: checkboxes
+    id: workflow_contract
+    attributes:
+      label: Workflow contract
+      options:
+        - label: I will keep detailed execution history in the linked plan tree instead of growing this issue body.
+          required: true
+        - label: I will add the relevant area label(s) and create slice issues instead of widening this parent indefinitely.
+          required: true
