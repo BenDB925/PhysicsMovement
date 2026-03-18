@@ -3,15 +3,18 @@
 ## Status
 - State: Active
 - Acceptance target: Stand up a workflow where durable reference docs stay in-repo, PRDs and execution slices live in GitHub issues, local plan files stay slim and resumable, stuck investigations split cleanly into bug issues plus bug sheets, and a fresh agent can execute one step from the plan and issue context alone.
-- Current next step: Draft and launch the follow-on `DEBUGGING.md` documentation-slimming slice under PRD #1, unless priorities change.
+- Current next step: Draft and launch the follow-on active-history migration slice for `AGENT_MOVEMENT_MIGRATION_PLAN.md`, unless priorities change.
 - Active blockers: None currently.
 
 ## Quick Resume
-- The documentation-slimming pilot now has live GitHub slice issues for `.copilot-instructions.md`, `AGENT_TEST_RUNNING.md`, `CODING_STANDARDS.md`, and `LOCOMOTION_BASELINES.md`, with child docs `06` through `09` serving as the canonical local resume surface.
-- `LOCOMOTION_BASELINES.md` is now a current-baseline index, while the detailed Chapter 1 and Chapter 8 baseline history lives in `Plans/archive/locomotion-baselines-history.md`.
-- The next useful restart point is a follow-on documentation-slimming slice for `DEBUGGING.md` under PRD #1 unless priorities change.
+- The documentation-slimming pilot now has live GitHub slice issues for `.copilot-instructions.md`, `AGENT_TEST_RUNNING.md`, `CODING_STANDARDS.md`, `LOCOMOTION_BASELINES.md`, and `DEBUGGING.md`, with child docs `06` through `10` serving as the canonical local resume surface.
+- `DEBUGGING.md` is now a compact playbook aligned with `.github/skills/debugging-workflow/SKILL.md`, keeping durable debugging rules and repo-specific patterns while moving repeated process prose out of the default read path.
+- The next useful restart point is a follow-on active-history migration slice for `AGENT_MOVEMENT_MIGRATION_PLAN.md` unless priorities change.
 
 ## Verified Artifacts
+- `https://github.com/BenDB925/PhysicsMovement/issues/7`: live slice issue for the `DEBUGGING.md` slimming pass.
+- `Plans/issue-driven-agent-workflow/10-debugging-slimming.md`: child doc for the fifth documentation-slimming slice, including the launched slice link and next restart point.
+- `DEBUGGING.md`: slimmed debugging playbook aligned with `.github/skills/debugging-workflow/SKILL.md` and the new context-budget target.
 - `https://github.com/BenDB925/PhysicsMovement/issues/6`: live slice issue for the `LOCOMOTION_BASELINES.md` slimming pass.
 - `Plans/issue-driven-agent-workflow/09-locomotion-baselines-slimming.md`: child doc for the fourth documentation-slimming slice, including the launched slice link and next restart point.
 - `LOCOMOTION_BASELINES.md`: slimmed current-baseline index that now keeps only the latest baseline reference, active known reds, and first-open artifact links.
@@ -50,16 +53,18 @@
 - [x] AGENT_TEST_RUNNING slimming slice: local execution record plus launched slice for the second documentation pass (`Plans/issue-driven-agent-workflow/07-agent-test-running-slimming.md`)
 - [x] CODING_STANDARDS slimming slice: local execution record plus launched slice for the third documentation pass (`Plans/issue-driven-agent-workflow/08-coding-standards-slimming.md`)
 - [x] LOCOMOTION_BASELINES slimming slice: local execution record plus launched slice for the fourth documentation pass (`Plans/issue-driven-agent-workflow/09-locomotion-baselines-slimming.md`)
+- [x] DEBUGGING slimming slice: local execution record plus launched slice for the fifth documentation pass (`Plans/issue-driven-agent-workflow/10-debugging-slimming.md`)
 
 ## Work packages
 1. [x] Define the issue model: PRD issue, local plan file, tracer-bullet slice issues, bug issues, refactor RFCs, AFK/HITL semantics, blocker links, and the stuck-issue split rules.
 2. [x] Add repo-local workflow customizations adapted to this Unity repo and its `Plans/` conventions, including separate issue-writing, debugging, and execution skills.
-3. [ ] Shrink the always-read document surface by converting heavy mandatory docs into thin entry points plus appendices or skills.
+3. [x] Shrink the always-read document surface by converting heavy mandatory docs into thin entry points plus appendices or skills.
 4. [x] Pilot the workflow on one real, bounded task to prove that a fresh agent can execute from the plan and issues without prior chat context.
 5. [ ] Migrate active execution history out of oversized parent plans and baseline docs into linked child docs or GitHub issues.
 6. [ ] Trim long-lived documentation back to durable reference only and document the steady-state workflow.
 
 ## Progress notes
+- 2026-03-18: Slimmed `DEBUGGING.md` into a compact debugging playbook, launched slice #7 under PRD #1, marked the documentation-slimming work package complete, and updated the next restart point to the `AGENT_MOVEMENT_MIGRATION_PLAN.md` archive-or-summarize slice.
 - 2026-03-18: Slimmed `LOCOMOTION_BASELINES.md` into a current baseline index, moved the detailed baseline history to `Plans/archive/locomotion-baselines-history.md`, launched slice #6 under PRD #1, and updated the local plan tree so `DEBUGGING.md` is now the leading documentation-slimming candidate.
 - 2026-03-18: Slimmed `CODING_STANDARDS.md` into a tighter rulebook, launched slice #4 under PRD #1, closed retry duplicate #5, and updated the local plan tree so `LOCOMOTION_BASELINES.md` is now the leading documentation-slimming candidate.
 - 2026-03-18: Slimmed `AGENT_TEST_RUNNING.md` to the repo-primary unattended test path, launched slice #3 under PRD #1, and updated the local plan tree so the next documentation-slimming candidate is now `CODING_STANDARDS.md`.

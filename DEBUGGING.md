@@ -1,211 +1,116 @@
 # DEBUGGING.md — PhysicsDrivenMovementDemo Debugging Playbook
 
-*Living document. Update this file whenever a debugging workflow, test pattern, logging tactic, or bug pattern proves useful more than once.*
+*Living document. Keep reusable debugging rules and repo patterns here. Put active attempt history in `Plans/` child docs or bug sheets.*
 
 ## Quick Load
 
-- If the game is visibly wrong and tests are green, write the failing outcome-based test first; if the failure mode is still unclear, add targeted logging before changing code.
-- Keep the nearest task plan or roadmap chapter as the parent record, and split into a bug sheet once hypotheses, raw logs, or telemetry start to sprawl.
-- Start with the broadest trustworthy outcome check, then add narrower outcome assertions only when they help localize the broken layer.
-- Isolate one subsystem at a time and fix the first layer where behavior becomes wrong rather than patching a downstream symptom.
+- If the game is visibly wrong and tests are green, write or strengthen the failing outcome-based test first.
+- If the symptom is not clear enough to test yet, add targeted logging before changing code.
+- Keep the nearest task plan or roadmap chapter current, and split to a bug sheet once hypotheses, raw logs, or telemetry start to sprawl.
+- Start with the player-visible outcome, then isolate one subsystem at a time until you find the first wrong layer.
 
 ## Read More When
 
-- Continue into the default debugging workflow when a regression needs a fresh end-to-end investigation path.
-- Continue into the repo pattern sections when the symptom looks like green-tests/wrong-game, mixed-slice contamination, or another recurring failure shape.
-- Continue into the checklists when you are adding new regression tests or instrumentation and need the keep/remove criteria.
+- Use `.github/skills/debugging-workflow/SKILL.md` for the full investigation loop and task-record expectations.
+- Use `AGENT_TEST_RUNNING.md` when you need unattended Unity test commands, result artifacts, or rerun guidance.
+- Use `Plans/README.md` when the investigation needs a child doc or bug sheet.
+- Use the repo patterns below when the symptom matches a known failure shape.
 
 ---
 
 ## Core Rules
 
-1. **If behavior is broken and tests are green, write the failing test first.** A bug that players can see should leave behind a test that can fail for the same reason.
-2. **Prefer outcome-based tests over implementation-based tests.** Test what the system does in the world, not whether an internal field, setter, or helper method changed.
-3. **If you cannot yet write the right failing test, add logging before guessing.** Unknown failure modes need evidence.
-4. **Start broad, then drill down.** First prove the whole feature is broken. Then add smaller outcome checks only if they help localize the fault.
-5. **Isolate one system at a time.** Disable or bypass subsystems temporarily to find the boundary where the bug appears.
-6. **Record what worked.** When a new trick or pattern pays off, add it here so the next debugging pass starts higher.
+1. Write or strengthen the failing test before code changes when the symptom is clear enough to test.
+2. Prefer outcome-based assertions over internal flags, state transitions, or method-call checks.
+3. Add only enough logging to separate the leading explanations, and sample every few fixed frames instead of every frame.
+4. Fix the first layer where behavior becomes wrong instead of patching a downstream symptom.
+5. Keep the stronger regression coverage after the fix and add reusable lessons back here.
 
----
+## Investigation Record
 
-## Investigation Record Rule
+- Treat the nearest task plan, roadmap chapter, or child doc as the canonical record.
+- If none exists and the work will involve repeated experiments, create one under `Plans/` or the user-specified folder.
+- Move the work into a linked bug sheet once raw logs, telemetry, or multiple hypotheses start cluttering the parent record.
+- Store failed hypotheses and artifact paths in the local record, not in long-lived root docs or GitHub issue bodies.
 
-- Treat the nearest task plan or chapter doc as the parent record for the investigation.
-- If no parent record exists and the debugging task is more than a one-shot check, create one under `Plans/` or the user-specified folder before the notes sprawl.
-- Keep the parent record current with the active symptom, current next step, blockers, and links to any child work-package docs or bug sheets.
-- Create a dedicated bug sheet once the investigation crosses the rollover thresholds in `Plans/README.md`, or whenever raw logs or telemetry would clutter the parent record.
-- Put failed hypotheses and experiment outcomes in the bug sheet so future agents do not retry them blindly.
+## Default Loop
 
----
+1. **Observe the symptom**
+	- Reproduce it in the fastest trustworthy path: focused test, scene, or both.
+	- Describe what the player would see, when it happens, and the conditions that trigger it.
+2. **Decide whether the symptom is clear enough to test**
+	- If yes, write the failing outcome-based test.
+	- If no, instrument the run until the failure is specific enough to test.
+3. **Write the strongest failing test you can**
+	- Start with the broad player-visible outcome.
+	- Add one or two narrower outcome assertions only when they help localize the broken layer.
+4. **Isolate the layer**
+	- Disable or bypass one suspect subsystem at a time.
+	- Identify the first boundary where behavior diverges.
+5. **Fix, verify, capture**
+	- Fix the narrowest correct layer, rerun the focused regression slice, then widen only if the blast radius justifies it.
+	- Keep the stronger test and add any reusable pattern back here.
 
-## Default Debugging Workflow
+## Keep / Remove Checks
 
-### Step 1 - Observe the symptom
-Before changing code:
-- Reproduce the issue in the fastest trustworthy path: scene, focused test, or both.
-- Describe the visible behavior precisely: what is wrong, when it happens, and what the player would notice.
-- If the issue looks like tuning rather than logic, try live Inspector changes first. If tuning fixes it, update the defaults in code and note the new baseline here.
+Keep a new test when it:
 
-### Step 2 - Decide whether you can already test it
-- **If yes:** write or strengthen a failing test before changing code.
-- **If no:** add targeted logging or instrumentation until the failure is clear enough to test.
+- would have failed on the real bug
+- measures displacement, stability, timing, contact, posture, or another external result
+- runs long enough for the behavior to emerge
+- uses thresholds tight enough to catch regressions without becoming flaky
 
-### Step 3 - Write the right failing test
-- Start with the broadest trustworthy outcome assertion you can support.
-- Prefer end-to-end or full-loop tests when multiple runtime systems interact.
-- If the broad test fails but does not localize the bug, add one or two narrower **outcome** assertions beneath it.
-- Avoid tests that only assert internal intent, such as target rotations, flags, or setter calls, unless there is no measurable external effect.
+Avoid or remove a test when it only proves:
 
-Examples:
-- **Strong:** "character travels at least X meters in 10 seconds"
-- **Stronger diagnostic pair:** "character moves forward" plus "lower leg clears Y meters off the floor at least once"
-- **Weak:** "LegAnimator wrote targetRotation Z"
-- **Strong:** "character regains upright pose within N frames"
-- **Weak:** "CharacterState entered GettingUp"
+- an internal flag flipped
+- a state transition happened
+- a setter, helper, or torque assignment ran
+- an implementation detail changed without showing a player-visible effect
 
-### Step 4 - Add logging when the cause is unclear
-- Log real runtime quantities that separate the leading hypotheses.
-- Include frame count, time, current state, or phase in each line.
-- Sample every 5-10 FixedUpdate frames, not every frame.
-- Compare a good run to a bad run when possible.
-- Use gated logging (`DEBUG_*`, `[SerializeField] bool`, temporary defines) so it can be disabled cleanly after the investigation.
+Keep logging when it:
 
-### Step 5 - Isolate the layer
-- Temporarily disable or bypass one suspect subsystem at a time.
-- Ask which layer should absorb the fix: input, state machine, balance, gait, collision, environment data, or tests.
-- If the issue disappears only when a neighboring system is removed, the bug is likely at the boundary between them.
+- compares two to four quantities that separate the leading explanations
+- includes frame or time plus state or phase
+- can be gated cleanly behind a debug flag or define
 
-### Step 6 - Fix the narrowest correct layer
-- Fix the first layer where the behavior becomes wrong.
-- Do not patch symptoms downstream if the source is clearly upstream.
-- If the fix is "just a better default," keep the stronger regression test anyway.
+Remove or disable logging when:
 
-### Step 7 - Verify and capture the learning
-- Run focused verification first, then widen coverage if the change crosses system boundaries.
-- Keep outcome-based assertions in place after the fix; they are the long-term protection.
-- When the investigation reveals a reusable tactic, threshold, or failure pattern, update this document and any relevant instructions.
-
----
-
-## Test Design Checklist
-
-Before keeping a new test, ask:
-
-- [ ] Would this test have failed on the real bug I just saw?
-- [ ] Am I asserting an outcome in world space or over time, not just an implementation detail?
-- [ ] If multiple systems interact here, am I exercising the real stack rather than a convenient seam?
-- [ ] Have I simulated enough frames or seconds for the behavior to appear?
-- [ ] Is the threshold tight enough to catch regressions but loose enough to avoid flakiness?
-- [ ] If I added a narrower diagnostic assertion, is there still a broader whole-system assertion above it?
-
----
-
-## Logging Checklist
-
-Before adding logs, ask:
-
-- [ ] Which competing explanations am I trying to separate?
-- [ ] Which 2-4 numbers will actually distinguish them?
-- [ ] Am I logging infrequently enough to keep the output readable?
-- [ ] Can I compare against a known-good run?
-- [ ] Is the logging gated so it can stay in the codebase safely or be removed cleanly?
-
----
+- it no longer changes the decision
+- it prints every frame without separating hypotheses
+- the same evidence is already covered by the regression test or task record
 
 ## Current Repo Patterns
 
-### "Tests pass but the game still looks wrong"
-**Most likely issue:** the tests are proving that inputs were applied, not that the feature actually worked.
+### Tests pass but the game still looks wrong
+- Most likely issue: the test proves intent or input application, not the gameplay outcome.
+- Best next step: add the player-visible outcome assertion first, then one lower-level outcome check only if you need localization.
 
-**Fix:** add an outcome-based test at the level the player would notice first, then add one lower-level outcome assertion only if you need localization.
+### Whole-system test fails but does not diagnose enough
+- Most likely issue: the suite needs a smaller outcome discriminator, not a pivot to internal-field assertions.
+- Best next step: keep the broad check and add one or two outcome assertions one layer down, such as distance plus limb clearance or recovery time plus tilt.
 
-### "Whole-system test is too broad to diagnose"
-**Best next step:** keep the broad outcome assertion, then add one or two smaller outcome checks one layer down.
+### You cannot tell what is wrong well enough to write the test
+- Most likely issue: the failure mode is still ambiguous.
+- Best next step: log position, height, tilt, velocity, grounded or contact state, authored state, or support progress until one hypothesis clearly wins.
 
-Examples:
-- movement distance + limb clearance
-- recovery time + hips tilt
-- jump apex + grounded transition
+### Landing smoothing never engages after a jump
+- Most likely issue: authored airborne state and raw foot-ground edges diverge across the landing frames.
+- Best next step: write a seam test around `IsGrounded` returning while the authored state still reports `Airborne`, then compare the exact landing-frame transitions before retuning damping.
 
-### "I cannot tell what is wrong well enough to write the test"
-**Best next step:** add targeted logging before changing code.
+### Recovery stays pinned longer than the visible disturbance
+- Most likely issue: the runtime keeps re-entering the same recovery and resetting the timer from near-identical severity samples.
+- Best next step: add a contract test around the recovery-state container and require a stronger same-situation signal before refreshing the active window.
 
-Useful physics-style signals:
-- position / height
-- tilt / angle error
-- velocity / angular velocity
-- grounded or contact state
-- state machine state
-- forces / torques / drive strength
-- progress through a course or task
+### Step-up planning says yes, but the body still stalls
+- Most likely issue: sensing and planning are no longer the problem; execution or support transfer is.
+- Best next step: in the same failing outcome test, compare planned touchdown progress against the best grounded support height actually achieved before changing planner carry again.
 
-### "Landing smoothing logic never seems to engage on a jump landing"
-**Most likely issue:** the authored jump/state machine can classify a recent launch as `Airborne` before raw foot-ground sensors fully release or reacquire, so touchdown logic tied only to raw grounded edges never opens at the moment you actually need it.
+### A feature only works when another system is disabled
+- Most likely issue: the bug is at the integration boundary.
+- Best next step: keep the real stack active in the regression test and diagnose the ownership or ordering conflict.
 
-**Best next step:** add a direct seam test for "grounded returns while state is still Airborne" and compare authored state against raw `IsGrounded` on the exact landing frames before retuning lean or damping multipliers.
+### A PlayMode fixture passes alone but degrades in a larger slice
+- Most likely issue: leaked global physics state or scene bleed from a prior fixture.
+- Best next step: restore global physics settings in setup or teardown and move prefab-backed fixtures into a fresh runtime-created active scene before instantiation.
 
-### "Recovery stays pinned far longer than the visible disturbance"
-**Most likely issue:** the runtime is re-entering the same recovery situation every frame and resetting its full timer from near-identical severity samples.
-
-**Best next step:** add a small contract test around the recovery-state container and require a stronger same-situation signal before refreshing the active recovery window.
-
-### "Step-up planning says yes, but the body still stalls on the riser"
-**Most likely issue:** the bug has moved past sensing and basic planner carry into execution or support transfer.
-
-**Useful discriminator:** in the same failing outcome test, log both the best planned touchdown and the best real support result.
-
-Compare:
-- planned landing progress versus the plateau-entry distance
-- planned landing height error versus the target step or landing height
-- maximum grounded support height actually achieved by either foot
-
-If planned landing clears the plateau entry but grounded support height stays pinned on the lower riser, stop changing obstruction sensing and planner carry first. The remaining miss is in how execution or support transfer turns that touchdown plan into real raised contact.
-
-### "A feature only works when another system is disabled"
-**Most likely issue:** the bug lives at the integration boundary, not fully inside either system in isolation.
-
-**Fix:** keep the real stack active in the regression test and diagnose the ownership or ordering conflict.
-
-### "A PlayMode fixture passes alone but degrades inside a multi-fixture slice"
-**Most likely issue:** a previous test leaked global Unity physics state such as the layer-collision matrix, fixed timestep, or solver settings, or left the next prefab-backed fixture instantiating into an authored scene that it did not expect.
-
-**Fix:** save and restore global physics settings in `SetUp`/`TearDown`, and for prefab-backed PlayMode fixtures switch the active test world to a fresh runtime scene via `SceneManager.CreateScene(...)` plus `SceneManager.SetActiveScene(...)` before instantiating the rig. Do not use `EditorSceneManager.NewScene(...)` during PlayMode setup. If the remaining red is a locomotion outcome assertion, prefer hips-relative limb lead over raw world-position crossing so whole-body translation does not dominate the metric.
-
----
-
-## Repo-Specific Examples
-
-### Walking / locomotion
-Prefer:
-- distance travelled in a time window
-- whether the character stays upright while moving
-- whether limbs clear a minimum threshold during gait
-
-Avoid as the only assertion:
-- exact `targetRotation` values
-- exact phase accumulator values
-- whether a movement method was called
-
-### Recovery / balance
-Prefer:
-- upright recovery within N frames
-- hips or torso tilt below a threshold after stabilization
-- standing height or grounded state regained
-
-Avoid as the only assertion:
-- torque was applied
-- a state transition fired
-
-### Jump / airborne behavior
-Prefer:
-- leaves the ground
-- reaches an apex
-- returns to grounded state in a stable posture
-
-Avoid as the only assertion:
-- jump input flag consumed
-- impulse method invoked
-
----
-
-*This is a living document. When a clever debugging approach, log shape, or stronger regression test proves itself, add it here.*
+*Living document. Add new reusable tactics only after they prove themselves more than once.*
