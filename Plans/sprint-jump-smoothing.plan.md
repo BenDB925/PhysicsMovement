@@ -1,18 +1,20 @@
 # Sprint-Jump Smoothing Plan
 
 ## Status
-- State: **Green** — all 6 `SprintJumpStabilityTests` pass, regression gate (48/48 changes-related) green
-- Acceptance target: Make repeated sprint -> jump -> land -> continue sprinting feel smooth enough for frequent player use, with `SprintJump_SingleJump_DoesNotFaceplant` and `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` green, the first `~0.5 s` after landing feeling more planted than wobbly, and no new regressions in the nearby sprint, jump, and recovery suites.
-- Current next step: Live-play validation to confirm the landing feel meets the user's "slight wobbles OK but doesn't slow you down" bar.
+- State: In Progress
+- Acceptance target: Extend the now-stable sprint jump into a more nimble but still grounded jump, with moderate extra reach, standing and sprint gap-crossing coverage, slight midair WASD correction, readable wind-up and airborne arm balance, stable landings, and no new regressions in the nearby sprint, jump, and recovery suites.
+- Current next step: Start Work Package 7 via `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md`: build the reusable gap harness first, lock the exact standing and sprint target widths, then work standing reach, sprint reach, and bounded air control as separate small slices.
 - Active blockers: None — acceptance tests are green.
 
 ## Quick Resume
-- Latest focused acceptance artifact is green: `PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests` reported `6 passed, 0 failed, 6 total` at `2026-03-18T19:00`, with `SingleJump PeakTiltAfterJump1=20.0` and `TwoJumps PeakTiltAfterJump1=29.6, PeakTiltAfterJump2=33.8, EverFallen=False`.
-- Root cause identified and fixed: forward movement force (300N * sprintMultiplier) continued applying to the hips during the airborne phase of intentional jumps, tipping the character forward because the feet had no ground traction. Combined with momentum surrender (65° + 3 rad/s firing within the landing impact), the character collapsed to 94°+ consistently.
-- Fix summary: (1) suppress forward movement force while airborne during intentional jumps, (2) ramp force back up over the first half of the post-landing grace window, (3) suppress BalanceController's momentum/extreme-angle surrender during the jump landing window, (4) boost PD gains 3x during the jump recovery window.
+- The sprint-jump stability baseline remains green: `PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests` reported `6 passed, 0 failed, 6 total`, with the earlier airborne-force faceplant fixed and repeated jump landings staying upright.
+- New user-requested follow-up is a bounded nimble-jump slice: moderate extra reach, one standing gap test plus one sprint-gap test, slight midair WASD correction, stronger airborne arm balance, and landings that stay grounded rather than floaty or unstable.
+- Current code has no translational midair control during intentional jumps: `PlayerMovement.ApplyMovementForces()` zeros move force while `_recentJumpAirborne && !_balance.IsGrounded`, so the new slice should add only small capped air control instead of full arcade steering.
 - The user-confirmed tuning surface includes the existing dirty prefab change `Assets/Prefabs/PlayerRagdoll_Skinned.prefab: _jumpForce = 175`; do not treat that as noise or silently revert it.
 
 ## Verified Artifacts
+- `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md`: active child doc for the new gap-crossing, air-control, and jump-feel extension.
+- `Assets/Scripts/Character/PlayerMovement.cs`: current jump launch and airborne-force ownership, including the existing no-midair-translation rule for intentional jumps.
 - `Plans/sprint-jump-smoothing/03-post-touchdown-stability.md`: active child doc for the remaining landing-feel and repeated-action follow-up.
 - `Plans/sprint-jump-smoothing/bugs/fallen-getting-up-state-loop.md`: active bug sheet for the reported player-state churn during stand-up attempts after landing.
 - `Plans/archive/sprint-jump-stability-tests.md`: archived baseline test plan and earlier failure metrics.
@@ -28,6 +30,7 @@
 ## Child Docs
 - [ ] `Plans/sprint-jump-smoothing/03-post-touchdown-stability.md`: active follow-up slice for landing feel, repeated-jump robustness, and the next execution order.
 - [ ] `Plans/sprint-jump-smoothing/bugs/fallen-getting-up-state-loop.md`: focused investigation record for the reported `GettingUp -> Fallen` churn after landing recovery attempts.
+- [ ] `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md`: active slice for moderate reach increase, standing/sprint gap outcome tests, slight air control, and airborne readability.
 
 ## Primary Touchpoints
 - `Assets/Scripts/Character/BalanceController.cs`: landing absorption, composite pelvis tilt, COM stabilization, upright damping, and surrender thresholds.
@@ -139,6 +142,10 @@ Result: All 6 `SprintJumpStabilityTests` pass (`6 passed, 0 failed`). SingleJump
    - Focused required gate: `SprintJumpStabilityTests`, `JumpTests`, `SprintBalanceOutcomeTests`, `SprintLeanOutcomeTests`.
    - Nearby confidence slice: `HardSnapRecoveryTests`, `SpinRecoveryTests`, and `MovementQualityTests`.
    - Treat the long-lived `MovementQualityTests` reds as baseline, but stop if the sprint-jump fix creates any new red or obvious metric regression in the other suites.
+7. [ ] Add gap-crossing and nimble-jump follow-up.
+   - Prove the capability with one standing short-gap outcome test and one sprint-gap outcome test.
+   - Add slight intentional-jump air control so WASD can trim the landing without full midair steering.
+   - Preserve the grounded wind-up, airborne, and landing feel while keeping the nearby jump/sprint/recovery gate green.
 
 ## Recommended Implementation Order
 1. Work the linked `Fallen`/`GettingUp` bug sheet to explain the later post-landing collapse on the current workspace state.
@@ -167,3 +174,5 @@ Result: All 6 `SprintJumpStabilityTests` pass (`6 passed, 0 failed`). SingleJump
 - 2026-03-18: Corrected `SprintJumpStabilityTests` so landing windows only start after a real raw-grounded `false -> true` touchdown, then guarded `BalanceController` against same-landing landing-absorb rearm with direct coverage in `BalanceControllerTests`. With the corrected harness, the latest known sprint-jump artifact is back to `3 passed, 2 failed, 5 total`, but both acceptance reds are now landing #1 failures again (`PeakTiltAfterJump1=48.2`, `Landing #1 peak tilt 97.8`) instead of the earlier jump-2-only interpretation.
 - 2026-03-18: Current handoff point: `LegAnimator` now mirrors the landing-bounce no-rearm guard and `AirborneSpringTests` contains new direct coverage, but the first validation run surfaced a compile error in the new NUnit assertion instead of a real PlayMode result (`Logs/test_playmode_20260318_174020.log`). The assertion has been corrected locally; next agent should rerun `PhysicsDrivenMovement.Tests.PlayMode.AirborneSpringTests.WhenLandingBounces_LandingAbsorptionDoesNotRestart`, then rerun `PhysicsDrivenMovement.Tests.PlayMode.SprintJumpStabilityTests` before choosing the next owner.
 - 2026-03-18: **Root cause identified and fixed.** Fresh diagnostic pass found the true cause was forward movement force (300N * sprintMultiplier) continuing to apply to the hips during jump airborne — with no ground traction the hips tip forward. Combined with BalanceController momentum surrender (65° + 3 rad/s), the character collapsed to 94°+. Isolated testing confirmed the faceplant was deterministic and reproducible in any test order (prior "warm physics" results were misleading). Fix: `PlayerMovement` now suppresses movement force during airborne jump phases and ramps it back during the first half of a new `_jumpPostLandingGraceDuration=0.5s` window; `BalanceController` suppresses momentum/extreme-angle surrender while `IsRecentJumpAirborne` is true (extended by the post-landing grace) and boosts PD gains 3x during the window; `LocomotionDirector` zeros sprint lean during jump airborne and boosts touchdown upright strength. Result: `6 passed, 0 failed, 6 total` in `SprintJumpStabilityTests` (SingleJump=20.0°, TwoJumps=29.6°/33.8°, EverFallen=False). Wider regression gate: `48 passed, 1 failed, 52 total` — the single failure (`JumpTests.SprintJump_WhenLaunchCommits_EntersAirborneWithinShortBudget`) is a pre-existing test-order-dependent flaky test that passes in isolation.
+- 2026-03-20: User requested a new bounded follow-up: the jump should feel a bit more nimble, prove both standing and sprint gap crossing, allow slight midair WASD correction, and give the arms more believable airborne balance without reopening the earlier landing-collapse fix. Current code check confirmed intentional jumps still have no translational midair control because `PlayerMovement.ApplyMovementForces()` zeros airborne move force while `_recentJumpAirborne && !_balance.IsGrounded`, so Work Package 7 should add only small capped air authority rather than full steering.
+- 2026-03-20: Re-reviewed Work Package 7 against the live runtime and test tree, then tightened `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` into smaller one-shot slices: harness scaffold, standing-gap acceptance, sprint-gap acceptance, standing reach, sprint reach, bounded air control, optional in-air yaw cap, airborne readability, and the final regression gate.
