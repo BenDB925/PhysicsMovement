@@ -116,3 +116,4 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
   3. Air-control acceptance was vague — locked at ≤ 15% of ground force, opposite-direction halved, with a concrete reversal-clamp negative test.
   4. No height ceiling existed — added ≤ 20% apex increase constraint to protect grounded feel.
   5. Slices 1-2-3 merged into one "harness + red tests" slice (too thin individually); old Slice 6 split into "force path" + "reversal clamp" (too fat for one pass). Final count: 8 slices, all single-agent-session sized.
+- 2026-03-20: Slice 1 implemented with JumpGapOutcomeTests (locked gap widths, platform harness helpers, red standing/sprint outcome tests).
