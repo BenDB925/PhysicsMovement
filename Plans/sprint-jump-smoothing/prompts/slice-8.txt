@@ -36,6 +36,8 @@ Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress n
 Format: "YYYY-MM-DD Slice N: [your note]"
 These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
 RULES:
+- Commit incrementally: after each meaningful change (test fix, tuning pass, etc) do a git add -A && git commit -m 'wip: [brief description]'. Do not wait until the end — if the session is killed, partial work must be recoverable.
+- RULES:
 - Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
 - Use --yolo flag behaviour: make changes directly without asking for confirmation.
 - When all green, git commit: git add -A && git commit -m "test: add height-budget regression gate and confirm full suite green (slice 8)"
@@ -44,5 +46,6 @@ RULES:
   - If all green: {"slice": 8, "status": "pass", "notes": "full suite green, X tests passing"}
   - If any failures: {"slice": 8, "status": "fail", "notes": "list of failing tests and counts"}
 - Then stop.
+
 
 

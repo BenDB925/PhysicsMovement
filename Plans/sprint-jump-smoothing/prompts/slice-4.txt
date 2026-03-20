@@ -35,6 +35,8 @@ Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress n
 Format: "YYYY-MM-DD Slice N: [your note]"
 These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
 RULES:
+- Commit incrementally: after each meaningful change (test fix, tuning pass, etc) do a git add -A && git commit -m 'wip: [brief description]'. Do not wait until the end — if the session is killed, partial work must be recoverable.
+- RULES:
 - Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
 - Use --yolo flag behaviour: make changes directly without asking for confirmation.
 - When done, git commit: git add -A && git commit -m "feat: add bounded midair WASD correction force (slice 4)"
@@ -43,5 +45,6 @@ RULES:
   - If success: {"slice": 4, "status": "pass", "notes": "brief summary"}
   - If blocked/failed: {"slice": 4, "status": "fail", "notes": "exact description of the problem"}
 - Then stop.
+
 
 

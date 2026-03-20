@@ -1,0 +1,79 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+- Assets/Scripts/Character/PlayerMovement.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+CONTEXT (read carefully before touching anything):
+Slice 3 first attempt got the sprint jump physically clearing 3.67m over the 3.60m gap, but the
+test still fails with LandedOnFarPlatform=false. The character IS crossing the gap, but the
+landing detection is not registering within the SprintTouchdownBudgetFrames=220 window.
+
+ROOT CAUSE ANALYSIS:
+The landing check in CaptureJumpGapOutcome() requires:
+  1. BalanceController.IsGrounded transitions from false → true (landing detected)
+  2. THEN IsTouchdownOnPlatform() does a downward raycast from hips position to confirm it hit the far platform
+
+Two problems likely combine here:
+- At sprint speed the character hits the near edge of the far platform at a shallow angle.
+  The brief grounded pulse may fire when hips are still over the gap (not yet over the platform),
+  so the raycast misses the far platform and LandedOnFarPlatform stays false.
+- SprintTouchdownBudgetFrames=220 may be too tight for the sprint ramp + airtime + edge-skimming.
+  The agent logged LandingFrame=-1 which means grounded never triggered at all within the window.
+
+YOUR TASK: Fix the sprint gap test to correctly detect landing on the far platform.
+
+This is a TWO-PART fix:
+
+PART A — Test fix (JumpGapOutcomeTests.cs):
+The test should detect landing more robustly. Options (pick the one that best fits):
+  1. In IsTouchdownOnPlatform, check a small horizontal range around hips position (not just directly
+     below) — if the character is on the platform edge, the raycast might miss by a few cm.
+  2. Increase SprintTouchdownBudgetFrames from 220 to something like 280-300. The character IS
+     clearing the gap, so this is a timing budget issue not a reach issue. Do NOT raise it above 350.
+  3. In CaptureJumpGapOutcome, add a secondary grounded-on-platform check: if the first grounded
+     pulse registers outside the far platform bounds, keep looking until the budget runs out.
+
+PART B — Verify reach is still adequate:
+After the test fix, the sprint gap outcome must show MaxFarEdgeProgress >= 3.60m AND
+LandedOnFarPlatform=true AND LandingFrame within budget AND MaxConsecutiveFallenFrames <= 20.
+If after fixing the detection the character is landing on the edge but tumbling, a small carry
+tuning adjustment is acceptable to make the landing more central on the platform.
+
+DO NOT:
+- Change SprintGapMeters (3.6f) — this is locked
+- Change the spawn positions or platform geometry
+- Touch StandingShortGapMeters or the standing gap test
+- Regress the apex budget tests or SprintJumpStabilityTests
+
+APPROACH:
+1. Read CaptureJumpGapOutcome() and IsTouchdownOnPlatform() carefully — understand exactly why
+   LandingFrame=-1 in the failing run.
+2. Fix the detection logic first (Part A).
+3. Run the sprint gap test. If MaxFarEdgeProgress >= 3.60 and LandedOnFarPlatform becomes true,
+   the slice is done.
+4. If landing is still fragile (fallen window fails), do minimal carry tuning.
+5. Run the full test suite with filter: !LapOptimizer_ComprehensiveFullPrefab
+   Use: powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended
+   Results at: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice 3 retry: [your note]"
+
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "fix: correct sprint gap landing detection and green sprint reach (slice 3 retry)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Slice 4 — air-control force path"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 3, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 3, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
