@@ -53,6 +53,12 @@ namespace PhysicsDrivenMovement.Character
                  "Jump is only allowed from Standing or Moving state while grounded.")]
         private float _jumpForce = 100f;
 
+        [SerializeField, Range(0f, 3000f)]
+        [Tooltip("Small input-directed horizontal launch impulse added on jump fire. " +
+                 "Uses current input magnitude instead of sprint speed so standing jumps gain reach " +
+                 "without turning airborne frames into full locomotion.")]
+        private float _jumpLaunchHorizontalImpulse = 2600f;
+
         [Header("Jump Wind-Up (C8.5)")]
         [SerializeField, Range(0f, 0.5f)]
         [Tooltip("Duration of the crouch wind-up before the jump impulse fires. " +
@@ -94,7 +100,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Seconds after landing (IsGrounded becomes true) during which " +
              "IsRecentJumpAirborne stays true. Gives downstream systems a window " +
              "to suppress surrender / boost upright torque through the landing impact.")]
-        private float _jumpPostLandingGraceDuration = 0.5f;
+        private float _jumpPostLandingGraceDuration = 0.65f;
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
@@ -700,7 +706,21 @@ namespace PhysicsDrivenMovement.Character
 
         private void FireJumpLaunch(string telemetryReason)
         {
-            _rb.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse);
+            // STEP 1: Preserve the grounded, short-leg read by keeping the vertical launch
+            //         force stable and adding any extra standing reach as a small input-shaped
+            //         horizontal impulse instead of inflating apex height.
+            Vector3 launchImpulse = Vector3.up * _jumpForce;
+            if (TryGetMoveWorldDirection(_currentMoveInput, out Vector3 launchDirection))
+            {
+                float launchInputMagnitude = Mathf.Clamp01(_currentMoveInput.magnitude);
+                // STEP 1a: Keep slice 2 focused on standing reach only. Sprint-specific carry tuning
+                //          belongs to the next slice, so full sprint ramp should not inherit any
+                //          extra horizontal launch shove from the standing-reach mechanism.
+                float sprintLaunchBonusMultiplier = Mathf.Lerp(1f, 0f, _sprintNormalized);
+                launchImpulse += launchDirection * (_jumpLaunchHorizontalImpulse * launchInputMagnitude * sprintLaunchBonusMultiplier);
+            }
+
+            _rb.AddForce(launchImpulse, ForceMode.Impulse);
             _recentJumpAirborne = true;
             BeginJumpAirborneStateGrace();
             EmitJumpTelemetry(_activeJumpAttemptId, JumpTelemetryEventType.LaunchFired, telemetryReason);
@@ -813,24 +833,16 @@ namespace PhysicsDrivenMovement.Character
             float activeMaxSpeed = _maxSpeed * sprintMovementMultiplier;
             float activeMoveForce = _moveForce * sprintMovementMultiplier;
 
-            // Suppress movement force during intentional jumps when the character is
-            // not grounded, and reduce it during the early post-landing window.
-            // The hips force tips the character forward when the feet have no ground
-            // traction. The character retains existing horizontal momentum from the
-            // sprint — only the ADDITIONAL push is removed or attenuated.
-            if (_recentJumpAirborne && _balance != null)
+            // During the early post-landing window, ramp ground drive back up smoothly
+            // so the jump recovery stays stable even after a slightly longer launch reach.
+            if (_recentJumpAirborne && _balance != null && _jumpPostLandingGraceTimer > 0f)
             {
-                if (!_balance.IsGrounded)
-                {
-                    activeMoveForce = 0f;
-                }
-                else if (_jumpPostLandingGraceTimer > _jumpPostLandingGraceDuration * 0.5f)
-                {
-                    // First half of the post-landing window: ramp force back up smoothly.
-                    float landingProgress = 1f - (_jumpPostLandingGraceTimer - _jumpPostLandingGraceDuration * 0.5f)
-                                                  / (_jumpPostLandingGraceDuration * 0.5f);
-                    activeMoveForce *= Mathf.Clamp01(landingProgress);
-                }
+                // STEP 3a: Reintroduce ground drive across the full landing-grace window
+                //          instead of snapping back to full push halfway through recovery.
+                //          Slice 2 only needs launch reach; it should not re-accelerate the
+                //          ragdoll into a faceplant on the first grounded frames.
+                float landingProgress = 1f - (_jumpPostLandingGraceTimer / Mathf.Max(0.0001f, _jumpPostLandingGraceDuration));
+                activeMoveForce *= Mathf.Clamp01(landingProgress);
             }
 
             if (horizontalVelocity.magnitude < activeMaxSpeed)
@@ -968,9 +980,17 @@ namespace PhysicsDrivenMovement.Character
 
         private bool ShouldSuppressLocomotion()
         {
-            if (_balance != null && _balance.IsFallen)
+            if (_balance != null)
             {
-                return true;
+                if (_balance.IsFallen)
+                {
+                    return true;
+                }
+
+                if (_recentJumpAirborne && !_balance.IsGrounded)
+                {
+                    return true;
+                }
             }
 
             if (_characterState == null)

@@ -74,7 +74,7 @@ namespace PhysicsDrivenMovement.Character
                  "recovery window (while IsRecentJumpAirborne is true and grounded). " +
                  "Temporarily stiffens the PD controller to resist the forward angular " +
                  "impulse from landing at sprint speed.")]
-        private float _jumpLandingGainBoost = 3f;
+        private float _jumpLandingGainBoost = 5f;
 
         [Header("Snap Recovery")]
         [SerializeField, Range(0.3f, 1f)]

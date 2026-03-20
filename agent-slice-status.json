@@ -1,0 +1,1 @@
+{"slice": 2, "status": "pass", "notes": "Fixed the gap harness spawn geometry so the standing jump starts on the launch lip, added the standing apex budget check, tuned standing-only horizontal launch reach, and restored sprint landing stability while leaving the sprint gap test red for slice 3."}

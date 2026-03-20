@@ -4,8 +4,8 @@
 Make the jump feel a bit more nimble without losing the grounded look that the earlier sprint-jump work protected. Prove the new capability with one standing short-gap outcome test and one sprint-gap outcome test, add slight midair WASD correction, and keep the landing stable enough that the character still feels like he has little legs rather than superhero hang time.
 
 ## Current status
-- State: Ready
-- Current next step: Slice 2 retry — fix spawn geometry and green standing gap test
+- State: In progress
+- Current next step: Slice 3 — sprint reach tuning
 - Blockers: None.
 
 ## Decisions
@@ -117,9 +117,11 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
   4. No height ceiling existed — added ≤ 20% apex increase constraint to protect grounded feel.
   5. Slices 1-2-3 merged into one "harness + red tests" slice (too thin individually); old Slice 6 split into "force path" + "reversal clamp" (too fat for one pass). Final count: 8 slices, all single-agent-session sized.
 - 2026-03-20: Slice 1 implemented with JumpGapOutcomeTests (locked gap widths, platform harness helpers, red standing/sprint outcome tests).
+- 2026-03-20: Slice 2 retry fixed the scenario geometry so the hips spawn on the launch platform lip instead of metres behind it, added the standing jump apex-height budget check, and tuned standing-only horizontal launch reach without leaking that shove into full sprint jumps.
 
 ## Agent log
 - 2026-03-20 Slice 1: Committed gap harness and two red tests (e767276)
 - 2026-03-20 Slice 2: First attempt failed — character spawned 10m from launch edge, progress 0.00m. Retry queued with spawn geometry fix.
+- 2026-03-20 Slice 2 retry: Spawn geometry corrected; standing gap + apex budget + sprint landing stability slice now green, while sprint gap remains intentionally red for Slice 3.
 
 

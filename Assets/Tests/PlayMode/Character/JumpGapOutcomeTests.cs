@@ -28,15 +28,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float LaunchPlatformWidth = 6f;
         private const float FarPlatformLength = 10f;
         private const float FarPlatformWidth = 6f;
-        private const float SpawnHipsHeight = 0.5f;
-        private const float StandingSpawnInset = 2f;
-        private const float SprintSpawnInset = 4f;
+        private const float SpawnHipsHeightAbovePlatformTop = 0.5f;
+        private const float StandingSpawnEdgeInset = -0.6f;
+        private const float SprintSpawnEdgeInset = 2f;
 
         private const int StandingTouchdownBudgetFrames = 240;
         private const int SprintTouchdownBudgetFrames = 220;
         private const int FallenWindowSampleFrames = 90;
         private const int FallenWindowMaxFrames = 20;
         private const int SprintRampFrames = 520;
+        private const int ApexSampleFrames = 180;
+        private const float ApexHeightBudgetMultiplier = 1.2f;
 
         private static readonly Vector3 TestOrigin = new Vector3(240f, 0f, 240f);
 
@@ -83,9 +85,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
             ClearGroundStateOverride();
 
-            Vector3 spawnPosition = _launchPlatform.transform.position
-                + _forward * (-LaunchPlatformLength * 0.5f + StandingSpawnInset)
-                + Vector3.up * SpawnHipsHeight;
+            Vector3 spawnPosition = GetLaunchSpawnPosition(StandingSpawnEdgeInset);
             RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
             yield return new WaitForFixedUpdate();
 
@@ -97,6 +97,11 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             JumpGapOutcome outcome = new JumpGapOutcome();
             yield return CaptureJumpGapOutcome(outcome, StandingTouchdownBudgetFrames);
+
+            float launchImpulse = GetPrivateField<float>(_rig.PlayerMovement, "_jumpLaunchHorizontalImpulse");
+            TestContext.Out.WriteLine($"[METRIC] StandingGap SpawnProgress={MeasureFarEdgeProgress(spawnPosition):F2}");
+            TestContext.Out.WriteLine($"[METRIC] StandingGap LaunchImpulse={launchImpulse:F1}");
+            TestContext.Out.WriteLine($"[METRIC] StandingGap MaxProgress={outcome.MaxFarEdgeProgress:F2}");
 
             // Assert
             Assert.That(outcome.MaxFarEdgeProgress, Is.GreaterThanOrEqualTo(StandingShortGapMeters),
@@ -120,9 +125,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
             ClearGroundStateOverride();
 
-            Vector3 spawnPosition = _launchPlatform.transform.position
-                + _forward * (-LaunchPlatformLength * 0.5f + SprintSpawnInset)
-                + Vector3.up * SpawnHipsHeight;
+            Vector3 spawnPosition = GetLaunchSpawnPosition(SprintSpawnEdgeInset);
             RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
             yield return new WaitForFixedUpdate();
 
@@ -155,6 +158,60 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             AssertFallenWindowWithinLimit("Sprint", outcome.MaxConsecutiveFallenFramesAfterLanding, FallenWindowMaxFrames);
         }
 
+        [UnityTest]
+        public IEnumerator StandingJump_LaunchImpulse_KeepsApexWithinTwentyPercentBudget()
+        {
+            // Arrange
+            CreateGapPlatforms(StandingShortGapMeters);
+            float baselineApexHeight = 0f;
+            float tunedApexHeight = 0f;
+
+            // Act
+            yield return MeasureStandingJumpApexHeight(0f, result => baselineApexHeight = result);
+            yield return MeasureStandingJumpApexHeight(null, result => tunedApexHeight = result);
+
+            // Assert
+            float allowedApexHeight = baselineApexHeight * ApexHeightBudgetMultiplier;
+            Assert.That(tunedApexHeight, Is.LessThanOrEqualTo(allowedApexHeight),
+                $"Standing jump apex should stay within +20% of the no-horizontal-impulse baseline. " +
+                $"Baseline={baselineApexHeight:F3}m, tuned={tunedApexHeight:F3}m, ceiling={allowedApexHeight:F3}m.");
+        }
+
+        private IEnumerator MeasureStandingJumpApexHeight(float? horizontalLaunchImpulseOverride, Action<float> onComplete)
+        {
+            yield return _rig.WarmUp(SettleFrames);
+            ClearGroundStateOverride();
+
+            float originalHorizontalLaunchImpulse = GetPrivateField<float>(_rig.PlayerMovement, "_jumpLaunchHorizontalImpulse");
+            SetPrivateField(
+                _rig.PlayerMovement,
+                "_jumpLaunchHorizontalImpulse",
+                horizontalLaunchImpulseOverride ?? originalHorizontalLaunchImpulse);
+
+            Vector3 spawnPosition = GetLaunchSpawnPosition(StandingSpawnEdgeInset);
+            RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
+            yield return new WaitForFixedUpdate();
+
+            float launchHipsHeight = _rig.Hips.position.y;
+            float peakHipsHeight = launchHipsHeight;
+
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetSprintInputForTest(false);
+            _rig.PlayerMovement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+            _rig.PlayerMovement.SetJumpInputForTest(false);
+
+            int windUpFrames = Mathf.CeilToInt(WindUpDurationSeconds / Time.fixedDeltaTime) + 2;
+            for (int frame = 0; frame < windUpFrames + ApexSampleFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+                peakHipsHeight = Mathf.Max(peakHipsHeight, _rig.Hips.position.y);
+            }
+
+            SetPrivateField(_rig.PlayerMovement, "_jumpLaunchHorizontalImpulse", originalHorizontalLaunchImpulse);
+            onComplete?.Invoke(peakHipsHeight - launchHipsHeight);
+        }
+
         private void CreateGapPlatforms(float gapWidth)
         {
             // STEP 2: Build the launch and far platforms separated by the target gap.
@@ -164,6 +221,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float centerSeparation = LaunchPlatformLength * 0.5f + gapWidth + FarPlatformLength * 0.5f;
             Vector3 farCenter = launchCenter + _forward * centerSeparation;
             _farPlatform = CreatePlatform("JumpGap_FarPlatform", farCenter, FarPlatformLength, FarPlatformWidth);
+        }
+
+        private Vector3 GetLaunchSpawnPosition(float edgeInset)
+        {
+            // STEP 2a: Spawn on top of the launch platform and near the lip facing the gap.
+            //          The earlier slice spawned from the back half and used the platform centre
+            //          height, which buried the hips into the cube and left the standing case
+            //          too far from the launch edge to exercise the gap at all.
+            Vector3 launchCenter = _launchPlatform.transform.position;
+            Vector3 platformTop = launchCenter + Vector3.up * (PlatformHeight * 0.5f);
+            Vector3 launchNearEdge = platformTop + _forward * (LaunchPlatformLength * 0.5f - edgeInset);
+            return launchNearEdge + Vector3.up * SpawnHipsHeightAbovePlatformTop;
         }
 
         private static GameObject CreatePlatform(string name, Vector3 center, float length, float width)
@@ -310,6 +379,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             Physics.SyncTransforms();
+        }
+
+        private static T GetPrivateField<T>(object instance, string fieldName)
+        {
+            FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Could not find private field '{fieldName}' on {instance.GetType().Name}.");
+            object value = field.GetValue(instance);
+            Assert.That(value, Is.Not.Null, $"Private field '{fieldName}' on {instance.GetType().Name} should not be null.");
+            return (T)value;
         }
 
         private static void SetPrivateField(object instance, string fieldName, object value)

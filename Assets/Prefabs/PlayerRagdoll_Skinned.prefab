@@ -890,7 +890,7 @@ MonoBehaviour:
   _yawDeadZoneDeg: 2
   _airborneMultiplier: 0.2
   _jumpAirborneMultiplier: 0.85
-  _jumpLandingGainBoost: 3
+  _jumpLandingGainBoost: 5
   _snapRecoveryKdScale: 0.6
   _snapRecoveryComDampScale: 0.4
   _snapRecoveryComSpringScale: 1
@@ -1079,6 +1079,7 @@ MonoBehaviour:
   _sprintSpeedMultiplier: 1.8
   _sprintBlendDuration: 0.25
   _jumpForce: 175
+  _jumpLaunchHorizontalImpulse: 2600
   _jumpWindUpDuration: 0.2
   _jumpWindUpGroundLossCommitProgress: 0.85
   _jumpCrouchHeightOffset: 0.07
@@ -1086,7 +1087,7 @@ MonoBehaviour:
   _jumpLaunchDuration: 0.1
   _jumpAirborneStateGraceDuration: 0.12
   _jumpAirborneStateVelocityThreshold: 0.1
-  _jumpPostLandingGraceDuration: 0.5
+  _jumpPostLandingGraceDuration: 0.65
   _maxFacingTurnRateDegPerSecond: 540
   _leanReductionStartAngle: 10
   _leanReductionFullAngle: 35
@@ -3287,3 +3288,4 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8b572fb53423d3342926489c3f6bb220, type: 3}
   m_PrefabInstance: {fileID: 800333546158640425}
   m_PrefabAsset: {fileID: 0}
+
