@@ -1,0 +1,47 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Scripts/Character/PlayerMovement.cs
+- Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+
+HANDOFF CONTEXT (what the previous agent left):
+Slice 3 completed: Added velocity-preservation factor reducing airborne drag so sprint momentum survives the arc. Both gap tests green, apex within budget, landing stability green.
+Check git log and agent-slice-status.json to confirm before proceeding.
+
+YOUR TASK: Implement Slice 4 only — "Air-control force path".
+
+Slice 4 scope (from the plan):
+- Add a midair WASD correction force in PlayerMovement gated on _recentJumpAirborne && !IsGrounded, bypassing ShouldSuppressLocomotion() for this limited force only
+- Cap air-control authority at <= 15% of normal ground move force
+- Clamp opposite-direction authority to roughly half of same-direction/lateral authority
+- Write a focused acceptance test: air input during a jump produces measurable lateral displacement (> some minimum) but total displacement from pure air input over one jump stays under a concrete ceiling
+
+EXIT CRITERIA:
+- Air-control acceptance test green
+- Both gap tests still green
+- Landing stability green
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "feat: add bounded midair WASD correction force (slice 4)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Slice 5 — air-control reversal clamp"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 4, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 4, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
+
+

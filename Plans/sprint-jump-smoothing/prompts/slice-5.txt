@@ -1,0 +1,45 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Scripts/Character/PlayerMovement.cs
+- Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+
+HANDOFF CONTEXT (what the previous agent left):
+Slice 4 completed: Added midair WASD correction force capped at 15% of ground force, opposite-direction halved. Air-control acceptance test green, both gap tests still green.
+Check git log and agent-slice-status.json to confirm before proceeding.
+
+YOUR TASK: Implement Slice 5 only — "Air-control reversal clamp".
+
+Slice 5 scope (from the plan):
+- Write a negative test: full opposite-direction air input during a jump does not reduce forward travel below a floor (>= 70% of zero-air-input travel distance)
+- If the negative test fails, tighten the opposite-direction clamp until it passes
+
+EXIT CRITERIA:
+- Reversal-clamp negative test green
+- Air-control acceptance test (from Slice 4) still green
+- Both gap tests still green
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "feat: tighten air-control reversal clamp and add negative test (slice 5)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Slice 7 — airborne arm readability"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 5, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 5, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
+
+

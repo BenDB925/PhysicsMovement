@@ -1,0 +1,51 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+- Assets/Tests/PlayMode/Utilities/PlayerPrefabTestRig.cs
+- Assets/Scripts/Character/PlayerMovement.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+CONTEXT: Slice 2 failed because the test rig spawns the character ~10m before the launch platform edge, so the character never reaches the gap. The standing gap test reports max progress 0.00m. This is a scenario setup bug in JumpGapOutcomeTests.cs, not a tuning problem.
+
+YOUR TASK: Fix the scenario setup and complete Slice 2 — "Standing reach tuning".
+
+Step 1 — Fix scenario geometry in JumpGapOutcomeTests.cs:
+- The character must spawn ON the launch platform, at or near the edge facing the gap, not 10m away
+- Check how PlayerPrefabTestRig positions the character and how the platforms are placed
+- Adjust spawn position / platform layout so the character is ready to jump at the gap immediately
+- Verify the standing gap test now shows measurable forward progress (> 0m) before any runtime tuning
+
+Step 2 — Complete Slice 2 runtime tuning (already partially done by previous agent):
+- There is already a horizontal launch impulse in FireJumpLaunch() from the previous agent's work — review it
+- Tune the impulse magnitude to green the standing gap test
+- Assert jump apex height does not exceed baseline + 20%
+- Confirm ShouldSuppressLocomotion() still blocks full ground-speed movement during airborne frames
+- If standing gap test goes green but SprintJumpStabilityTests regress, retune _jumpLandingGainBoost or _jumpPostLandingGraceDuration in this same pass
+
+EXIT CRITERIA:
+- Standing gap test green
+- Apex height within baseline + 20% budget
+- Existing landing stability tests still green
+- Sprint gap test still red (correct — sprint tuning is next)
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "fix: correct gap test spawn geometry and green standing reach (slice 2 retry)"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 2, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 2, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
+

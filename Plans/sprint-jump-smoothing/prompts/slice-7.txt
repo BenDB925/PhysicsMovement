@@ -1,0 +1,47 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Scripts/Character/ArmAnimator.cs
+- Assets/Tests/PlayMode/Character/ArmAnimatorPlayModeTests.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+
+HANDOFF CONTEXT (what the previous agent left):
+Slice 5 completed: Tightened opposite-direction air clamp. Reversal negative test green — full reverse input keeps >= 70% of forward travel.
+Check git log and agent-slice-status.json to confirm before proceeding.
+
+YOUR TASK: Implement Slice 7 only — "Airborne readability".
+
+NOTE: Slice 6 (airborne facing contingency) is conditional - only needed if midair yaw rate exceeded 180 deg/s during Slice 4/5 or if yaw snapping was visible. Skip it unless evidence exists.
+
+Slice 7 scope (from the plan):
+- Tune airborne arm raise and balance pose now that distance and air-control behavior are stable
+- Reuse or extend airborne arm tests in ArmAnimatorPlayModeTests
+- Keep changes minimal and grounded-feeling
+
+EXIT CRITERIA:
+- Existing airborne arm tests still green (or extended with new coverage)
+- All gap tests, air-control tests, and landing stability tests still green
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "polish: tune airborne arm readability (slice 7)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Slice 8 — landing and regression gate"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 7, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 7, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
+
+

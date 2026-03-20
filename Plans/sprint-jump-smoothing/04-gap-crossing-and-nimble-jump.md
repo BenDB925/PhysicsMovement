@@ -5,7 +5,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 ## Current status
 - State: Ready
-- Current next step: Implement Slice 1 by building the two-platform PlayMode harness, writing both gap tests (red), and locking the exact standing and sprint target gap widths before any runtime tuning.
+- Current next step: Slice 2 retry — fix spawn geometry and green standing gap test
 - Blockers: None.
 
 ## Decisions
@@ -121,4 +121,5 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 ## Agent log
 - 2026-03-20 Slice 1: Committed gap harness and two red tests (e767276)
 - 2026-03-20 Slice 2: First attempt failed — character spawned 10m from launch edge, progress 0.00m. Retry queued with spawn geometry fix.
+
 

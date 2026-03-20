@@ -1,0 +1,50 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- Assets/Scripts/Character/PlayerMovement.cs (focus: ShouldSuppressLocomotion, ApplyMovementForces)
+- Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+
+HANDOFF CONTEXT (what the previous agent left):
+Slice 2 completed: Added horizontal launch impulse in FireJumpLaunch(), fixed spawn geometry in JumpGapOutcomeTests.cs. Standing gap test green, apex within budget. Sprint gap test still red (expected).
+Check git log and agent-slice-status.json to confirm before proceeding.
+
+YOUR TASK: Implement Slice 3 only — "Sprint reach tuning".
+
+Slice 3 scope (from the plan):
+- Add a velocity-preservation factor: reduce airborne horizontal damping/drag so more pre-jump sprint speed survives through the arc
+- The mechanism lives in ShouldSuppressLocomotion() or a new airborne-drag path in ApplyMovementForces()
+- Tune the factor to green the sprint gap test. Do NOT inflate _jumpForce.
+- Assert jump apex height remains within 20% ceiling for sprint jumps as well
+- Keep sprint gain bounded so character still reads heavy and does not outrun touchdown recovery
+- If SprintJumpStabilityTests regress from faster horizontal touchdown, retune landing gains in this same slice
+
+EXIT CRITERIA:
+- Sprint gap test green
+- Standing gap test still green
+- Apex height within budget for both profiles
+- Landing stability green
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When done, git commit: git add -A && git commit -m "feat: add velocity-preservation factor for sprint reach (slice 3)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Slice 4 — air-control force path"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If success: {"slice": 3, "status": "pass", "notes": "brief summary"}
+  - If blocked/failed: {"slice": 3, "status": "fail", "notes": "exact description of the problem"}
+- Then stop.
+
+

@@ -1,0 +1,48 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+- AGENT_TEST_RUNNING.md
+- .copilot-instructions.md
+- CODING_STANDARDS.md
+
+
+HANDOFF CONTEXT (what the previous agent left):
+Slice 7 completed: Tuned airborne arm raise and balance pose. Existing airborne arm tests green or extended.
+Check git log and agent-slice-status.json to confirm before proceeding.
+
+YOUR TASK: Implement Slice 8 only — "Landing and regression gate".
+
+Slice 8 scope:
+- Add a height-budget assertion: measure peak apex height for both standing and sprint jumps and assert <= baseline + 20%
+- Run the full PlayMode test suite using EXACTLY this command:
+  powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended
+- Results at: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+- Read and report pass/fail counts and any failures
+
+EXIT CRITERIA:
+- All gap tests, air-control tests green
+- JumpTests, SprintJumpStabilityTests, AirborneSpringTests green
+- Height budget assertion green
+- If any test is failing: write status as fail with details, do NOT attempt silent fixes
+
+
+PROGRESS LOGGING (mandatory):
+Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md Progress notes section as you work:
+- Write a line when you START: what files you're reading, what your plan is
+- Write a line for any significant DECISION: what you chose and why (e.g. "chose impulse 1.8f over 2.0f — apex overshot at 2.0")
+- Write a line if you hit a PROBLEM: what it is and how you're addressing it
+- Write a line when you FINISH: what you committed and whether exit criteria were met
+Format: "YYYY-MM-DD Slice N: [your note]"
+These notes are how your orchestrator tracks progress if you go silent. Keep them honest and specific.
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, and move on.
+- Use --yolo flag behaviour: make changes directly without asking for confirmation.
+- When all green, git commit: git add -A && git commit -m "test: add height-budget regression gate and confirm full suite green (slice 8)"
+- Before stopping, update the "Current next step" line in Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md to: "Current next step: Complete — all slices done"
+- Then write your result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - If all green: {"slice": 8, "status": "pass", "notes": "full suite green, X tests passing"}
+  - If any failures: {"slice": 8, "status": "fail", "notes": "list of failing tests and counts"}
+- Then stop.
+
+
