@@ -1080,6 +1080,10 @@ MonoBehaviour:
   _sprintBlendDuration: 0.25
   _jumpForce: 175
   _jumpLaunchHorizontalImpulse: 2600
+  _jumpAirborneVelocityPreservationFactor: 0.9
+  _jumpAirborneVelocityPreservationAcceleration: 32
+  _jumpAirControlForceFraction: 0
+  _jumpAirControlOppositeDirectionMultiplier: 0.5
   _jumpWindUpDuration: 0.2
   _jumpWindUpGroundLossCommitProgress: 0.85
   _jumpCrouchHeightOffset: 0.07
