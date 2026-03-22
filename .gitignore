@@ -130,3 +130,7 @@ yarn-error.log*
 *.sln.iml
 .history
 TestResults
+
+# Unity test runner temp scenes
+Assets/InitTestScene*.unity
+Assets/InitTestScene*.unity.meta
