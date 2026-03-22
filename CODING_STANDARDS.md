@@ -94,6 +94,24 @@ Output the Phase F result as a PASS or FAIL table with a brief note for each row
 
 Commit per completed subtask. Each commit should cover one bounded slice, and the parent plan or chapter must be updated in the same slice before you move on.
 
+### Branch-per-Slice Workflow (mandatory from plan 04 slice 5 onwards)
+
+Every agent slice must follow this branching pattern:
+
+1. **Create a slice branch** at the start: `git checkout -b slice/[plan-id]-[slice-num]-[short-desc]`
+   Example: `git checkout -b slice/04-5-reversal-clamp`
+2. **Work and commit on that branch** — all wip and final commits go here, never directly on the plan branch or master
+3. **Commit before running tests** — code must be committed (wip is fine) before any test run; never lose work to a timeout mid-test
+4. **On pass**: merge into the plan branch and delete the slice branch:
+   ```
+   git checkout plan/04-gap-crossing
+   git merge --no-ff slice/04-5-reversal-clamp -m "feat: [slice description] (slice 5)"
+   git branch -d slice/04-5-reversal-clamp
+   ```
+5. **On fail**: leave the slice branch in place for the next agent to inspect and continue from
+
+Plan branches follow the pattern `plan/[plan-id]-[short-desc]` (e.g. `plan/04-gap-crossing`). Master only receives merges from completed plan branches, not individual slices.
+
 ## 2 — Testing Standards
 
 - Use `Tools/Run-UnityTests.ps1` as the primary unattended runner. `AGENT_TEST_RUNNING.md` owns the exact commands, exit codes, and troubleshooting flow.
@@ -254,6 +272,7 @@ Keep assembly-definition ownership and dependency notes in `ARCHITECTURE.md` rat
 | Read before write | Read the target file, relevant docs, and nearby tests before editing. |
 | One concern per commit | Each commit covers one bug, feature, refactor, or documentation slice. |
 | Commit per subtask | When working from a plan chapter or child doc, run Phase F and commit after each completed subtask. |
+| Commit before tests | Always commit (wip is fine) before running any test suite — never lose code to a timeout mid-run. |
 | Never delete tests silently | Update tests when behavior intentionally changes, but do not remove coverage without replacing it. |
 | Explain trade-offs | When multiple credible approaches exist, note why the chosen approach won. |
 | Flag uncertainty | If a risk remains, say so and say how to verify it. |
