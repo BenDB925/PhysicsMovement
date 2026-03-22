@@ -1070,7 +1070,10 @@ namespace PhysicsDrivenMovement.Character
 
             if (worldDirection.sqrMagnitude > 0.01f)
             {
-                if (!_recentJumpAirborne || _balance.IsGrounded)
+                bool shouldHoldFacingForCommittedJump = _jumpPhase != JumpPhase.None ||
+                    (_recentJumpAirborne && !_balance.IsGrounded);
+
+                if (!shouldHoldFacingForCommittedJump)
                 {
                     bool forceImmediateFacing = !_hasReceivedMovementInput;
                     UpdateFacingDirection(worldDirection, forceImmediateFacing);
