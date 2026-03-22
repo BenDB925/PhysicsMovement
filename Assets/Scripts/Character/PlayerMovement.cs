@@ -1260,7 +1260,13 @@ namespace PhysicsDrivenMovement.Character
                     return true;
                 }
 
-                if (_recentJumpAirborne && !_balance.IsGrounded)
+                // STEP 4b: Suppress ground locomotion not only once the character is fully
+                //          ungrounded, but also during the short launch-classified grace window.
+                //          The gap air-control tests switch to reverse input as soon as the jump
+                //          is reported airborne; without this guard, those first launch frames can
+                //          still be technically grounded and feed raw reverse input into the normal
+                //          movement-force path before liftoff, erasing the preserved forward carry.
+                if (_recentJumpAirborne && (!_balance.IsGrounded || ShouldTreatJumpLaunchAsAirborne))
                 {
                     return true;
                 }
