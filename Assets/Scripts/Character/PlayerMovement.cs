@@ -35,7 +35,7 @@ namespace PhysicsDrivenMovement.Character
         private const int JumpTelemetryCapacity = 64;
         private const float MinimumSprintReachVelocityPreservationFactor = 0.85f;
         private const float MinimumSprintReachVelocityPreservationAcceleration = 28f;
-        private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
+        private const float MinimumSprintReachPostLandingGraceDuration = 0.8f;
         private const float MinimumJumpAirControlForceFraction = 0.15f;
         private const float MinimumJumpAirControlOppositeDirectionMultiplier = 0.5f;
 
