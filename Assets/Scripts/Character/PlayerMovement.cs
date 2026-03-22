@@ -1070,8 +1070,12 @@ namespace PhysicsDrivenMovement.Character
 
             if (worldDirection.sqrMagnitude > 0.01f)
             {
-                bool forceImmediateFacing = !_hasReceivedMovementInput;
-                UpdateFacingDirection(worldDirection, forceImmediateFacing);
+                if (!_recentJumpAirborne || _balance.IsGrounded)
+                {
+                    bool forceImmediateFacing = !_hasReceivedMovementInput;
+                    UpdateFacingDirection(worldDirection, forceImmediateFacing);
+                }
+
                 _hasReceivedMovementInput = true;
             }
         }
