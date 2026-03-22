@@ -213,6 +213,9 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Pre-jump horizontal speed along <see cref="_jumpAirborneTravelDirection"/> captured at launch.</summary>
         private float _jumpAirborneLaunchHorizontalSpeed;
 
+        /// <summary>Raw move-input direction captured at jump launch so recent-jump consumers can strip pure reverse intent even when world-space travel direction is ambiguous.</summary>
+        private Vector2 _jumpAirborneLaunchMoveInput;
+
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
         private int _activeJumpAttemptId;
@@ -861,12 +864,16 @@ namespace PhysicsDrivenMovement.Character
             {
                 _jumpAirborneTravelDirection = Vector3.zero;
                 _jumpAirborneLaunchHorizontalSpeed = 0f;
+                _jumpAirborneLaunchMoveInput = Vector2.zero;
                 return;
             }
 
             travelDirection.Normalize();
             _jumpAirborneTravelDirection = travelDirection;
             _jumpAirborneLaunchHorizontalSpeed = Mathf.Max(0f, Vector3.Dot(preLaunchHorizontalVelocity, travelDirection));
+            _jumpAirborneLaunchMoveInput = _currentMoveInput.sqrMagnitude > 0.0001f
+                ? _currentMoveInput.normalized
+                : Vector2.zero;
         }
 
         private void ApplyRecentJumpAirborneVelocityPreservation()
@@ -1094,6 +1101,18 @@ namespace PhysicsDrivenMovement.Character
             if (_balance == null || !_recentJumpAirborne)
             {
                 return _currentMoveInput;
+            }
+
+            if (_jumpAirborneLaunchMoveInput.sqrMagnitude > 0.0001f)
+            {
+                float launchInputAlignment = Vector2.Dot(_currentMoveInput.normalized, _jumpAirborneLaunchMoveInput);
+                if (launchInputAlignment < 0f)
+                {
+                    Vector2 lateralTrimInput = _currentMoveInput - (_jumpAirborneLaunchMoveInput * Vector2.Dot(_currentMoveInput, _jumpAirborneLaunchMoveInput));
+                    return lateralTrimInput.sqrMagnitude > 0.0001f
+                        ? Vector2.ClampMagnitude(lateralTrimInput, 1f)
+                        : Vector2.zero;
+                }
             }
 
             if (_jumpAirborneTravelDirection.sqrMagnitude < 0.0001f)
