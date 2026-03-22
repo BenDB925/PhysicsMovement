@@ -264,7 +264,7 @@ namespace PhysicsDrivenMovement.Character
         private bool _overrideMoveInput;
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
-        public Vector2 CurrentMoveInput => GetEffectiveMoveInputForStateConsumers();
+        public Vector2 CurrentMoveInput => _currentMoveInput;
 
         /// <summary>
         /// Latest world-space facing direction requested by movement input.
@@ -280,8 +280,7 @@ namespace PhysicsDrivenMovement.Character
         {
             get
             {
-                Vector2 effectiveMoveInput = GetEffectiveMoveInputForStateConsumers();
-                return TryGetMoveWorldDirection(effectiveMoveInput, out Vector3 worldDirection)
+                return TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection)
                     ? worldDirection
                     : Vector3.zero;
             }
@@ -320,13 +319,12 @@ namespace PhysicsDrivenMovement.Character
         {
             get
             {
-                Vector2 effectiveMoveInput = GetEffectiveMoveInputForStateConsumers();
-                Vector3 effectiveMoveWorldDirection = TryGetMoveWorldDirection(effectiveMoveInput, out Vector3 worldDirection)
+                Vector3 moveWorldDirection = TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection)
                     ? worldDirection
                     : Vector3.zero;
                 return new DesiredInput(
-                    effectiveMoveInput,
-                    effectiveMoveWorldDirection,
+                    _currentMoveInput,
+                    moveWorldDirection,
                     CurrentFacingDirection,
                     _jumpRequestedThisPhysicsStep,
                     _sprintNormalized);
@@ -536,15 +534,14 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4a: Allow only a tiny midair correction path during recent intentional jumps.
             //          This bypasses the full locomotion suppression gate on purpose, but the
             //          applied force stays capped far below grounded movement authority.
-            ApplyRecentJumpAirborneCorrectionForce(_currentMoveInput);
+            ApplyRecentJumpAirborneCorrectionForce(GetEffectiveMoveInputForStateConsumers());
 
             // STEP 5: Movement forces. Skip when the character is in a confirmed fall/collapse path.
-            //         Recent-jump recovery reuses the same effective-input clamp as state consumers
-            //         so full reverse input cannot immediately cancel the preserved jump carry on
-            //         the first grounded recovery frames.
+            //         Ground locomotion always uses the raw sampled input; the recent-jump
+            //         reversal clamp only belongs to the bounded airborne correction force.
             if (!ShouldSuppressLocomotion())
             {
-                ApplyMovementForces(GetEffectiveMoveInputForStateConsumers());
+                ApplyMovementForces(_currentMoveInput);
             }
 
             // STEP 6: Lean-proportional braking. Applied regardless of locomotion suppression
