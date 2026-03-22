@@ -5,7 +5,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 ## Current status
 - State: In progress
-- Current next step: Slice 7 — airborne arm readability
+- Current next step: Slice 5 unblock — trace the remaining reverse-input brake path in the first grounded recovery frames, then rerun `JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests`.
 - **Slice 4 complete**: 25/25 tests green. See progress log.
 - Blockers: Slice 5 reversal-retention test still red; full opposite air input collapses forward travel to ~0.1% of baseline in `JumpGapOutcomeTests`.
 
@@ -133,6 +133,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 - 2026-03-22 Slice 5: Problem - the world-space recent-jump clamp still leaked full reverse intent in the failing run, which strongly suggests the captured launch travel vector is not stable enough on this near-edge harness to police downstream consumers by itself. Adding a launch-input-space clamp as the first gate, then falling back to the travel-vector path for lateral trim.
 - 2026-03-22 Slice 5: Finished blocked. Added the reversal-retention negative test, split the air-control harness spawn/reset paths, clamped opposite-direction correction/exported intent in PlayerMovement, and tuned the opposite multiplier all the way down to 0.0. Focused `JumpGapOutcomeTests` still fails only the new reversal case (`baseline 0.862m`, `reverse 0.001m`, ratio `0.001`), so exit criteria were not met and no merge was performed.
 - 2026-03-22 Slice 5: Finished blocked again after two more clamp passes. Routing locomotion through the recent-jump effective-input helper and then adding a launch-input-space reverse clamp still left `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` red at `baseline 0.816m`, `reverse 0.002m`, ratio `0.002`; the remaining brake is coming from another downstream consumer outside the current PlayerMovement correction/export path.
+- 2026-03-22 Slice 5 fix: Reverted the recent-jump effective-input helper back out of `ApplyMovementForces`, `CurrentMoveInput`, `CurrentMoveWorldDirection`, and `CurrentDesiredInput`, keeping that clamp only on `ApplyRecentJumpAirborneCorrectionForce()` as intended. Committed `7a4c217` and reran the focused PlayMode gate (`JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests`): the reversal-retention test is still red at the same ~0.2% ratio (`baseline 0.816m`, `reverse 0.002m`), plus adjacent regressions remain in `WindUp_LowersHipsDuringCrouch` and `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant`, so Slice 5 stays blocked.
 - 2026-03-20 Slice 1: Committed gap harness and two red tests (e767276)
 - 2026-03-20 Slice 2: First attempt failed - character spawned 10m from launch edge, progress 0.00m. Retry queued with spawn geometry fix.
 - 2026-03-20 Slice 2 retry: Spawn geometry corrected; standing gap + apex budget + sprint landing stability slice now green, while sprint gap remains intentionally red for Slice 3.
