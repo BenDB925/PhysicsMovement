@@ -6,6 +6,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 ## Current status
 - State: In progress
 - Current next step: Slice 5 — air-control reversal clamp
+- **Slice 4 complete**: 25/25 tests green. See progress log.
 - Blockers: None.
 
 ## Decisions
@@ -156,3 +157,5 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 - 2026-03-22 Slice 4: The landing-only tweak was the wrong lever — it merely moved the red from the two-jump sprint case to the single-jump case. Reverted that lean clamp and changed the air-control path itself so earned forward carry still comes from Slice 3 while Slice 4 only adds lateral trim plus limited reverse braking when a launch direction exists.
 - 2026-03-22 Slice 4: With forward air propulsion removed, the remaining 46.0° sprint-landing red now pointed back at my temporary 0.8s landing-grace extension rather than the correction path. Reverting that grace clamp to the Slice 3 baseline (0.7s) to confirm the bounded trim feature is not carrying unrelated recovery drift.
 - 2026-03-22 Slice 4: Finished blocked. Landed the bounded airborne trim path and acceptance test work in PlayerMovement + JumpGapOutcomeTests, but focused PlayMode regression never got fully green: `JumpGapOutcomeTests` passes, while `SprintJumpStabilityTests` still reports `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` at ~45.99° peak tilt with the air-control path already reduced to lateral trim only. No final feat commit made because exit criteria were not met.
+- 2026-03-22 Slice 4 fix2: Reintroduced the air-control path from the reverted state and tested three minimal root-cause hypotheses against `JumpTests|SprintJumpStabilityTests`: (1) forced non-zero Awake defaults for the new air-control fields, (2) the air-control method rewriting facing intent during airborne trim, and (3) missing prefab serialization for the new jump air-control fields. None cleared the deterministic `SprintJump_SingleJump_DoesNotFaceplant` failure (still ~95.7° peak tilt, 19/20 passing). Best next step is instrumentation, not more blind tuning: log the actual `correctionDirection`, `airControlForce`, and desired-input/facing values through the landing window and compare that trace directly against the passing Slice 3 baseline.
+
