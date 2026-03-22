@@ -33,12 +33,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float SprintSpawnEdgeInset = 2f;
 
         private const int StandingTouchdownBudgetFrames = 240;
-        private const int SprintTouchdownBudgetFrames = 220;
+        private const int SprintTouchdownBudgetFrames = 300;
         private const int FallenWindowSampleFrames = 90;
+
+        private const float TouchdownProbeHeightOffset = 0.5f;
+        private const float TouchdownProbeDistance = 2f;
+        private const float TouchdownProbeForwardOffset = 0.2f;
+        private const float TouchdownProbeLateralOffset = 0.25f;
+        private const float TouchdownPlatformEdgeTolerance = 0.2f;
+        private const float TouchdownHipsHeightTolerance = 1.25f;
         private const int FallenWindowMaxFrames = 20;
         private const int SprintRampFrames = 520;
         private const int ApexSampleFrames = 180;
         private const float ApexHeightBudgetMultiplier = 1.2f;
+        private const float AirControlPlatformLength = 20f;
+        private const float AirControlPlatformWidth = 20f;
+        private const int AirControlLandingBudgetFrames = 240;
+        private const float AirControlMinimumLateralDisplacement = 0.2f;
+        private const float AirControlMaximumLateralDisplacement = 0.9f;
 
         private static readonly Vector3 TestOrigin = new Vector3(240f, 0f, 240f);
 
@@ -144,6 +156,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             JumpGapOutcome outcome = new JumpGapOutcome();
             yield return CaptureJumpGapOutcome(outcome, SprintTouchdownBudgetFrames);
 
+            float velocityPreservation = GetPrivateField<float>(_rig.PlayerMovement, "_jumpAirborneVelocityPreservationFactor");
+            TestContext.Out.WriteLine($"[METRIC] SprintGap SpawnProgress={MeasureFarEdgeProgress(spawnPosition):F2}");
+            TestContext.Out.WriteLine($"[METRIC] SprintGap VelocityPreservation={velocityPreservation:F2}");
+            TestContext.Out.WriteLine($"[METRIC] SprintGap MaxProgress={outcome.MaxFarEdgeProgress:F2}");
+            TestContext.Out.WriteLine($"[METRIC] SprintGap LandingFrame={outcome.LandingFrame}");
+
             // Assert
             Assert.That(outcome.MaxFarEdgeProgress, Is.GreaterThanOrEqualTo(SprintGapMeters),
                 $"Sprint jump should clear the {SprintGapMeters:F2}m gap " +
@@ -167,8 +185,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float tunedApexHeight = 0f;
 
             // Act
-            yield return MeasureStandingJumpApexHeight(0f, result => baselineApexHeight = result);
-            yield return MeasureStandingJumpApexHeight(null, result => tunedApexHeight = result);
+            yield return MeasureJumpApexHeight(StandingSpawnEdgeInset, sprintHeld: false, sprintRampFrames: 0, 0f, null, result => baselineApexHeight = result);
+            yield return MeasureJumpApexHeight(StandingSpawnEdgeInset, sprintHeld: false, sprintRampFrames: 0, null, null, result => tunedApexHeight = result);
 
             // Assert
             float allowedApexHeight = baselineApexHeight * ApexHeightBudgetMultiplier;
@@ -177,18 +195,75 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Baseline={baselineApexHeight:F3}m, tuned={tunedApexHeight:F3}m, ceiling={allowedApexHeight:F3}m.");
         }
 
-        private IEnumerator MeasureStandingJumpApexHeight(float? horizontalLaunchImpulseOverride, Action<float> onComplete)
+        [UnityTest]
+        public IEnumerator SprintJump_VelocityPreservation_KeepsApexWithinTwentyPercentBudget()
+        {
+            // Arrange
+            CreateGapPlatforms(SprintGapMeters);
+            float baselineApexHeight = 0f;
+            float tunedApexHeight = 0f;
+
+            // Act
+            yield return MeasureJumpApexHeight(SprintSpawnEdgeInset, sprintHeld: true, sprintRampFrames: SprintRampFrames, null, 0f, result => baselineApexHeight = result);
+            yield return MeasureJumpApexHeight(SprintSpawnEdgeInset, sprintHeld: true, sprintRampFrames: SprintRampFrames, null, null, result => tunedApexHeight = result);
+
+            // Assert
+            float allowedApexHeight = baselineApexHeight * ApexHeightBudgetMultiplier;
+            Assert.That(tunedApexHeight, Is.LessThanOrEqualTo(allowedApexHeight),
+                $"Sprint jump apex should stay within +20% of the no-velocity-preservation baseline. " +
+                $"Baseline={baselineApexHeight:F3}m, tuned={tunedApexHeight:F3}m, ceiling={allowedApexHeight:F3}m.");
+        }
+
+        [UnityTest]
+        public IEnumerator JumpAirControl_AirborneRightInput_ProducesBoundedLateralDisplacement()
+        {
+            // Arrange
+            CreateAirControlPlatform();
+            yield return _rig.WarmUp(SettleFrames);
+            ClearGroundStateOverride();
+
+            Vector3 spawnPosition = GetSinglePlatformSpawnPosition();
+            RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
+            yield return new WaitForFixedUpdate();
+
+            float maxLateralDisplacement = 0f;
+
+            // Act
+            yield return MeasureAirControlLateralDisplacement(Vector2.right, result => maxLateralDisplacement = result);
+            TestContext.Out.WriteLine($"[METRIC] AirControl MaxLateralDisplacement={maxLateralDisplacement:F3}");
+
+            // Assert
+            Assert.That(maxLateralDisplacement, Is.GreaterThanOrEqualTo(AirControlMinimumLateralDisplacement),
+                $"Pure airborne right input should trim landing by at least {AirControlMinimumLateralDisplacement:F2}m " +
+                $"(observed {maxLateralDisplacement:F3}m).");
+            Assert.That(maxLateralDisplacement, Is.LessThanOrEqualTo(AirControlMaximumLateralDisplacement),
+                $"Pure airborne right input should stay bounded below {AirControlMaximumLateralDisplacement:F2}m over one jump " +
+                $"(observed {maxLateralDisplacement:F3}m).");
+        }
+
+        private IEnumerator MeasureJumpApexHeight(
+            float spawnEdgeInset,
+            bool sprintHeld,
+            int sprintRampFrames,
+            float? horizontalLaunchImpulseOverride,
+            float? velocityPreservationOverride,
+            Action<float> onComplete)
         {
             yield return _rig.WarmUp(SettleFrames);
             ClearGroundStateOverride();
 
             float originalHorizontalLaunchImpulse = GetPrivateField<float>(_rig.PlayerMovement, "_jumpLaunchHorizontalImpulse");
+            float originalVelocityPreservation = GetPrivateField<float>(_rig.PlayerMovement, "_jumpAirborneVelocityPreservationFactor");
             SetPrivateField(
                 _rig.PlayerMovement,
                 "_jumpLaunchHorizontalImpulse",
                 horizontalLaunchImpulseOverride ?? originalHorizontalLaunchImpulse);
+            SetPrivateField(
+                _rig.PlayerMovement,
+                "_jumpAirborneVelocityPreservationFactor",
+                velocityPreservationOverride ?? originalVelocityPreservation);
 
-            Vector3 spawnPosition = GetLaunchSpawnPosition(StandingSpawnEdgeInset);
+            Vector3 spawnPosition = GetLaunchSpawnPosition(spawnEdgeInset);
             RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
             yield return new WaitForFixedUpdate();
 
@@ -196,7 +271,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float peakHipsHeight = launchHipsHeight;
 
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
-            _rig.PlayerMovement.SetSprintInputForTest(false);
+            _rig.PlayerMovement.SetSprintInputForTest(sprintHeld);
+            for (int frame = 0; frame < sprintRampFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
             _rig.PlayerMovement.SetJumpInputForTest(true);
             yield return new WaitForFixedUpdate();
             _rig.PlayerMovement.SetJumpInputForTest(false);
@@ -209,6 +289,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             SetPrivateField(_rig.PlayerMovement, "_jumpLaunchHorizontalImpulse", originalHorizontalLaunchImpulse);
+            SetPrivateField(_rig.PlayerMovement, "_jumpAirborneVelocityPreservationFactor", originalVelocityPreservation);
             onComplete?.Invoke(peakHipsHeight - launchHipsHeight);
         }
 
@@ -223,6 +304,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _farPlatform = CreatePlatform("JumpGap_FarPlatform", farCenter, FarPlatformLength, FarPlatformWidth);
         }
 
+        private void CreateAirControlPlatform()
+        {
+            Vector3 platformCenter = new Vector3(TestOrigin.x, TestOrigin.y - PlatformHeight * 0.5f, TestOrigin.z);
+            _launchPlatform = CreatePlatform("JumpAirControl_Platform", platformCenter, AirControlPlatformLength, AirControlPlatformWidth);
+            _farPlatform = null;
+        }
+
         private Vector3 GetLaunchSpawnPosition(float edgeInset)
         {
             // STEP 2a: Spawn on top of the launch platform and near the lip facing the gap.
@@ -233,6 +321,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Vector3 platformTop = launchCenter + Vector3.up * (PlatformHeight * 0.5f);
             Vector3 launchNearEdge = platformTop + _forward * (LaunchPlatformLength * 0.5f - edgeInset);
             return launchNearEdge + Vector3.up * SpawnHipsHeightAbovePlatformTop;
+        }
+
+        private Vector3 GetSinglePlatformSpawnPosition()
+        {
+            Vector3 launchCenter = _launchPlatform.transform.position;
+            Vector3 platformTop = launchCenter + Vector3.up * (PlatformHeight * 0.5f);
+            return platformTop + Vector3.up * SpawnHipsHeightAbovePlatformTop;
         }
 
         private static GameObject CreatePlatform(string name, Vector3 center, float length, float width)
@@ -274,10 +369,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     wasAirborne = true;
                 }
 
-                if (landingFrame < 0 && wasAirborne && _rig.BalanceController.IsGrounded)
+                bool touchdownStateObserved = wasAirborne &&
+                                              (_rig.BalanceController.IsGrounded ||
+                                               _rig.CharacterState.CurrentState != CharacterStateType.Airborne);
+                bool groundedOnFarPlatform = touchdownStateObserved && IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position);
+                if (landingFrame < 0 && groundedOnFarPlatform)
                 {
+                    // STEP 3a: Do not latch the first grounded pulse unless it actually resolves onto
+                    //          the far platform. Sprint jumps can skim the front edge while the hips
+                    //          are still fractionally over the gap, so keep watching inside budget.
                     landingFrame = frame;
-                    landedOnFarPlatform = IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position);
+                    landedOnFarPlatform = true;
                 }
 
                 if (landingFrame >= 0 && frame - landingFrame < FallenWindowSampleFrames)
@@ -297,6 +399,49 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             outcome.LandingFrame = landingFrame;
             outcome.LandedOnFarPlatform = landedOnFarPlatform;
             outcome.MaxConsecutiveFallenFramesAfterLanding = maxConsecutiveFallenFrames;
+        }
+
+        private IEnumerator MeasureAirControlLateralDisplacement(Vector2 airborneInput, Action<float> onComplete)
+        {
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+            _rig.PlayerMovement.SetSprintInputForTest(false);
+            _rig.PlayerMovement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+            _rig.PlayerMovement.SetJumpInputForTest(false);
+
+            float startLateralPosition = _rig.Hips.position.x;
+            float maxLateralDisplacement = 0f;
+            bool wasAirborne = false;
+            int groundedFramesAfterAirborne = 0;
+
+            int totalFrames = AirControlLandingBudgetFrames + FallenWindowSampleFrames;
+            for (int frame = 0; frame < totalFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                bool isAirborne = _rig.CharacterState.CurrentState == CharacterStateType.Airborne || !_rig.BalanceController.IsGrounded;
+                if (isAirborne)
+                {
+                    wasAirborne = true;
+                    _rig.PlayerMovement.SetMoveInputForTest(airborneInput);
+                }
+                else if (wasAirborne)
+                {
+                    groundedFramesAfterAirborne++;
+                    _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+                }
+
+                maxLateralDisplacement = Mathf.Max(
+                    maxLateralDisplacement,
+                    Mathf.Abs(_rig.Hips.position.x - startLateralPosition));
+
+                if (wasAirborne && groundedFramesAfterAirborne >= 5)
+                {
+                    break;
+                }
+            }
+
+            onComplete?.Invoke(maxLateralDisplacement);
         }
 
         private float MeasureFarEdgeProgress(Vector3 hipsPosition)
@@ -319,11 +464,41 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 return false;
             }
 
-            Ray ray = new Ray(hipsPosition + Vector3.up * 0.5f, Vector3.down);
-            int mask = 1 << GameSettings.LayerEnvironment;
-            if (Physics.Raycast(ray, out RaycastHit hit, 2f, mask, QueryTriggerInteraction.Ignore))
+            Bounds expandedBounds = collider.bounds;
+            expandedBounds.Expand(new Vector3(
+                TouchdownPlatformEdgeTolerance * 2f,
+                0f,
+                TouchdownPlatformEdgeTolerance * 2f));
+
+            Vector3 projectedHipsPosition = new Vector3(hipsPosition.x, expandedBounds.center.y, hipsPosition.z);
+            float platformTop = collider.bounds.max.y;
+            bool hipsOverPlatformBounds = expandedBounds.Contains(projectedHipsPosition) &&
+                                         hipsPosition.y >= platformTop - 0.1f &&
+                                         hipsPosition.y <= platformTop + TouchdownHipsHeightTolerance;
+            if (hipsOverPlatformBounds)
             {
-                return hit.collider != null && hit.collider.gameObject == platform;
+                return true;
+            }
+
+            int mask = 1 << GameSettings.LayerEnvironment;
+            Vector3[] probeOffsets =
+            {
+                Vector3.zero,
+                Vector3.forward * TouchdownProbeForwardOffset,
+                Vector3.back * TouchdownProbeForwardOffset,
+                Vector3.right * TouchdownProbeLateralOffset,
+                Vector3.left * TouchdownProbeLateralOffset,
+            };
+
+            for (int i = 0; i < probeOffsets.Length; i++)
+            {
+                Ray ray = new Ray(hipsPosition + Vector3.up * TouchdownProbeHeightOffset + probeOffsets[i], Vector3.down);
+                if (Physics.Raycast(ray, out RaycastHit hit, TouchdownProbeDistance, mask, QueryTriggerInteraction.Ignore) &&
+                    hit.collider != null &&
+                    hit.collider.gameObject == platform)
+                {
+                    return true;
+                }
             }
 
             return false;

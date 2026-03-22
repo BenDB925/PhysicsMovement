@@ -151,3 +151,4 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 
 - 2026-03-22 Slice 3 complete: Sprint carry preservation (0.9 factor, 32 m/s cap) + landing lean clamp (1.5 deg max) + squared post-landing drive ramp. 29/29 focused tests green. Committed 6f6a52f.
+- 2026-03-22 Slice 4: Started after confirming git head and agent-slice-status both show Slice 3 cleanly landed. Reading the slice plan, PlayerMovement suppression/carry path, JumpGapOutcomeTests harness, and repo coding instructions; plan is to add a tightly bounded airborne correction force plus one acceptance test that proves lateral trim exists without turning jumps into arcade steering.

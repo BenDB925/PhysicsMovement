@@ -36,6 +36,8 @@ namespace PhysicsDrivenMovement.Character
         private const float MinimumSprintReachVelocityPreservationFactor = 0.85f;
         private const float MinimumSprintReachVelocityPreservationAcceleration = 28f;
         private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
+        private const float MinimumJumpAirControlForceFraction = 0.15f;
+        private const float MinimumJumpAirControlOppositeDirectionMultiplier = 0.5f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
@@ -72,6 +74,17 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Maximum horizontal speed correction applied per second while preserving recent jump carry. " +
                  "Caps the anti-damping assist so sprint jumps stay heavy and touchdown recovery remains readable.")]
         private float _jumpAirborneVelocityPreservationAcceleration = 32f;
+
+        [Header("Jump Air Control")]
+        [SerializeField, Range(0f, 0.15f)]
+        [Tooltip("Fraction of the normal grounded move force that may be applied as airborne correction during an intentional jump. " +
+                 "Keeps midair WASD limited to landing trim instead of full steering.")]
+        private float _jumpAirControlForceFraction = 0.15f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
+                 "Clamps reverse steering harder than same-direction or lateral trim so jumps cannot be meaningfully reversed in midair.")]
+        private float _jumpAirControlOppositeDirectionMultiplier = 0.5f;
 
         [Header("Jump Wind-Up (C8.5)")]
         [SerializeField, Range(0f, 0.5f)]
@@ -403,6 +416,12 @@ namespace PhysicsDrivenMovement.Character
             _jumpPostLandingGraceDuration = Mathf.Max(
                 _jumpPostLandingGraceDuration,
                 MinimumSprintReachPostLandingGraceDuration);
+            _jumpAirControlForceFraction = Mathf.Max(
+                _jumpAirControlForceFraction,
+                MinimumJumpAirControlForceFraction);
+            _jumpAirControlOppositeDirectionMultiplier = Mathf.Max(
+                _jumpAirControlOppositeDirectionMultiplier,
+                MinimumJumpAirControlOppositeDirectionMultiplier);
 
             Vector3 initialFacing = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (initialFacing.sqrMagnitude < 0.001f)
@@ -505,6 +524,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4: Preserve a bounded slice of earned sprint carry during the intentional
             //         airborne window before deciding whether full locomotion is suppressed.
             ApplyRecentJumpAirborneVelocityPreservation();
+
+            // STEP 4a: Allow only a tiny midair correction path during recent intentional jumps.
+            //          This bypasses the full locomotion suppression gate on purpose, but the
+            //          applied force stays capped far below grounded movement authority.
+            ApplyRecentJumpAirborneCorrectionForce(_currentMoveInput);
 
             // STEP 5: Movement forces. Skip when the character is in a confirmed fall/collapse path.
             if (!ShouldSuppressLocomotion())
@@ -870,6 +894,56 @@ namespace PhysicsDrivenMovement.Character
             //          the intentional jump window. It restores only lost forward carry and does
             //          not add lateral steering or extra vertical energy.
             _rb.AddForce(_jumpAirborneTravelDirection * appliedSpeedCorrection, ForceMode.VelocityChange);
+        }
+
+        private void ApplyRecentJumpAirborneCorrectionForce(Vector2 moveInput)
+        {
+            if (_rb == null || _balance == null)
+            {
+                return;
+            }
+
+            if (!_recentJumpAirborne || _balance.IsGrounded)
+            {
+                return;
+            }
+
+            if (moveInput.sqrMagnitude < 0.0001f)
+            {
+                return;
+            }
+
+            if (!TryGetMoveWorldDirection(moveInput, out Vector3 worldDirection))
+            {
+                return;
+            }
+
+            float authorityMultiplier = 1f;
+            if (_jumpAirborneTravelDirection.sqrMagnitude > 0.0001f)
+            {
+                float alignment = Vector3.Dot(worldDirection, _jumpAirborneTravelDirection);
+                if (alignment < 0f)
+                {
+                    authorityMultiplier = _jumpAirControlOppositeDirectionMultiplier;
+                }
+            }
+
+            float airControlForce = _moveForce * _jumpAirControlForceFraction * authorityMultiplier;
+            if (airControlForce <= 0f)
+            {
+                return;
+            }
+
+            // STEP 1d: Bypass the full locomotion suppression gate for this narrow path only.
+            //          Force mode stays as continuous Force, capped to 15% of grounded authority,
+            //          so the player can trim landing placement without generating arcade reversal.
+            _rb.AddForce(worldDirection * airControlForce, ForceMode.Force);
+
+            if (worldDirection.sqrMagnitude > 0.01f)
+            {
+                UpdateFacingDirection(worldDirection, forceImmediateFacing: false);
+                _hasReceivedMovementInput = true;
+            }
         }
 
         private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)
