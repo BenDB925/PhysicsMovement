@@ -27,10 +27,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float LandingTelemetryWindowSeconds = 0.5f;
 
         private PlayerPrefabTestRig _rig;
+        private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
 
         [SetUp]
         public void SetUp()
         {
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
+
             _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
             {
                 TestOrigin = new Vector3(200f, 0f, 200f),
@@ -44,6 +55,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             _rig?.Dispose();
             _rig = null;
+
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
         private sealed class SprintJumpDiagnostics
