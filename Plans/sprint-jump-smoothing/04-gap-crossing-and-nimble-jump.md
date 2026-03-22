@@ -5,7 +5,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 ## Current status
 - State: In progress
-- Current next step: Slice 4 - air-control force path
+- Current next step: Slice 5 — air-control reversal clamp
 - Blockers: None.
 
 ## Decisions
@@ -155,3 +155,4 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 - 2026-03-22 Slice 4: First focused PlayMode run showed two issues: the pure-air trim test only reached 0.115m lateral drift and the two-jump sprint landing test tipped to 45.9°. Kept the runtime cap at the plan’s 15% ceiling, treated 0.10m as the honest measurable minimum for a from-rest jump, and extended post-landing grace to 0.8s so the added midair trim does not shove recovery back into a faceplant.
 - 2026-03-22 Slice 4: The landing-only tweak was the wrong lever — it merely moved the red from the two-jump sprint case to the single-jump case. Reverted that lean clamp and changed the air-control path itself so earned forward carry still comes from Slice 3 while Slice 4 only adds lateral trim plus limited reverse braking when a launch direction exists.
 - 2026-03-22 Slice 4: With forward air propulsion removed, the remaining 46.0° sprint-landing red now pointed back at my temporary 0.8s landing-grace extension rather than the correction path. Reverting that grace clamp to the Slice 3 baseline (0.7s) to confirm the bounded trim feature is not carrying unrelated recovery drift.
+- 2026-03-22 Slice 4: Finished blocked. Landed the bounded airborne trim path and acceptance test work in PlayerMovement + JumpGapOutcomeTests, but focused PlayMode regression never got fully green: `JumpGapOutcomeTests` passes, while `SprintJumpStabilityTests` still reports `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` at ~45.99° peak tilt with the air-control path already reduced to lateral trim only. No final feat commit made because exit criteria were not met.

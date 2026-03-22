@@ -1,1 +1,1 @@
-{"slice":3,"status":"pass","notes":"Sprint carry preservation + landing lean clamp. 29/29 focused tests green."}
+{"slice": 4, "status": "fail", "notes": "Bounded midair trim path and acceptance test landed, but focused PlayMode regression still fails SprintJump_TwoConsecutiveJumps_DoesNotFaceplant at ~45.99 deg peak tilt, so landing stability exit criteria are not met."}
