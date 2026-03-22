@@ -1274,7 +1274,17 @@ namespace PhysicsDrivenMovement.Character
                     return true;
                 }
 
-                // STEP 4b: Suppress ground locomotion not only once the character is fully
+                // STEP 4b: Once a jump is committed, treat the wind-up and launch as a dedicated
+                //          locomotion sequence rather than letting regular ground drive keep running
+                //          underneath it. That preserves the crouch, prevents late input flips from
+                //          walking the rig backwards before liftoff, and keeps the only midair
+                //          translation authority on the bounded Slice 4 correction path.
+                if (_jumpPhase != JumpPhase.None)
+                {
+                    return true;
+                }
+
+                // STEP 4c: Suppress ground locomotion not only once the character is fully
                 //          ungrounded, but also during the short launch-classified grace window.
                 //          The gap air-control tests switch to reverse input as soon as the jump
                 //          is reported airborne; without this guard, those first launch frames can
