@@ -178,7 +178,6 @@ namespace PhysicsDrivenMovement.Character
         private CharacterState _characterState;
         private LegAnimator _legAnimator;
         private PlayerInputActions _inputActions;
-        private Collider[] _hipColliders;
         private Vector2 _currentMoveInput;
         private Vector3 _currentFacingDirection = Vector3.forward;
         private bool _hasFacingDirection;
@@ -402,10 +401,6 @@ namespace PhysicsDrivenMovement.Character
             {
                 _camera = Camera.main;
             }
-
-            // STEP 3a: Cache hips colliders so near-ground air-control cutoff can probe from the
-            //          lowest local support point instead of the rigidbody centre of mass.
-            _hipColliders = GetComponents<Collider>();
 
             // STEP 4: Create and enable PlayerInputActions for the local movement map.
             _inputActions = new PlayerInputActions();
@@ -983,32 +978,11 @@ namespace PhysicsDrivenMovement.Character
                 return false;
             }
 
-            Vector3 rayOrigin = _rb.worldCenterOfMass;
-            if (_hipColliders != null && _hipColliders.Length > 0)
-            {
-                float lowestBoundsY = float.PositiveInfinity;
-                for (int i = 0; i < _hipColliders.Length; i++)
-                {
-                    Collider hipCollider = _hipColliders[i];
-                    if (hipCollider == null || !hipCollider.enabled)
-                    {
-                        continue;
-                    }
-
-                    lowestBoundsY = Mathf.Min(lowestBoundsY, hipCollider.bounds.min.y);
-                }
-
-                if (!float.IsPositiveInfinity(lowestBoundsY))
-                {
-                    rayOrigin = new Vector3(_rb.worldCenterOfMass.x, lowestBoundsY + 0.02f, _rb.worldCenterOfMass.z);
-                }
-            }
-
             // STEP 1f: Stop the Slice 4 airborne correction a little before contact, not only on
-            //          the exact grounded frame. Probe from the hips collider underside so the
-            //          ~0.3 m cutoff means actual clearance-to-ground, not centre-of-mass height.
+            //          the exact grounded frame. Landing absorption needs an undisturbed final
+            //          descent window so the last midair WASD trim does not leak into touchdown.
             return Physics.Raycast(
-                origin: rayOrigin,
+                origin: _rb.worldCenterOfMass,
                 direction: Vector3.down,
                 maxDistance: JumpAirControlGroundProximityCutoff,
                 layerMask: 1 << GameSettings.LayerEnvironment,
