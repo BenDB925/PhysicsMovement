@@ -213,6 +213,9 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Pre-jump horizontal speed along <see cref="_jumpAirborneTravelDirection"/> captured at launch.</summary>
         private float _jumpAirborneLaunchHorizontalSpeed;
 
+        /// <summary>Raw move-input direction captured at jump acceptance so the committed launch keeps its original intent even if input changes during wind-up.</summary>
+        private Vector2 _committedJumpMoveInput;
+
         /// <summary>Raw move-input direction captured at jump launch so recent-jump consumers can strip pure reverse intent even when world-space travel direction is ambiguous.</summary>
         private Vector2 _jumpAirborneLaunchMoveInput;
 
@@ -661,6 +664,7 @@ namespace PhysicsDrivenMovement.Character
 
             EmitJumpTelemetry(attemptId, JumpTelemetryEventType.JumpAccepted, "accepted");
             _activeJumpAttemptId = attemptId;
+            _committedJumpMoveInput = Vector2.ClampMagnitude(_currentMoveInput, 1f);
 
             // All gates passed — enter wind-up phase (C8.5a).
             if (_jumpWindUpDuration > 0f)
@@ -779,20 +783,26 @@ namespace PhysicsDrivenMovement.Character
             //         force stable and adding any extra standing reach as a small input-shaped
             //         horizontal impulse instead of inflating apex height.
             Vector3 launchImpulse = Vector3.up * _jumpForce;
+            Vector2 committedJumpMoveInput = _committedJumpMoveInput.sqrMagnitude > 0.0001f
+                ? _committedJumpMoveInput
+                : _currentMoveInput;
             Vector3 launchDirection = Vector3.zero;
-            bool hasLaunchDirection = TryGetMoveWorldDirection(_currentMoveInput, out launchDirection);
+            bool hasLaunchDirection = TryGetMoveWorldDirection(committedJumpMoveInput, out launchDirection);
             if (hasLaunchDirection)
             {
-                float launchInputMagnitude = Mathf.Clamp01(_currentMoveInput.magnitude);
+                float launchInputMagnitude = Mathf.Clamp01(committedJumpMoveInput.magnitude);
                 // STEP 1a: Keep slice 2 focused on standing reach only. Sprint-specific carry tuning
                 //          belongs to the next slice, so full sprint ramp should not inherit any
                 //          extra horizontal launch shove from the standing-reach mechanism.
+                // STEP 1b: Use the move input that committed the jump, not whatever the player is
+                //          pressing after wind-up has already started. That preserves the intended
+                //          launch carry even if airborne-state handoff flips during the crouch.
                 float sprintLaunchBonusMultiplier = Mathf.Lerp(1f, 0f, _sprintNormalized);
                 launchImpulse += launchDirection * (_jumpLaunchHorizontalImpulse * launchInputMagnitude * sprintLaunchBonusMultiplier);
             }
 
             Vector3 launchHorizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            CaptureJumpAirborneCarryBaseline(launchHorizontalVelocity, hasLaunchDirection ? launchDirection : Vector3.zero);
+            CaptureJumpAirborneCarryBaseline(launchHorizontalVelocity, hasLaunchDirection ? launchDirection : Vector3.zero, committedJumpMoveInput);
 
             _rb.AddForce(launchImpulse, ForceMode.Impulse);
             _recentJumpAirborne = true;
@@ -833,6 +843,7 @@ namespace PhysicsDrivenMovement.Character
             _jumpLaunchTimer = 0f;
             _jumpAirborneStateGraceTimer = 0f;
             _activeJumpAttemptId = 0;
+            _committedJumpMoveInput = Vector2.zero;
             _balance.ClearJumpCrouchOffset();
             if (_legAnimator != null)
             {
@@ -846,9 +857,12 @@ namespace PhysicsDrivenMovement.Character
             _jumpAirborneStateGraceTimer = Mathf.Max(_jumpAirborneStateGraceDuration, Time.fixedDeltaTime);
         }
 
-        private void CaptureJumpAirborneCarryBaseline(Vector3 preLaunchHorizontalVelocity, Vector3 inputLaunchDirection)
+        private void CaptureJumpAirborneCarryBaseline(
+            Vector3 preLaunchHorizontalVelocity,
+            Vector3 inputLaunchDirection,
+            Vector2 committedJumpMoveInput)
         {
-            // STEP 1b: Preserve earned sprint carry from the run-up itself instead of sneaking extra
+            // STEP 1c: Preserve earned sprint carry from the run-up itself instead of sneaking extra
             //          forward launch force into sprint jumps. If input is missing, fall back to the
             //          actual horizontal travel direction so the airborne assist tracks real momentum.
             Vector3 travelDirection = inputLaunchDirection;
@@ -868,8 +882,8 @@ namespace PhysicsDrivenMovement.Character
             travelDirection.Normalize();
             _jumpAirborneTravelDirection = travelDirection;
             _jumpAirborneLaunchHorizontalSpeed = Mathf.Max(0f, Vector3.Dot(preLaunchHorizontalVelocity, travelDirection));
-            _jumpAirborneLaunchMoveInput = _currentMoveInput.sqrMagnitude > 0.0001f
-                ? _currentMoveInput.normalized
+            _jumpAirborneLaunchMoveInput = committedJumpMoveInput.sqrMagnitude > 0.0001f
+                ? committedJumpMoveInput.normalized
                 : Vector2.zero;
         }
 
