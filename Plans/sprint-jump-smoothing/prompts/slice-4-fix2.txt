@@ -1,0 +1,49 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Assets/Scripts/Character/PlayerMovement.cs
+- Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs
+- CODING_STANDARDS.md
+
+CONTEXT - what we know:
+
+Slice 4 was supposed to add a bounded midair WASD correction force (ApplyRecentJumpAirborneCorrectionForce) to PlayerMovement.cs. The feature was implemented but causes SprintJump_SingleJump_DoesNotFaceplant to fail deterministically with 95.7 degrees tilt (threshold 48 degrees). This is a full faceplant - the character falls over completely.
+
+Key findings from investigation:
+1. The test PASSES with slice 3 code (8c7581f). The test FAILS with slice 4 code present.
+2. The regression persists even when _jumpAirControlForceFraction is set to 0f - meaning zero force is actually applied.
+3. The diff between slice 3 and slice 4 is purely additive - no existing lines were changed, only new code added.
+4. A proximity cutoff approach was already tried and caused more regressions - do NOT use that approach.
+5. The test uses forward move input held throughout the jump (SetMoveInputForTest with forwardInput).
+
+YOUR TASK: Find and fix the root cause of SprintJump_SingleJump_DoesNotFaceplant failing when the air control code is present, even at 0f force.
+
+INVESTIGATION STARTING POINT:
+The air control method calls UpdateFacingDirection() and sets _hasReceivedMovementInput = true inside ApplyRecentJumpAirborneCorrectionForce, guarded by an airControlForce > 0f check. However, even with force=0, the method is still being called in FixedUpdate. Look carefully at:
+- Whether calling TryGetMoveWorldDirection() mid-air has side effects
+- Whether any state mutation happens before the force guard
+- Whether _recentJumpAirborne, _jumpAirborneTravelDirection, or related fields are being modified when they shouldn't be
+- Whether the Awake/init path for the new serialized fields has any unintended effect on existing state
+
+The fix should be minimal. If the root cause is a side effect in the method body, fix that. If it's a field initialization issue, fix that. Do NOT add a proximity cutoff. Do NOT change existing constants or tuned values.
+
+COMMIT BEFORE TESTS: Commit your code change first, then run the filtered test suite to verify.
+
+Run filtered tests after committing:
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -TestFilter "JumpTests|SprintJumpStabilityTests" -MaxAttemptsPerPlatform 2 -Unattended
+
+EXIT CRITERIA (all must pass):
+- SprintJump_SingleJump_DoesNotFaceplant: PASS (peak tilt < 48 degrees)
+- SprintJump_TwoConsecutiveJumps_DoesNotFaceplant: PASS (peak tilt < 48 degrees)
+- LandingAbsorption_LowersHipsBriefly_AfterAirborneToStanding: PASS
+- All other JumpTests and SprintJumpStabilityTests still green (was 19/20 before, need 20/20)
+
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, move on.
+- Commit incrementally: wip commits as you go, final clean commit when tests are green.
+- Final commit message: "fix: resolve air-control side effect causing SingleJump faceplant (slice 4 fix)"
+- Write result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - Pass: {"slice": 4, "status": "pass", "notes": "brief summary of what the root cause was and how you fixed it"}
+  - Fail: {"slice": 4, "status": "fail", "notes": "exact description of what's still broken and your best hypothesis"}
+- Append a one-line entry to the Agent Log section in H:\Work\PhysicsDrivenMovementDemo\Plans\sprint-jump-smoothing\04-gap-crossing-and-nimble-jump.md
+- Then stop.

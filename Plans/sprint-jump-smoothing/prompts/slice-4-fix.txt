@@ -1,0 +1,40 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+FIRST: Read these files before doing anything:
+- Assets/Scripts/Character/PlayerMovement.cs
+- Assets/Tests/PlayMode/Character/JumpTests.cs
+- Assets/Tests/PlayMode/Character/SprintJumpStabilityTests.cs
+- CODING_STANDARDS.md
+
+HANDOFF CONTEXT:
+Slice 4 added ApplyRecentJumpAirborneCorrectionForce() in PlayerMovement.cs — a midair WASD correction force gated on _recentJumpAirborne && !IsGrounded. This caused two test regressions:
+
+1. LandingAbsorption_LowersHipsBriefly_AfterAirborneToStanding (JumpTests) — hips not dipping on landing
+2. SprintJump_TwoConsecutiveJumps_DoesNotFaceplant (SprintJumpStabilityTests) — peak tilt 50.3 deg, threshold 48 deg
+
+Root cause: the correction force runs right up to the landing frame, nudging velocity enough that the balance controller's landing absorption doesn't trigger properly.
+
+YOUR TASK: Fix the landing regression — targeted, minimal change only.
+
+Add a proximity cutoff to ApplyRecentJumpAirborneCorrectionForce() so it stops firing when the character is close to the ground (within ~0.3m), not just on contact. IsGrounded only flips on actual contact — too late. Use a downward raycast or check the existing ground sensor distance if available. If neither is clean, use a simple Physics.Raycast from hips downward with layermask matching what BalanceController uses.
+
+Do NOT change anything else. Do not retune existing constants. Do not touch BalanceController.cs.
+
+COMMIT BEFORE TESTS: Commit your code change first, then run the filtered test suite to verify.
+
+Run filtered tests after committing:
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -TestFilter "JumpTests|SprintJumpStabilityTests" -MaxAttemptsPerPlatform 2 -Unattended
+
+EXIT CRITERIA:
+- LandingAbsorption_LowersHipsBriefly_AfterAirborneToStanding: PASS
+- SprintJump_TwoConsecutiveJumps_DoesNotFaceplant: PASS (threshold is 48 deg)
+- All other JumpTests and SprintJumpStabilityTests still green
+
+RULES:
+- Do NOT ask questions. Make your best call, add a comment explaining why, move on.
+- Commit incrementally: wip commits as you go, final commit when tests are green.
+- Final commit message: "fix: cut air-control force near ground to restore landing absorption (slice 4 fix)"
+- Write result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+  - Pass: {"slice": 4, "status": "pass", "notes": "brief summary"}
+  - Fail: {"slice": 4, "status": "fail", "notes": "exact description of what's still broken"}
+- Then stop.

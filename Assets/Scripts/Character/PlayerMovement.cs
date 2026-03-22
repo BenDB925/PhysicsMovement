@@ -82,7 +82,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
                  "Clamps reverse steering harder than same-direction or lateral trim so jumps cannot be meaningfully reversed in midair.")]
-        private float _jumpAirControlOppositeDirectionMultiplier = 0.5f;
+        private float _jumpAirControlOppositeDirectionMultiplier = 0f;
 
         [Header("Jump Wind-Up (C8.5)")]
         [SerializeField, Range(0f, 0.5f)]
@@ -261,7 +261,7 @@ namespace PhysicsDrivenMovement.Character
         private bool _overrideMoveInput;
 
         /// <summary>Latest sampled movement input from the Player action map.</summary>
-        public Vector2 CurrentMoveInput => _currentMoveInput;
+        public Vector2 CurrentMoveInput => GetEffectiveMoveInputForStateConsumers();
 
         /// <summary>
         /// Latest world-space facing direction requested by movement input.
@@ -277,7 +277,8 @@ namespace PhysicsDrivenMovement.Character
         {
             get
             {
-                return TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection)
+                Vector2 effectiveMoveInput = GetEffectiveMoveInputForStateConsumers();
+                return TryGetMoveWorldDirection(effectiveMoveInput, out Vector3 worldDirection)
                     ? worldDirection
                     : Vector3.zero;
             }
@@ -312,13 +313,22 @@ namespace PhysicsDrivenMovement.Character
 
         internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
-        internal DesiredInput CurrentDesiredInput =>
-            new DesiredInput(
-                _currentMoveInput,
-                CurrentMoveWorldDirection,
-                CurrentFacingDirection,
-                _jumpRequestedThisPhysicsStep,
-                _sprintNormalized);
+        internal DesiredInput CurrentDesiredInput
+        {
+            get
+            {
+                Vector2 effectiveMoveInput = GetEffectiveMoveInputForStateConsumers();
+                Vector3 effectiveMoveWorldDirection = TryGetMoveWorldDirection(effectiveMoveInput, out Vector3 worldDirection)
+                    ? worldDirection
+                    : Vector3.zero;
+                return new DesiredInput(
+                    effectiveMoveInput,
+                    effectiveMoveWorldDirection,
+                    CurrentFacingDirection,
+                    _jumpRequestedThisPhysicsStep,
+                    _sprintNormalized);
+            }
+        }
 
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
@@ -1069,6 +1079,64 @@ namespace PhysicsDrivenMovement.Character
 
             worldDirection.Normalize();
             return true;
+        }
+
+        private Vector2 GetEffectiveMoveInputForStateConsumers()
+        {
+            if (_currentMoveInput.sqrMagnitude < 0.0001f)
+            {
+                return _currentMoveInput;
+            }
+
+            if (_balance == null || !_recentJumpAirborne || _balance.IsGrounded)
+            {
+                return _currentMoveInput;
+            }
+
+            if (_jumpAirborneTravelDirection.sqrMagnitude < 0.0001f)
+            {
+                return _currentMoveInput;
+            }
+
+            if (!TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection))
+            {
+                return _currentMoveInput;
+            }
+
+            float alignment = Vector3.Dot(worldDirection, _jumpAirborneTravelDirection);
+            if (alignment >= 0f)
+            {
+                return _currentMoveInput;
+            }
+
+            Vector3 lateralTrimDirection = worldDirection - (_jumpAirborneTravelDirection * alignment);
+            if (lateralTrimDirection.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.zero;
+            }
+
+            return ConvertWorldDirectionToMoveInput(lateralTrimDirection.normalized) * Mathf.Clamp01(lateralTrimDirection.magnitude);
+        }
+
+        private Vector2 ConvertWorldDirectionToMoveInput(Vector3 worldDirection)
+        {
+            Vector3 flattenedWorldDirection = Vector3.ProjectOnPlane(worldDirection, Vector3.up);
+            if (flattenedWorldDirection.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.zero;
+            }
+
+            flattenedWorldDirection.Normalize();
+
+            if (_camera != null)
+            {
+                float cameraYaw = _camera.transform.eulerAngles.y;
+                Quaternion inverseYaw = Quaternion.Euler(0f, -cameraYaw, 0f);
+                Vector3 localDirection = inverseYaw * flattenedWorldDirection;
+                return new Vector2(localDirection.x, localDirection.z);
+            }
+
+            return new Vector2(flattenedWorldDirection.x, flattenedWorldDirection.z);
         }
 
         private void UpdateFacingDirection(Vector3 desiredWorldDirection, bool forceImmediateFacing)

@@ -51,6 +51,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int AirControlLandingBudgetFrames = 240;
         private const float AirControlMinimumLateralDisplacement = 0.08f;
         private const float AirControlMaximumLateralDisplacement = 0.4f;
+        private const float AirControlReverseTravelRetentionFloor = 0.7f;
 
         private static readonly Vector3 TestOrigin = new Vector3(240f, 0f, 240f);
 
@@ -222,7 +223,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return _rig.WarmUp(SettleFrames);
             ClearGroundStateOverride();
 
-            Vector3 spawnPosition = GetSinglePlatformSpawnPosition();
+            Vector3 spawnPosition = GetSinglePlatformCenterSpawnPosition();
             RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
             yield return new WaitForFixedUpdate();
 
@@ -239,6 +240,31 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(maxLateralDisplacement, Is.LessThanOrEqualTo(AirControlMaximumLateralDisplacement),
                 $"Pure airborne right input should stay bounded below {AirControlMaximumLateralDisplacement:F2}m over one jump " +
                 $"(observed {maxLateralDisplacement:F3}m).");
+        }
+
+        [UnityTest]
+        public IEnumerator JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel()
+        {
+            // Arrange
+            yield return PrepareAirControlScenario(useNearEdgeSpawn: true);
+
+            float zeroInputForwardTravel = 0f;
+            float reverseInputForwardTravel = 0f;
+
+            // Act
+            yield return MeasureJumpAirControlForwardTravel(Vector2.zero, result => zeroInputForwardTravel = result);
+            yield return PrepareAirControlScenario(useNearEdgeSpawn: true);
+            yield return MeasureJumpAirControlForwardTravel(Vector2.down, result => reverseInputForwardTravel = result);
+
+            float retainedTravelRatio = reverseInputForwardTravel / Mathf.Max(0.0001f, zeroInputForwardTravel);
+            TestContext.Out.WriteLine($"[METRIC] AirControl ZeroInputForwardTravel={zeroInputForwardTravel:F3}");
+            TestContext.Out.WriteLine($"[METRIC] AirControl ReverseInputForwardTravel={reverseInputForwardTravel:F3}");
+            TestContext.Out.WriteLine($"[METRIC] AirControl ReverseRetentionRatio={retainedTravelRatio:F3}");
+
+            // Assert
+            Assert.That(retainedTravelRatio, Is.GreaterThanOrEqualTo(AirControlReverseTravelRetentionFloor),
+                $"Full reverse airborne input should still retain at least {AirControlReverseTravelRetentionFloor:P0} of the zero-input forward travel " +
+                $"(baseline {zeroInputForwardTravel:F3}m, reverse {reverseInputForwardTravel:F3}m, ratio {retainedTravelRatio:F3}).");
         }
 
         private IEnumerator MeasureJumpApexHeight(
@@ -311,6 +337,39 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _farPlatform = null;
         }
 
+        private IEnumerator PrepareAirControlScenario(bool useNearEdgeSpawn)
+        {
+            if (_launchPlatform != null)
+            {
+                UnityEngine.Object.Destroy(_launchPlatform);
+                _launchPlatform = null;
+            }
+
+            if (_farPlatform != null)
+            {
+                UnityEngine.Object.Destroy(_farPlatform);
+                _farPlatform = null;
+            }
+
+            _rig?.Dispose();
+            _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
+            {
+                TestOrigin = TestOrigin,
+                GroundOffset = new Vector3(0f, -8f, 0f),
+                GroundScale = new Vector3(10f, 1f, 10f),
+            });
+
+            CreateAirControlPlatform();
+            yield return _rig.WarmUp(SettleFrames);
+            ClearGroundStateOverride();
+
+            Vector3 spawnPosition = useNearEdgeSpawn
+                ? GetSinglePlatformNearEdgeSpawnPosition()
+                : GetSinglePlatformCenterSpawnPosition();
+            RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
+            yield return new WaitForFixedUpdate();
+        }
+
         private Vector3 GetLaunchSpawnPosition(float edgeInset)
         {
             // STEP 2a: Spawn on top of the launch platform and near the lip facing the gap.
@@ -323,11 +382,19 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             return launchNearEdge + Vector3.up * SpawnHipsHeightAbovePlatformTop;
         }
 
-        private Vector3 GetSinglePlatformSpawnPosition()
+        private Vector3 GetSinglePlatformCenterSpawnPosition()
         {
             Vector3 launchCenter = _launchPlatform.transform.position;
             Vector3 platformTop = launchCenter + Vector3.up * (PlatformHeight * 0.5f);
             return platformTop + Vector3.up * SpawnHipsHeightAbovePlatformTop;
+        }
+
+        private Vector3 GetSinglePlatformNearEdgeSpawnPosition()
+        {
+            Vector3 launchCenter = _launchPlatform.transform.position;
+            Vector3 platformTop = launchCenter + Vector3.up * (PlatformHeight * 0.5f);
+            Vector3 launchNearEdge = platformTop + _forward * (AirControlPlatformLength * 0.5f - StandingSpawnEdgeInset);
+            return launchNearEdge + Vector3.up * SpawnHipsHeightAbovePlatformTop;
         }
 
         private static GameObject CreatePlatform(string name, Vector3 center, float length, float width)
@@ -442,6 +509,47 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             onComplete?.Invoke(maxLateralDisplacement);
+        }
+
+        private IEnumerator MeasureJumpAirControlForwardTravel(Vector2 airborneInput, Action<float> onComplete)
+        {
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            _rig.PlayerMovement.SetSprintInputForTest(false);
+            _rig.PlayerMovement.SetJumpInputForTest(true);
+            yield return new WaitForFixedUpdate();
+            _rig.PlayerMovement.SetJumpInputForTest(false);
+
+            float jumpStartForwardPosition = _rig.Hips.position.z;
+            float maxForwardTravel = 0f;
+            bool wasAirborne = false;
+            int groundedFramesAfterAirborne = 0;
+
+            int totalFrames = AirControlLandingBudgetFrames + FallenWindowSampleFrames;
+            for (int frame = 0; frame < totalFrames; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+
+                bool isAirborne = _rig.CharacterState.CurrentState == CharacterStateType.Airborne || !_rig.BalanceController.IsGrounded;
+                if (isAirborne)
+                {
+                    wasAirborne = true;
+                    _rig.PlayerMovement.SetMoveInputForTest(airborneInput);
+                }
+                else if (wasAirborne)
+                {
+                    groundedFramesAfterAirborne++;
+                    _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+                }
+
+                maxForwardTravel = Mathf.Max(maxForwardTravel, _rig.Hips.position.z - jumpStartForwardPosition);
+
+                if (wasAirborne && groundedFramesAfterAirborne >= 5)
+                {
+                    break;
+                }
+            }
+
+            onComplete?.Invoke(maxForwardTravel);
         }
 
         private float MeasureFarEdgeProgress(Vector3 hipsPosition)
