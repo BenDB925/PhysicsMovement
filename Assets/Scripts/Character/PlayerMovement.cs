@@ -38,7 +38,6 @@ namespace PhysicsDrivenMovement.Character
         private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
         private const float MinimumJumpAirControlForceFraction = 0.15f;
         private const float MinimumJumpAirControlOppositeDirectionMultiplier = 0.5f;
-        private const float JumpAirControlGroundProximityCutoff = 0.3f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
@@ -909,11 +908,6 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            if (IsNearGroundForJumpAirControl())
-            {
-                return;
-            }
-
             if (moveInput.sqrMagnitude < 0.0001f)
             {
                 return;
@@ -968,24 +962,6 @@ namespace PhysicsDrivenMovement.Character
                 UpdateFacingDirection(normalizedCorrectionDirection, forceImmediateFacing: false);
                 _hasReceivedMovementInput = true;
             }
-        }
-
-        private bool IsNearGroundForJumpAirControl()
-        {
-            if (_rb == null)
-            {
-                return false;
-            }
-
-            // STEP 1f: Stop the Slice 4 airborne correction a little before contact, not only on
-            //          the exact grounded frame. Landing absorption needs an undisturbed final
-            //          descent window so the last midair WASD trim does not leak into touchdown.
-            return Physics.Raycast(
-                origin: _rb.worldCenterOfMass,
-                direction: Vector3.down,
-                maxDistance: JumpAirControlGroundProximityCutoff,
-                layerMask: 1 << GameSettings.LayerEnvironment,
-                queryTriggerInteraction: QueryTriggerInteraction.Ignore);
         }
 
         private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)
