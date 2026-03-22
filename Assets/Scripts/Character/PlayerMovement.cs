@@ -536,9 +536,12 @@ namespace PhysicsDrivenMovement.Character
             ApplyRecentJumpAirborneCorrectionForce(_currentMoveInput);
 
             // STEP 5: Movement forces. Skip when the character is in a confirmed fall/collapse path.
+            //         Recent-jump recovery reuses the same effective-input clamp as state consumers
+            //         so full reverse input cannot immediately cancel the preserved jump carry on
+            //         the first grounded recovery frames.
             if (!ShouldSuppressLocomotion())
             {
-                ApplyMovementForces(_currentMoveInput);
+                ApplyMovementForces(GetEffectiveMoveInputForStateConsumers());
             }
 
             // STEP 6: Lean-proportional braking. Applied regardless of locomotion suppression
@@ -1088,7 +1091,7 @@ namespace PhysicsDrivenMovement.Character
                 return _currentMoveInput;
             }
 
-            if (_balance == null || !_recentJumpAirborne || _balance.IsGrounded)
+            if (_balance == null || !_recentJumpAirborne)
             {
                 return _currentMoveInput;
             }
