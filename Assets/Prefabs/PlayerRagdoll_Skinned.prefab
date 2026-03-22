@@ -1082,7 +1082,7 @@ MonoBehaviour:
   _jumpLaunchHorizontalImpulse: 2600
   _jumpAirborneVelocityPreservationFactor: 0.9
   _jumpAirborneVelocityPreservationAcceleration: 32
-  _jumpAirControlForceFraction: 0.1
+  _jumpAirControlForceFraction: 0.12
   _jumpAirControlOppositeDirectionMultiplier: 0.5
   _jumpWindUpDuration: 0.2
   _jumpWindUpGroundLossCommitProgress: 0.85
