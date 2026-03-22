@@ -77,7 +77,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 0.15f)]
         [Tooltip("Fraction of the normal grounded move force that may be applied as airborne correction during an intentional jump. " +
                  "Keeps midair WASD limited to landing trim instead of full steering.")]
-        private float _jumpAirControlForceFraction = 0.15f;
+        private float _jumpAirControlForceFraction = 0f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
