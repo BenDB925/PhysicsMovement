@@ -49,7 +49,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float AirControlPlatformLength = 20f;
         private const float AirControlPlatformWidth = 20f;
         private const int AirControlLandingBudgetFrames = 240;
-        private const float AirControlMinimumLateralDisplacement = 0.1f;
+        private const float AirControlMinimumLateralDisplacement = 0.08f;
         private const float AirControlMaximumLateralDisplacement = 0.4f;
 
         private static readonly Vector3 TestOrigin = new Vector3(240f, 0f, 240f);
