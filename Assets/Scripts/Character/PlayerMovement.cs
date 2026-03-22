@@ -36,8 +36,8 @@ namespace PhysicsDrivenMovement.Character
         private const float MinimumSprintReachVelocityPreservationFactor = 0.85f;
         private const float MinimumSprintReachVelocityPreservationAcceleration = 28f;
         private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
-        private const float MinimumJumpAirControlForceFraction = 0.15f;
-        private const float MinimumJumpAirControlOppositeDirectionMultiplier = 0.5f;
+        private const float MinimumJumpAirControlForceFraction = 0f;
+        private const float MinimumJumpAirControlOppositeDirectionMultiplier = 0f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
@@ -79,7 +79,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 0.15f)]
         [Tooltip("Fraction of the normal grounded move force that may be applied as airborne correction during an intentional jump. " +
                  "Keeps midair WASD limited to landing trim instead of full steering.")]
-        private float _jumpAirControlForceFraction = 0.15f;
+        private float _jumpAirControlForceFraction = 0f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
