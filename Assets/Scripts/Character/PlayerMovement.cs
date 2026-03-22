@@ -918,30 +918,48 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float authorityMultiplier = 1f;
+            Vector3 correctionDirection = worldDirection;
             if (_jumpAirborneTravelDirection.sqrMagnitude > 0.0001f)
             {
                 float alignment = Vector3.Dot(worldDirection, _jumpAirborneTravelDirection);
-                if (alignment < 0f)
+                Vector3 alignedComponent = _jumpAirborneTravelDirection * alignment;
+                Vector3 lateralComponent = worldDirection - alignedComponent;
+
+                if (alignment > 0f)
                 {
-                    authorityMultiplier = _jumpAirControlOppositeDirectionMultiplier;
+                    // STEP 1d: Treat this as correction, not bonus propulsion. Preserve the
+                    //          Slice 3 carry path for earned forward travel and spend the bounded
+                    //          air-control budget on lateral trim plus limited reverse braking.
+                    correctionDirection = lateralComponent;
+                }
+                else if (alignment < 0f)
+                {
+                    correctionDirection = lateralComponent + (alignedComponent * _jumpAirControlOppositeDirectionMultiplier);
                 }
             }
 
-            float airControlForce = _moveForce * _jumpAirControlForceFraction * authorityMultiplier;
+            float correctionMagnitude = correctionDirection.magnitude;
+            if (correctionMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            float airControlForce = _moveForce * _jumpAirControlForceFraction * Mathf.Clamp01(correctionMagnitude);
             if (airControlForce <= 0f)
             {
                 return;
             }
 
-            // STEP 1d: Bypass the full locomotion suppression gate for this narrow path only.
+            Vector3 normalizedCorrectionDirection = correctionDirection / correctionMagnitude;
+
+            // STEP 1e: Bypass the full locomotion suppression gate for this narrow path only.
             //          Force mode stays as continuous Force, capped to 15% of grounded authority,
             //          so the player can trim landing placement without generating arcade reversal.
-            _rb.AddForce(worldDirection * airControlForce, ForceMode.Force);
+            _rb.AddForce(normalizedCorrectionDirection * airControlForce, ForceMode.Force);
 
-            if (worldDirection.sqrMagnitude > 0.01f)
+            if (normalizedCorrectionDirection.sqrMagnitude > 0.01f)
             {
-                UpdateFacingDirection(worldDirection, forceImmediateFacing: false);
+                UpdateFacingDirection(normalizedCorrectionDirection, forceImmediateFacing: false);
                 _hasReceivedMovementInput = true;
             }
         }

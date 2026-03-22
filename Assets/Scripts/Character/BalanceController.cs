@@ -17,7 +17,7 @@ namespace PhysicsDrivenMovement.Character
     [RequireComponent(typeof(Rigidbody))]
     public class BalanceController : MonoBehaviour
     {
-        private const float MaximumSprintReachLandingAbsorbLeanDeg = 1.4f;
+        private const float MaximumSprintReachLandingAbsorbLeanDeg = 1.5f;
         // TUNING LOG:
         // - Character stands still: ✓
         // - 200 N push → recovers within 3 s: ✗ (pending in-editor verification)
