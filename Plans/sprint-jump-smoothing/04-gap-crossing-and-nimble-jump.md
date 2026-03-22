@@ -5,9 +5,9 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 ## Current status
 - State: In progress
-- Current next step: Slice 5 — air-control reversal clamp
+- Current next step: Slice 7 — airborne arm readability
 - **Slice 4 complete**: 25/25 tests green. See progress log.
-- Blockers: None.
+- Blockers: Slice 5 reversal-retention test still red; full opposite air input collapses forward travel to ~0.1% of baseline in `JumpGapOutcomeTests`.
 
 ## Decisions
 - 2026-03-20: Reuse the `Plans/sprint-jump-smoothing/` tree because this is a direct jump-feel follow-up, not a new unrelated locomotion track.
@@ -129,6 +129,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 - 2026-03-22 Slice 5: Decision - for the retention metric, measure from the jump start on the near-edge spawn rather than from a later launch/airborne marker. On this fixture there is effectively no pre-jump walk-up drift, and the simpler baseline is more stable than chasing the exact launch frame.
 - 2026-03-22 Slice 5: Problem - even with the reverse correction force clamped to zero, full back input still killed forward travel because downstream locomotion/recovery consumers were reading the raw opposite move intent during the airborne window. Added an exported-input clamp so recent-jump consumers keep only lateral trim while reverse intent is stripped during the jump.
 - 2026-03-22 Slice 5: Problem - the zero-input and reverse-input measurements were sharing one rig instance back-to-back, so post-landing recovery state could bleed into the second run. Resetting the entire air-control scenario between the baseline and reversal passes for a clean apples-to-apples comparison.
+- 2026-03-22 Slice 5: Finished blocked. Added the reversal-retention negative test, split the air-control harness spawn/reset paths, clamped opposite-direction correction/exported intent in PlayerMovement, and tuned the opposite multiplier all the way down to 0.0. Focused `JumpGapOutcomeTests` still fails only the new reversal case (`baseline 0.862m`, `reverse 0.001m`, ratio `0.001`), so exit criteria were not met and no merge was performed.
 - 2026-03-20 Slice 1: Committed gap harness and two red tests (e767276)
 - 2026-03-20 Slice 2: First attempt failed - character spawned 10m from launch edge, progress 0.00m. Retry queued with spawn geometry fix.
 - 2026-03-20 Slice 2 retry: Spawn geometry corrected; standing gap + apex budget + sprint landing stability slice now green, while sprint gap remains intentionally red for Slice 3.
