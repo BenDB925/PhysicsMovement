@@ -12,6 +12,18 @@ HANDOFF CONTEXT (what the previous agent left):
 Slice 5 completed: Tightened opposite-direction air clamp. Reversal negative test green — full reverse input keeps >= 70% of forward travel.
 Check git log and agent-slice-status.json to confirm before proceeding.
 
+BRANCH WORKFLOW (mandatory):
+1. At the very start, create and checkout your slice branch:
+   git checkout -b slice/04-7
+2. All commits (wip and final) go on this branch — never commit directly to master or the plan branch.
+3. ALWAYS commit your code before running any test suite (wip commit is fine). Never lose work to a timeout mid-test-run.
+4. On success: after writing agent-slice-status.json, merge into master and delete the branch:
+   git checkout master
+   git merge --no-ff slice/04-7 -m "feat: slice 7"
+   git branch -d slice/04-7
+5. On failure: leave the branch in place. Do NOT merge. Write agent-slice-status.json with status=fail.
+
+
 YOUR TASK: Implement Slice 7 only — "Airborne readability".
 
 NOTE: Slice 6 (airborne facing contingency) is conditional - only needed if midair yaw rate exceeded 180 deg/s during Slice 4/5 or if yaw snapping was visible. Skip it unless evidence exists.
