@@ -77,7 +77,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 0.15f)]
         [Tooltip("Fraction of the normal grounded move force that may be applied as airborne correction during an intentional jump. " +
                  "Keeps midair WASD limited to landing trim instead of full steering.")]
-        private float _jumpAirControlForceFraction = 0f;
+        private float _jumpAirControlForceFraction = 0.15f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
@@ -950,13 +950,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1e: Bypass the full locomotion suppression gate for this narrow path only.
             //          Force mode stays as continuous Force, capped to 15% of grounded authority,
             //          so the player can trim landing placement without generating arcade reversal.
+            // STEP 1f: Keep airborne correction force-only. Rewriting facing intent here leaks a
+            //          tiny midair trim path into landing posture selection and can destabilize the
+            //          first grounded frames even when the player never asked to turn in the air.
             _rb.AddForce(normalizedCorrectionDirection * airControlForce, ForceMode.Force);
-
-            if (normalizedCorrectionDirection.sqrMagnitude > 0.01f)
-            {
-                UpdateFacingDirection(normalizedCorrectionDirection, forceImmediateFacing: false);
-                _hasReceivedMovementInput = true;
-            }
         }
 
         private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)
