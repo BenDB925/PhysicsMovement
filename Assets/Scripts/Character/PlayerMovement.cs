@@ -33,6 +33,9 @@ namespace PhysicsDrivenMovement.Character
     public class PlayerMovement : MonoBehaviour
     {
         private const int JumpTelemetryCapacity = 64;
+        private const float MinimumSprintReachVelocityPreservationFactor = 0.85f;
+        private const float MinimumSprintReachVelocityPreservationAcceleration = 28f;
+        private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
@@ -58,6 +61,17 @@ namespace PhysicsDrivenMovement.Character
                  "Uses current input magnitude instead of sprint speed so standing jumps gain reach " +
                  "without turning airborne frames into full locomotion.")]
         private float _jumpLaunchHorizontalImpulse = 2600f;
+
+        [Header("Jump Airborne Carry")]
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("Minimum fraction of the earned pre-jump horizontal speed to preserve while the character is in the intentional jump airborne window. " +
+                 "Keeps sprint jumps carrying their run-up momentum without inflating jump height or adding full midair drive.")]
+        private float _jumpAirborneVelocityPreservationFactor = 0.9f;
+
+        [SerializeField, Range(0f, 40f)]
+        [Tooltip("Maximum horizontal speed correction applied per second while preserving recent jump carry. " +
+                 "Caps the anti-damping assist so sprint jumps stay heavy and touchdown recovery remains readable.")]
+        private float _jumpAirborneVelocityPreservationAcceleration = 32f;
 
         [Header("Jump Wind-Up (C8.5)")]
         [SerializeField, Range(0f, 0.5f)]
@@ -181,6 +195,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>True from jump launch until the character is confirmed grounded after the jump completes.</summary>
         private bool _recentJumpAirborne;
+
+        /// <summary>World-space horizontal travel direction captured at jump launch for bounded airborne carry preservation.</summary>
+        private Vector3 _jumpAirborneTravelDirection;
+
+        /// <summary>Pre-jump horizontal speed along <see cref="_jumpAirborneTravelDirection"/> captured at launch.</summary>
+        private float _jumpAirborneLaunchHorizontalSpeed;
 
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
@@ -371,6 +391,19 @@ namespace PhysicsDrivenMovement.Character
             _inputActions = new PlayerInputActions();
             _inputActions.Enable();
 
+            // STEP 4a: Prefab-backed test rigs can retain older serialized values for new tuning
+            //          fields. Clamp Slice 3's carry-preservation knobs to the tuned minimums so
+            //          sprint reach behaves consistently until the prefab is resaved.
+            _jumpAirborneVelocityPreservationFactor = Mathf.Max(
+                _jumpAirborneVelocityPreservationFactor,
+                MinimumSprintReachVelocityPreservationFactor);
+            _jumpAirborneVelocityPreservationAcceleration = Mathf.Max(
+                _jumpAirborneVelocityPreservationAcceleration,
+                MinimumSprintReachVelocityPreservationAcceleration);
+            _jumpPostLandingGraceDuration = Mathf.Max(
+                _jumpPostLandingGraceDuration,
+                MinimumSprintReachPostLandingGraceDuration);
+
             Vector3 initialFacing = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (initialFacing.sqrMagnitude < 0.001f)
             {
@@ -469,13 +502,17 @@ namespace PhysicsDrivenMovement.Character
             TickJumpWindUp();
             TickJumpLaunch();
 
-            // STEP 4: Movement forces. Skip when the character is in a confirmed fall/collapse path.
+            // STEP 4: Preserve a bounded slice of earned sprint carry during the intentional
+            //         airborne window before deciding whether full locomotion is suppressed.
+            ApplyRecentJumpAirborneVelocityPreservation();
+
+            // STEP 5: Movement forces. Skip when the character is in a confirmed fall/collapse path.
             if (!ShouldSuppressLocomotion())
             {
                 ApplyMovementForces(_currentMoveInput);
             }
 
-            // STEP 5: Lean-proportional braking. Applied regardless of locomotion suppression
+            // STEP 6: Lean-proportional braking. Applied regardless of locomotion suppression
             //         because the goal is to bleed off existing horizontal momentum that feeds
             //         the topple, not to add new movement.
             ApplyLeanBraking();
@@ -710,7 +747,9 @@ namespace PhysicsDrivenMovement.Character
             //         force stable and adding any extra standing reach as a small input-shaped
             //         horizontal impulse instead of inflating apex height.
             Vector3 launchImpulse = Vector3.up * _jumpForce;
-            if (TryGetMoveWorldDirection(_currentMoveInput, out Vector3 launchDirection))
+            Vector3 launchDirection = Vector3.zero;
+            bool hasLaunchDirection = TryGetMoveWorldDirection(_currentMoveInput, out launchDirection);
+            if (hasLaunchDirection)
             {
                 float launchInputMagnitude = Mathf.Clamp01(_currentMoveInput.magnitude);
                 // STEP 1a: Keep slice 2 focused on standing reach only. Sprint-specific carry tuning
@@ -719,6 +758,9 @@ namespace PhysicsDrivenMovement.Character
                 float sprintLaunchBonusMultiplier = Mathf.Lerp(1f, 0f, _sprintNormalized);
                 launchImpulse += launchDirection * (_jumpLaunchHorizontalImpulse * launchInputMagnitude * sprintLaunchBonusMultiplier);
             }
+
+            Vector3 launchHorizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+            CaptureJumpAirborneCarryBaseline(launchHorizontalVelocity, hasLaunchDirection ? launchDirection : Vector3.zero);
 
             _rb.AddForce(launchImpulse, ForceMode.Impulse);
             _recentJumpAirborne = true;
@@ -770,6 +812,64 @@ namespace PhysicsDrivenMovement.Character
         private void BeginJumpAirborneStateGrace()
         {
             _jumpAirborneStateGraceTimer = Mathf.Max(_jumpAirborneStateGraceDuration, Time.fixedDeltaTime);
+        }
+
+        private void CaptureJumpAirborneCarryBaseline(Vector3 preLaunchHorizontalVelocity, Vector3 inputLaunchDirection)
+        {
+            // STEP 1b: Preserve earned sprint carry from the run-up itself instead of sneaking extra
+            //          forward launch force into sprint jumps. If input is missing, fall back to the
+            //          actual horizontal travel direction so the airborne assist tracks real momentum.
+            Vector3 travelDirection = inputLaunchDirection;
+            if (travelDirection.sqrMagnitude < 0.0001f && preLaunchHorizontalVelocity.sqrMagnitude > 0.0001f)
+            {
+                travelDirection = preLaunchHorizontalVelocity.normalized;
+            }
+
+            if (travelDirection.sqrMagnitude < 0.0001f)
+            {
+                _jumpAirborneTravelDirection = Vector3.zero;
+                _jumpAirborneLaunchHorizontalSpeed = 0f;
+                return;
+            }
+
+            travelDirection.Normalize();
+            _jumpAirborneTravelDirection = travelDirection;
+            _jumpAirborneLaunchHorizontalSpeed = Mathf.Max(0f, Vector3.Dot(preLaunchHorizontalVelocity, travelDirection));
+        }
+
+        private void ApplyRecentJumpAirborneVelocityPreservation()
+        {
+            if (_rb == null || _balance == null)
+            {
+                return;
+            }
+
+            if (!_recentJumpAirborne || _balance.IsGrounded)
+            {
+                return;
+            }
+
+            if (_jumpAirborneLaunchHorizontalSpeed <= 0f || _jumpAirborneTravelDirection.sqrMagnitude < 0.0001f)
+            {
+                return;
+            }
+
+            Vector3 horizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+            float currentSpeedAlongLaunch = Vector3.Dot(horizontalVelocity, _jumpAirborneTravelDirection);
+            float preservedSpeedFloor = _jumpAirborneLaunchHorizontalSpeed * _jumpAirborneVelocityPreservationFactor;
+            if (currentSpeedAlongLaunch >= preservedSpeedFloor)
+            {
+                return;
+            }
+
+            float missingSpeed = preservedSpeedFloor - currentSpeedAlongLaunch;
+            float maxSpeedCorrectionThisStep = _jumpAirborneVelocityPreservationAcceleration * Time.fixedDeltaTime;
+            float appliedSpeedCorrection = Mathf.Min(missingSpeed, maxSpeedCorrectionThisStep);
+
+            // STEP 1c: Use VelocityChange so this acts like a bounded anti-damping path during
+            //          the intentional jump window. It restores only lost forward carry and does
+            //          not add lateral steering or extra vertical energy.
+            _rb.AddForce(_jumpAirborneTravelDirection * appliedSpeedCorrection, ForceMode.VelocityChange);
         }
 
         private void EmitJumpTelemetry(int attemptId, JumpTelemetryEventType eventType, string reason)
@@ -842,7 +942,9 @@ namespace PhysicsDrivenMovement.Character
                 //          Slice 2 only needs launch reach; it should not re-accelerate the
                 //          ragdoll into a faceplant on the first grounded frames.
                 float landingProgress = 1f - (_jumpPostLandingGraceTimer / Mathf.Max(0.0001f, _jumpPostLandingGraceDuration));
-                activeMoveForce *= Mathf.Clamp01(landingProgress);
+                // STEP 3b: Ease the landing-drive return with a squared ramp so the extra sprint
+                //          carry does not immediately shove the ragdoll past the recovery posture.
+                activeMoveForce *= Mathf.Clamp01(landingProgress * landingProgress);
             }
 
             if (horizontalVelocity.magnitude < activeMaxSpeed)

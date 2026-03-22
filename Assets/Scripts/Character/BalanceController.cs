@@ -17,6 +17,7 @@ namespace PhysicsDrivenMovement.Character
     [RequireComponent(typeof(Rigidbody))]
     public class BalanceController : MonoBehaviour
     {
+        private const float MaximumSprintReachLandingAbsorbLeanDeg = 1.5f;
         // TUNING LOG:
         // - Character stands still: ✓
         // - 200 N push → recovers within 3 s: ✗ (pending in-editor verification)
@@ -304,7 +305,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 10f)]
         [Tooltip("Forward lean impulse in degrees applied on landing to simulate " +
                  "impact absorption through the pelvis.")]
-        private float _landingAbsorbLeanDeg = 3f;
+        private float _landingAbsorbLeanDeg = 1.5f;
 
         [SerializeField, Range(0.05f, 0.5f)]
         [Tooltip("Duration in seconds of the full landing squat hold before blend-out starts.")]
@@ -729,6 +730,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1: Cache the Rigidbody on this GameObject (guaranteed by RequireComponent).
             _rb = GetComponent<Rigidbody>();
             TryGetComponent(out _ragdollSetup);
+
+            // STEP 1a: Prefab-backed rigs still serialize the old landing-absorption posture.
+            //          Clamp the forward lean lower so the landing window stops tipping
+            //          sprint landings without needing a prefab resave.
+            _landingAbsorbLeanDeg = Mathf.Min(_landingAbsorbLeanDeg, MaximumSprintReachLandingAbsorbLeanDeg);
 
             Vector3 currentForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (currentForward.sqrMagnitude < 0.001f)
