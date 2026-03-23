@@ -667,12 +667,22 @@ namespace PhysicsDrivenMovement.Character
             float effectiveStepAngle = Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
 
             // Option A: add a per-leg parameter here so every caller reuses the same bounded noise path.
-            if (!_disableOrganicVariation)
+            if (ShouldApplyOrganicStepAngleVariation())
             {
                 effectiveStepAngle += isLeftLeg ? _leftStepAngleNoise : _rightStepAngleNoise;
             }
 
             return Mathf.Clamp(effectiveStepAngle, 30f, 90f);
+        }
+
+        private bool ShouldApplyOrganicStepAngleVariation()
+        {
+            if (_disableOrganicVariation)
+            {
+                return false;
+            }
+
+            return _commandObservation.IsGrounded && !_commandObservation.IsFallen && _commandDesiredInput.MoveMagnitude > 0.01f;
         }
 
         private float GetEffectiveUpperLegLiftBoost()
@@ -1100,12 +1110,13 @@ namespace PhysicsDrivenMovement.Character
                     _minimumStateMachineConfidenceExit,
                     _fallbackGaitBlendRiseSpeed,
                     _fallbackGaitBlendFallSpeed);
+                float fallbackEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 _confidenceEvaluator.ApplyFallback(
                     ref explicitLeftCommand,
                     ref explicitRightCommand,
                     gaitReferenceDirection,
                     bothFeetBehind,
-                    effectiveStepAngle,
+                    fallbackEffectiveStepAngle,
                     effectiveKneeAngle,
                     effectiveUpperLegLiftBoost);
 
