@@ -1,0 +1,101 @@
+## Slice 5 Fix — Opus Brief: Reversal Clamp Root Cause
+
+### The problem
+`JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` fails:
+- Zero-input forward travel (baseline): 0.816m
+- Full reverse input (`Vector2.down`) forward travel: 0.002m
+- Required: ≥ 70% of baseline (≥ 0.571m)
+
+Three previous fix agents failed on this. All focused on `PlayerMovement.cs`. That was the wrong file.
+
+### The actual root cause
+`LocomotionDirector.ComputeTurnSeverity()` reads `CurrentDesiredInput.MoveWorldDirection`.
+With `Vector2.down` held during a jump, `MoveWorldDirection` points **backward** (180° from travel).
+`headingDelta = Vector3.Angle(backward, bodyForward) = 180°`
+→ `headingSeverity = 1.0`, `turnSeverity = 1.0`
+
+A `turnSeverity` of 1.0 propagates into lean calculations, COM stabilization, and body support
+throughout `LocomotionDirector` — treating the airborne player as if they're doing a full U-turn.
+This kills forward carry almost entirely, hence 0.002m.
+
+**This is NOT a PlayerMovement problem.** The facing is already gated during jump airborne
+(commits `ff873c8`, `a5d9eb5`). The locomotion director reads `CurrentDesiredInput` independently
+and still computes max turn severity from the raw reverse input direction.
+
+### The fix
+Gate `LocomotionDirector.GetCoordinatorDesiredInput()` during `_playerMovement.IsRecentJumpAirborne`.
+When the character is airborne mid-jump, pass forward-intent (zero move input, or the captured launch
+direction) instead of the current reverse input to `TurnSeverity` and related downstream consumers.
+
+The simplest correct approach:
+
+```csharp
+// In LocomotionDirector.GetCoordinatorDesiredInput() (line ~1134):
+DesiredInput desiredInput = _playerMovement.CurrentDesiredInput;
+
+if (_playerMovement.IsRecentJumpAirborne && !_playerMovement.IsGrounded)
+{
+    // During jump arc, pass zero move intent to the locomotion director
+    // so turn-severity and lean calculations don't fight the preserved carry.
+    // The airborne correction force in PlayerMovement handles any actual trim.
+    return new DesiredInput(
+        Vector2.zero,
+        Vector3.zero,
+        desiredInput.FacingDirection,
+        desiredInput.JumpRequested,
+        desiredInput.SprintNormalized);
+}
+```
+
+**Check what `IsRecentJumpAirborne` and `IsGrounded` are exposed as on PlayerMovement** —
+they may be `IsRecentJumpAirborne` (bool property) and `_balance.IsGrounded` may need to be
+accessed via `BalanceController`. Look at the existing uses in `BalanceController.cs` lines
+1448, 1493, 1749 for the correct property names.
+
+### Also still failing: WindUp_LowersHipsDuringCrouch
+Fails by ~0.00013m. Add a 1mm tolerance to that assertion in `JumpTests.cs`. Do not change
+`BalanceController.cs`.
+
+### What's already been tried (do NOT redo these)
+1. ✗ Proximity cutoff in PlayerMovement — caused more regressions
+2. ✗ Setting _jumpAirControlForceFraction = 0f — made no difference
+3. ✗ Removing UpdateFacingDirection entirely — made no difference
+4. ✗ Gating UpdateFacingDirection behind _recentJumpAirborne — made no difference
+5. ✗ Reverting ApplyMovementForces to use raw _currentMoveInput — made no difference
+6. ✗ Gating facing through full committed jump sequence — made no difference
+
+All of these were in PlayerMovement. The problem is in LocomotionDirector.
+
+### Files to read first
+- `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs` — `GetCoordinatorDesiredInput()` (~L1134), `ComputeTurnSeverity()` (~L362)
+- `Assets/Scripts/Character/PlayerMovement.cs` — `IsRecentJumpAirborne` property, current state of recent-jump gating
+- `CODING_STANDARDS.md`
+- `.copilot-instructions.md`
+
+### Test filter
+`"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` — 26 tests, all must pass.
+
+### Coding standards
+- Read `CODING_STANDARDS.md` and `.copilot-instructions.md` before touching any code
+- No magic numbers — named constants or serialized fields
+- Incremental commits — commit after each meaningful change
+- No questions — make best call, document reasoning, commit
+- Write `agent-slice-status.json` on finish: `{"slice": 5, "status": "pass"|"fail", "notes": "..."}`
+- Log progress to `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` Agent log section
+
+### Exit criteria
+- All 26 tests in `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` pass
+- `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` passes
+- `SprintJump_SingleJump_DoesNotFaceplant` still passes
+- `WindUp_LowersHipsDuringCrouch` passes
+- Write `agent-slice-status.json` with status "pass"
+
+### Mandatory final step — ping Telegram directly
+After writing agent-slice-status.json, run this to notify Ze directly:
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[gap-slice-5-fix3-opus] STATUS: <pass/fail>. NOTES: <one line summary>" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
+
+This MUST run as the very last step, regardless of pass or fail.

@@ -1,0 +1,51 @@
+You are working on a Unity physics game project at H:\Work\PhysicsDrivenMovementDemo.
+
+CONTEXT — what the previous agents left:
+Slice 3 touchdown detection is fixed and SprintGap_WithRunUp passes in isolation. However two regressions appeared in the working tree (not committed):
+- SprintJump_WhenLaunchCommits_EntersAirborneWithinShortBudget — missing Airborne state within budget
+- SprintJump_SingleJump_DoesNotFaceplant — tilt peaking ~45.54° (over limit)
+
+These regressions were introduced by changes to BalanceController.cs and/or PlayerMovement.cs made during the touchdown detection fix. The previous agent tried one tune, it made things worse, reverted it, and stopped cleanly.
+
+YOUR JOB:
+1. Read these files first (mandatory):
+   - Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md
+   - Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs
+   - Assets/Tests/PlayMode/Character/JumpTests.cs (to understand the two failing tests)
+   - Assets/Scripts/Character/PlayerMovement.cs
+   - Assets/Scripts/Character/BalanceController.cs
+   - .copilot-instructions.md
+
+2. Run git diff to see exactly what the inherited changes are.
+
+3. Diagnose the two regressions:
+   - EntersAirborneWithinShortBudget: something is delaying Airborne state entry after jump launch. Look at what BalanceController or PlayerMovement changes could cause this.
+   - DoesNotFaceplant: tilt 45.54° suggests landing is harder/faster. Check if landing-support or post-landing damping was changed.
+
+4. Fix the regressions without breaking the sprint gap fix. Minimal targeted changes only.
+
+5. Run the focused test set: JumpGapOutcomeTests + JumpTests + SprintJumpStabilityTests + AirborneSpringTests
+   Use: powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended
+   Results: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+
+6. When focused set is green, run full suite (same command, no filter except !LapOptimizer_ComprehensiveFullPrefab).
+
+7. Commit incrementally: after each meaningful fix, commit with a wip message. Do not wait until the end.
+   Final commit when all green: git add Assets/Scripts Assets/Tests/PlayMode Plans/sprint-jump-smoothing agent-slice-status.json && git commit -m "fix: correct sprint gap landing detection and green sprint reach (slice 3 retry)"
+   Do NOT commit InitTestScene*.unity files — test runner artifacts.
+
+8. Update Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md:
+   - Append progress to ## Agent log with format "2026-03-22 Slice 3 fix: [note]"
+   - Update the ## Progress Log table: change slice 3 row to "✅ Pass" with brief summary
+   - Update "Current next step" to: "Current next step: Slice 4 — air-control force path"
+
+9. Write result to H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json:
+   - Success: {"slice": 3, "status": "pass", "notes": "brief summary"}
+   - Fail: {"slice": 3, "status": "fail", "notes": "exact description"}
+
+RULES:
+- Do NOT ask questions. Make best call, comment the reasoning, move on.
+- Do NOT commit InitTestScene files.
+- Always exclude LapOptimizer_ComprehensiveFullPrefab from full suite runs.
+- Commit incrementally — if killed mid-run, partial work must be recoverable from git log.
+- Then stop.

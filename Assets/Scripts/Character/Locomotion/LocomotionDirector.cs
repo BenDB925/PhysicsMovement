@@ -272,7 +272,7 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            _currentDesiredInput = _playerMovement.CurrentDesiredInput;
+            _currentDesiredInput = GetCoordinatorDesiredInput();
 
             // STEP 2: Gather a shared sensor snapshot, then promote it into the locomotion observation frame.
             if (!_sensorAggregator.TryCollect(out _currentSensorSnapshot))
@@ -1129,6 +1129,32 @@ namespace PhysicsDrivenMovement.Character
             const float maxBoost = 1.5f;
             float t = Mathf.Clamp01(deficit / deficitRange);
             return Mathf.Lerp(1f, maxBoost, t);
+        }
+
+        private DesiredInput GetCoordinatorDesiredInput()
+        {
+            DesiredInput desiredInput = _playerMovement.CurrentDesiredInput;
+
+            // STEP 1a: Keep PlayerMovement as the source of raw public input while making the
+            //          locomotion coordinator treat intentional jump airborne frames as a
+            //          posture-stabilization window, not a second air-steering path. Slice 4's
+            //          bounded correction force remains the only airborne translation authority.
+            //          Gate on IsRecentJumpAirborne alone — the previous condition required
+            //          ShouldTreatJumpLaunchAsAirborne OR !IsGrounded, which left a timing gap
+            //          during early launch frames (still grounded, velocity below threshold).
+            //          Those few frames of raw reverse input at full turn severity were enough
+            //          for lean/recovery torques to kill forward carry entirely.
+            if (!_playerMovement.IsRecentJumpAirborne)
+            {
+                return desiredInput;
+            }
+
+            return new DesiredInput(
+                Vector2.zero,
+                Vector3.zero,
+                desiredInput.FacingDirection,
+                desiredInput.JumpRequested,
+                desiredInput.SprintNormalized);
         }
 
         private Vector3 GetSupportFacingDirection()

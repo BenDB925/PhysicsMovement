@@ -1,0 +1,72 @@
+## Slice 5 Fix — Air-Control Reversal Clamp
+
+### Context
+Slice 5 is about preventing full reverse airborne input from cancelling the character's forward jump carry.
+The acceptance test `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` is failing:
+baseline forward travel = 0.816m, reverse-input travel = 0.002m (ratio 0.002, needs ≥ 0.70).
+
+The character is essentially stopping mid-air when reverse input is held.
+
+### Root cause (diagnosed)
+The previous agent's `GetEffectiveMoveInputForStateConsumers()` clamped reverse input correctly for the
+airborne correction force, but it was ALSO applied to `ApplyMovementForces()` via this line in FixedUpdate:
+
+```csharp
+ApplyMovementForces(GetEffectiveMoveInputForStateConsumers());
+```
+
+`ApplyMovementForces` is the regular grounded locomotion force path. During the airborne-to-landing
+transition, when `_recentJumpAirborne` is still true, this feeds near-zero effective input into the
+movement force — killing forward carry entirely during that window. That's the 0.002m result.
+
+Additionally, `CurrentMoveInput` was changed to return `GetEffectiveMoveInputForStateConsumers()`.
+This likely feeds into `ApplyLeanProportionalBraking()` which also brakes on reverse input, compounding the stop.
+
+### The fix
+1. **Revert `ApplyMovementForces` to use `_currentMoveInput` directly** — the ground locomotion force
+   should never be silently clamped. The reversal clamp is only relevant for the airborne correction force.
+
+2. **Revert `CurrentMoveInput` property to return `_currentMoveInput` directly** — don't silently mutate
+   the public-facing input value. Downstream consumers that should clamp can call the method themselves.
+
+3. **Revert `CurrentDesiredInput`** to use `_currentMoveInput` directly (not the effective clamped version).
+   State machine consumers should see raw input.
+
+4. The `GetEffectiveMoveInputForStateConsumers()` method and `_jumpAirborneLaunchMoveInput` field can
+   stay — they're the right mechanism — but should ONLY be called from:
+   - `ApplyRecentJumpAirborneCorrectionForce()` (the airborne trim force)
+   - Nowhere else
+
+5. After those reverts, re-run the test filter:
+   `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` (25 tests)
+   All 25 should pass including the reversal retention test.
+
+### If the reversal test still fails after the revert
+The correction force alone (at 0.12 fraction) may not be strong enough to steer the character noticeably
+in the reverse direction. In that case: the test is checking that reverse input does NOT reduce forward
+travel, not that it steers the character backward. Check whether the test is comparing airborne forward
+travel distance with and without reverse input — if `ApplyMovementForces` is correctly using raw input,
+the ground locomotion forces during the landing window (when `_recentJumpAirborne` clears and grounded
+resumes) will push forward regardless of what happened mid-air.
+
+The key insight: the reversal clamp only needs to prevent the AIRBORNE CORRECTION FORCE from actively
+braking forward travel. The ground locomotion force takes care of itself once the character lands.
+
+### Files to check
+- `Assets/Scripts/Character/PlayerMovement.cs` — see `FixedUpdate`, `GetEffectiveMoveInputForStateConsumers`, `CurrentMoveInput`, `CurrentDesiredInput`
+- `Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs` — reversal test at `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel`
+
+### Coding standards
+- Read `CODING_STANDARDS.md` before making any changes
+- Read `.copilot-instructions.md` for project rules
+- No magic numbers — use named constants or serialized fields
+- Commit after each meaningful change (incremental commits, not one giant commit at the end)
+- Write `agent-slice-status.json` on finish: `{"slice": 5, "status": "pass"|"fail", "notes": "..."}`
+- Log progress to `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` Agent log section
+- No questions — make best call, document reasoning, commit
+
+### Exit criteria
+- All 25 tests in `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` pass
+- `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` passes
+- `SprintJump_SingleJump_DoesNotFaceplant` still passes
+- Write `agent-slice-status.json` with status "pass"

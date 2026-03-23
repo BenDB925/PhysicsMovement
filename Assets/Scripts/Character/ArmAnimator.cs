@@ -96,17 +96,17 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 60f)]
         [Tooltip("Extra abduction angle (degrees) added to each upper arm while airborne, " +
                  "pushing arms outward for an instinctive balance-seeking pose.")]
-        private float _airborneAbductionBoost = 25f;
+        private float _airborneAbductionBoost = 30f;
 
         [SerializeField, Range(-30f, 30f)]
         [Tooltip("Forward reach angle (degrees) applied via the arm swing axis while airborne. " +
                  "Positive = arms reach forward slightly.")]
-        private float _airborneForwardReach = 10f;
+        private float _airborneForwardReach = 6f;
 
         [SerializeField, Range(0f, 45f)]
         [Tooltip("Elbow bend angle (degrees) applied to lower arms while airborne. " +
-                 "Slightly straighter than walk bend for an open-arm appearance.")]
-        private float _airborneElbowBend = 8f;
+                 "Keeps the arms open for balance without reading like a rigid superhero glide.")]
+        private float _airborneElbowBend = 12f;
 
         [SerializeField, Range(1f, 30f)]
         [Tooltip("Rate at which the airborne arm raise blends in on Airborne entry " +

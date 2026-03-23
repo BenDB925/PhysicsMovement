@@ -82,7 +82,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 1f)]
         [Tooltip("Additional multiplier applied when airborne input opposes the captured jump travel direction. " +
                  "Clamps reverse steering harder than same-direction or lateral trim so jumps cannot be meaningfully reversed in midair.")]
-        private float _jumpAirControlOppositeDirectionMultiplier = 0.5f;
+        private float _jumpAirControlOppositeDirectionMultiplier = 0f;
 
         [Header("Jump Wind-Up (C8.5)")]
         [SerializeField, Range(0f, 0.5f)]
@@ -126,6 +126,21 @@ namespace PhysicsDrivenMovement.Character
              "IsRecentJumpAirborne stays true. Gives downstream systems a window " +
              "to suppress surrender / boost upright torque through the landing impact.")]
         private float _jumpPostLandingGraceDuration = 0.65f;
+
+        /// <summary>
+        /// Tracks continuous time (in seconds) the character has been ungrounded
+        /// without an active jump. Used to suppress grounded locomotion forces
+        /// when the character has walked off a platform edge.
+        /// </summary>
+        private float _nonJumpUngroundedTimer;
+
+        /// <summary>
+        /// How many seconds of continuous non-jump ungrounded state before grounded
+        /// locomotion forces are suppressed. Short enough to catch edge-falls quickly
+        /// but long enough to ignore normal stride transitions where both feet briefly
+        /// leave the ground.
+        /// </summary>
+        private const float NonJumpUngroundedSuppressionThreshold = 0.04f;
 
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
@@ -212,6 +227,12 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Pre-jump horizontal speed along <see cref="_jumpAirborneTravelDirection"/> captured at launch.</summary>
         private float _jumpAirborneLaunchHorizontalSpeed;
+
+        /// <summary>Raw move-input direction captured at jump acceptance so the committed launch keeps its original intent even if input changes during wind-up.</summary>
+        private Vector2 _committedJumpMoveInput;
+
+        /// <summary>Raw move-input direction captured at jump launch so recent-jump consumers can strip pure reverse intent even when world-space travel direction is ambiguous.</summary>
+        private Vector2 _jumpAirborneLaunchMoveInput;
 
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
@@ -312,13 +333,21 @@ namespace PhysicsDrivenMovement.Character
 
         internal bool CurrentSprintHeld => _sprintHeldThisPhysicsStep;
 
-        internal DesiredInput CurrentDesiredInput =>
-            new DesiredInput(
-                _currentMoveInput,
-                CurrentMoveWorldDirection,
-                CurrentFacingDirection,
-                _jumpRequestedThisPhysicsStep,
-                _sprintNormalized);
+        internal DesiredInput CurrentDesiredInput
+        {
+            get
+            {
+                Vector3 moveWorldDirection = TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection)
+                    ? worldDirection
+                    : Vector3.zero;
+                return new DesiredInput(
+                    _currentMoveInput,
+                    moveWorldDirection,
+                    CurrentFacingDirection,
+                    _jumpRequestedThisPhysicsStep,
+                    _sprintNormalized);
+            }
+        }
 
         /// <summary>
         /// Test seam: directly inject move input, bypassing the Input System.
@@ -497,6 +526,16 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            // STEP 2a: Track continuous non-jump ungrounded time for edge-fall detection.
+            if (!_recentJumpAirborne && !_balance.IsGrounded)
+            {
+                _nonJumpUngroundedTimer += Time.fixedDeltaTime;
+            }
+            else
+            {
+                _nonJumpUngroundedTimer = 0f;
+            }
+
             if (_camera == null)
             {
                 _camera = Camera.main;
@@ -523,9 +562,11 @@ namespace PhysicsDrivenMovement.Character
             // STEP 4a: Allow only a tiny midair correction path during recent intentional jumps.
             //          This bypasses the full locomotion suppression gate on purpose, but the
             //          applied force stays capped far below grounded movement authority.
-            ApplyRecentJumpAirborneCorrectionForce(_currentMoveInput);
+            ApplyRecentJumpAirborneCorrectionForce(GetEffectiveMoveInputForStateConsumers());
 
             // STEP 5: Movement forces. Skip when the character is in a confirmed fall/collapse path.
+            //         Ground locomotion always uses the raw sampled input; the recent-jump
+            //         reversal clamp only belongs to the bounded airborne correction force.
             if (!ShouldSuppressLocomotion())
             {
                 ApplyMovementForces(_currentMoveInput);
@@ -648,6 +689,7 @@ namespace PhysicsDrivenMovement.Character
 
             EmitJumpTelemetry(attemptId, JumpTelemetryEventType.JumpAccepted, "accepted");
             _activeJumpAttemptId = attemptId;
+            _committedJumpMoveInput = Vector2.ClampMagnitude(_currentMoveInput, 1f);
 
             // All gates passed — enter wind-up phase (C8.5a).
             if (_jumpWindUpDuration > 0f)
@@ -766,20 +808,26 @@ namespace PhysicsDrivenMovement.Character
             //         force stable and adding any extra standing reach as a small input-shaped
             //         horizontal impulse instead of inflating apex height.
             Vector3 launchImpulse = Vector3.up * _jumpForce;
+            Vector2 committedJumpMoveInput = _committedJumpMoveInput.sqrMagnitude > 0.0001f
+                ? _committedJumpMoveInput
+                : _currentMoveInput;
             Vector3 launchDirection = Vector3.zero;
-            bool hasLaunchDirection = TryGetMoveWorldDirection(_currentMoveInput, out launchDirection);
+            bool hasLaunchDirection = TryGetMoveWorldDirection(committedJumpMoveInput, out launchDirection);
             if (hasLaunchDirection)
             {
-                float launchInputMagnitude = Mathf.Clamp01(_currentMoveInput.magnitude);
+                float launchInputMagnitude = Mathf.Clamp01(committedJumpMoveInput.magnitude);
                 // STEP 1a: Keep slice 2 focused on standing reach only. Sprint-specific carry tuning
                 //          belongs to the next slice, so full sprint ramp should not inherit any
                 //          extra horizontal launch shove from the standing-reach mechanism.
+                // STEP 1b: Use the move input that committed the jump, not whatever the player is
+                //          pressing after wind-up has already started. That preserves the intended
+                //          launch carry even if airborne-state handoff flips during the crouch.
                 float sprintLaunchBonusMultiplier = Mathf.Lerp(1f, 0f, _sprintNormalized);
                 launchImpulse += launchDirection * (_jumpLaunchHorizontalImpulse * launchInputMagnitude * sprintLaunchBonusMultiplier);
             }
 
             Vector3 launchHorizontalVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
-            CaptureJumpAirborneCarryBaseline(launchHorizontalVelocity, hasLaunchDirection ? launchDirection : Vector3.zero);
+            CaptureJumpAirborneCarryBaseline(launchHorizontalVelocity, hasLaunchDirection ? launchDirection : Vector3.zero, committedJumpMoveInput);
 
             _rb.AddForce(launchImpulse, ForceMode.Impulse);
             _recentJumpAirborne = true;
@@ -820,6 +868,7 @@ namespace PhysicsDrivenMovement.Character
             _jumpLaunchTimer = 0f;
             _jumpAirborneStateGraceTimer = 0f;
             _activeJumpAttemptId = 0;
+            _committedJumpMoveInput = Vector2.zero;
             _balance.ClearJumpCrouchOffset();
             if (_legAnimator != null)
             {
@@ -833,9 +882,12 @@ namespace PhysicsDrivenMovement.Character
             _jumpAirborneStateGraceTimer = Mathf.Max(_jumpAirborneStateGraceDuration, Time.fixedDeltaTime);
         }
 
-        private void CaptureJumpAirborneCarryBaseline(Vector3 preLaunchHorizontalVelocity, Vector3 inputLaunchDirection)
+        private void CaptureJumpAirborneCarryBaseline(
+            Vector3 preLaunchHorizontalVelocity,
+            Vector3 inputLaunchDirection,
+            Vector2 committedJumpMoveInput)
         {
-            // STEP 1b: Preserve earned sprint carry from the run-up itself instead of sneaking extra
+            // STEP 1c: Preserve earned sprint carry from the run-up itself instead of sneaking extra
             //          forward launch force into sprint jumps. If input is missing, fall back to the
             //          actual horizontal travel direction so the airborne assist tracks real momentum.
             Vector3 travelDirection = inputLaunchDirection;
@@ -848,12 +900,16 @@ namespace PhysicsDrivenMovement.Character
             {
                 _jumpAirborneTravelDirection = Vector3.zero;
                 _jumpAirborneLaunchHorizontalSpeed = 0f;
+                _jumpAirborneLaunchMoveInput = Vector2.zero;
                 return;
             }
 
             travelDirection.Normalize();
             _jumpAirborneTravelDirection = travelDirection;
             _jumpAirborneLaunchHorizontalSpeed = Mathf.Max(0f, Vector3.Dot(preLaunchHorizontalVelocity, travelDirection));
+            _jumpAirborneLaunchMoveInput = committedJumpMoveInput.sqrMagnitude > 0.0001f
+                ? committedJumpMoveInput.normalized
+                : Vector2.zero;
         }
 
         private void ApplyRecentJumpAirborneVelocityPreservation()
@@ -1034,13 +1090,51 @@ namespace PhysicsDrivenMovement.Character
             if (horizontalVelocity.magnitude < activeMaxSpeed)
             {
                 float leanMultiplier = GetLeanForceMultiplier();
-                _rb.AddForce(worldDirection * (activeMoveForce * leanMultiplier), ForceMode.Force);
+
+                // STEP 3c: When the character is airborne from a non-jump transition (walked
+                //          off an edge), strip the component of the desired force that opposes
+                //          the current facing direction.  This prevents held-reverse input from
+                //          applying full ground braking while falling, while still allowing
+                //          forward and lateral steering (needed for gap traversal).
+                Vector3 force = worldDirection * (activeMoveForce * leanMultiplier);
+                if (_characterState != null &&
+                    _characterState.CurrentState == CharacterStateType.Airborne &&
+                    !_recentJumpAirborne)
+                {
+                    Vector3 facingXZ = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (facingXZ.sqrMagnitude > 0.0001f)
+                    {
+                        facingXZ.Normalize();
+                        float facingAlignment = Vector3.Dot(worldDirection, facingXZ);
+                        if (facingAlignment < 0f)
+                        {
+                            // Remove the backward-facing component of the force
+                            force = (worldDirection - facingXZ * facingAlignment) * (activeMoveForce * leanMultiplier);
+                        }
+                    }
+                }
+
+                _rb.AddForce(force, ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
             {
-                bool forceImmediateFacing = !_hasReceivedMovementInput;
-                UpdateFacingDirection(worldDirection, forceImmediateFacing);
+                bool shouldHoldFacingForCommittedJump = _jumpPhase != JumpPhase.None ||
+                    (_recentJumpAirborne && !_balance.IsGrounded);
+
+                // Also freeze facing during non-jump airborne to prevent reverse input
+                // from rotating the character backward and then feeding aligned backward
+                // forces through the facing-based clamp above.
+                bool isNonJumpAirborne = _characterState != null &&
+                    _characterState.CurrentState == CharacterStateType.Airborne &&
+                    !_recentJumpAirborne;
+
+                if (!shouldHoldFacingForCommittedJump && !isNonJumpAirborne)
+                {
+                    bool forceImmediateFacing = !_hasReceivedMovementInput;
+                    UpdateFacingDirection(worldDirection, forceImmediateFacing);
+                }
+
                 _hasReceivedMovementInput = true;
             }
         }
@@ -1069,6 +1163,76 @@ namespace PhysicsDrivenMovement.Character
 
             worldDirection.Normalize();
             return true;
+        }
+
+        private Vector2 GetEffectiveMoveInputForStateConsumers()
+        {
+            if (_currentMoveInput.sqrMagnitude < 0.0001f)
+            {
+                return _currentMoveInput;
+            }
+
+            if (_balance == null || !_recentJumpAirborne)
+            {
+                return _currentMoveInput;
+            }
+
+            if (_jumpAirborneLaunchMoveInput.sqrMagnitude > 0.0001f)
+            {
+                float launchInputAlignment = Vector2.Dot(_currentMoveInput.normalized, _jumpAirborneLaunchMoveInput);
+                if (launchInputAlignment < 0f)
+                {
+                    Vector2 lateralTrimInput = _currentMoveInput - (_jumpAirborneLaunchMoveInput * Vector2.Dot(_currentMoveInput, _jumpAirborneLaunchMoveInput));
+                    return lateralTrimInput.sqrMagnitude > 0.0001f
+                        ? Vector2.ClampMagnitude(lateralTrimInput, 1f)
+                        : Vector2.zero;
+                }
+            }
+
+            if (_jumpAirborneTravelDirection.sqrMagnitude < 0.0001f)
+            {
+                return _currentMoveInput;
+            }
+
+            if (!TryGetMoveWorldDirection(_currentMoveInput, out Vector3 worldDirection))
+            {
+                return _currentMoveInput;
+            }
+
+            float alignment = Vector3.Dot(worldDirection, _jumpAirborneTravelDirection);
+            if (alignment >= 0f)
+            {
+                return _currentMoveInput;
+            }
+
+            Vector3 lateralTrimDirection = worldDirection - (_jumpAirborneTravelDirection * alignment);
+            if (lateralTrimDirection.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.zero;
+            }
+
+            return ConvertWorldDirectionToMoveInput(lateralTrimDirection.normalized) * Mathf.Clamp01(lateralTrimDirection.magnitude);
+        }
+
+        private Vector2 ConvertWorldDirectionToMoveInput(Vector3 worldDirection)
+        {
+            Vector3 flattenedWorldDirection = Vector3.ProjectOnPlane(worldDirection, Vector3.up);
+            if (flattenedWorldDirection.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.zero;
+            }
+
+            flattenedWorldDirection.Normalize();
+
+            if (_camera != null)
+            {
+                float cameraYaw = _camera.transform.eulerAngles.y;
+                Quaternion inverseYaw = Quaternion.Euler(0f, -cameraYaw, 0f);
+                Vector3 localDirection = inverseYaw * flattenedWorldDirection;
+                return new Vector2(localDirection.x, localDirection.z);
+            }
+
+            return new Vector2(flattenedWorldDirection.x, flattenedWorldDirection.z);
         }
 
         private void UpdateFacingDirection(Vector3 desiredWorldDirection, bool forceImmediateFacing)
@@ -1173,7 +1337,13 @@ namespace PhysicsDrivenMovement.Character
                     return true;
                 }
 
-                if (_recentJumpAirborne && !_balance.IsGrounded)
+                // STEP 4b: Suppress ground locomotion not only once the character is fully
+                //          ungrounded, but also during the short launch-classified grace window.
+                //          The gap air-control tests switch to reverse input as soon as the jump
+                //          is reported airborne; without this guard, those first launch frames can
+                //          still be technically grounded and feed raw reverse input into the normal
+                //          movement-force path before liftoff, erasing the preserved forward carry.
+                if (_recentJumpAirborne && (!_balance.IsGrounded || ShouldTreatJumpLaunchAsAirborne))
                 {
                     return true;
                 }
