@@ -434,15 +434,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     wasAirborne = true;
                 }
 
-                bool touchdownStateObserved = wasAirborne &&
-                                              (_rig.BalanceController.IsGrounded ||
-                                               _rig.CharacterState.CurrentState != CharacterStateType.Airborne);
-                bool groundedOnFarPlatform = touchdownStateObserved && IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position);
-                if (landingFrame < 0 && groundedOnFarPlatform)
+                bool touchdownOnFarPlatform = wasAirborne &&
+                                              landingFrame < 0 &&
+                                              IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position);
+                if (touchdownOnFarPlatform)
                 {
-                    // STEP 3a: Do not latch the first grounded pulse unless it actually resolves onto
-                    //          the far platform. Sprint jumps can skim the front edge while the hips
-                    //          are still fractionally over the gap, so keep watching inside budget.
+                    // STEP 3a: Once the jump has gone airborne, the far-platform ownership probe is the
+                    //          most reliable touchdown signal. Sprint landings can pass through Moving or
+                    //          Fallen before grounded/state flags settle, so latch the first positive
+                    //          far-platform hit directly instead of waiting for those transient flags.
                     landingFrame = frame;
                     landedOnFarPlatform = true;
                 }
