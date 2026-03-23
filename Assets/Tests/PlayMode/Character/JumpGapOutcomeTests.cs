@@ -253,7 +253,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act
             yield return MeasureJumpAirControlForwardTravel(Vector2.zero, result => zeroInputForwardTravel = result);
-            yield return PrepareAirControlScenario(useNearEdgeSpawn: true);
+
+            Vector3 spawnPosition = GetSinglePlatformNearEdgeSpawnPosition();
+            RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition);
+            yield return _rig.WarmUp(SettleFrames);
+            ClearGroundStateOverride();
+            yield return new WaitForFixedUpdate();
+
             yield return MeasureJumpAirControlForwardTravel(Vector2.down, result => reverseInputForwardTravel = result);
 
             float retainedTravelRatio = reverseInputForwardTravel / Mathf.Max(0.0001f, zeroInputForwardTravel);
@@ -350,14 +356,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 UnityEngine.Object.Destroy(_farPlatform);
                 _farPlatform = null;
             }
-
-            _rig?.Dispose();
-            _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
-            {
-                TestOrigin = TestOrigin,
-                GroundOffset = new Vector3(0f, -8f, 0f),
-                GroundScale = new Vector3(10f, 1f, 10f),
-            });
 
             CreateAirControlPlatform();
             yield return _rig.WarmUp(SettleFrames);
