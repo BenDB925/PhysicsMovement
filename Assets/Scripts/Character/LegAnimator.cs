@@ -33,6 +33,12 @@ namespace PhysicsDrivenMovement.Character
              "the visible stride without changing step-target planning. Default 75°.")]
         private float _sprintStepAngle = 75f;
 
+        [SerializeField, Tooltip("Seed for organic variation RNG. Change to alter the character's movement personality.")]
+        private int _noiseSeed = 42;
+
+        [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
+        private bool _disableOrganicVariation = false;
+
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
                  "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
@@ -371,6 +377,9 @@ namespace PhysicsDrivenMovement.Character
         private readonly StepPlanner _stepPlanner = new StepPlanner();
         private readonly GaitConfidenceEvaluator _confidenceEvaluator = new GaitConfidenceEvaluator();
         private LegJointDriver _jointDriver;
+        private System.Random _organicRng;
+        private float _leftStepAngleNoise;
+        private float _rightStepAngleNoise;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -517,6 +526,7 @@ namespace PhysicsDrivenMovement.Character
             // STEP 6: Seed the per-leg state machines so Chapter 3.2 starts from the same
             //         mirrored cadence shape as the legacy pass-through gait.
             ResetLegStateMachinesForMirroredCadence();
+            _organicRng = new System.Random(_noiseSeed);
         }
 
         private void Start()
@@ -630,6 +640,14 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Fall back to PlayerMovement when the director has not published a
             //         command frame yet so inspector/debug readers still see the sprint blend.
             return _playerMovement != null ? Mathf.Clamp01(_playerMovement.SprintNormalized) : 0f;
+        }
+
+        /// <summary>Resets the organic RNG to a known seed. Call from PlayMode tests for deterministic results.</summary>
+        public void SetOrganicVariationSeedForTest(int seed)
+        {
+            _organicRng = new System.Random(seed);
+            _leftStepAngleNoise = 0f;
+            _rightStepAngleNoise = 0f;
         }
 
         private float GetEffectiveStepAngle()
@@ -899,7 +917,6 @@ namespace PhysicsDrivenMovement.Character
 
             if (isMoving)
             {
-                float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 float effectiveUpperLegLiftBoost = GetEffectiveUpperLegLiftBoost(desiredInput.SprintNormalized);
                 float effectiveKneeAngle = GetEffectiveKneeAngle(desiredInput.SprintNormalized);
                 float effectiveCyclesPerSec = GetEffectiveCadenceCyclesPerSecond(
@@ -972,6 +989,7 @@ namespace PhysicsDrivenMovement.Character
                     phaseAdvance,
                     forceCatchStep && recoveryLeg == LocomotionLeg.Right);
 
+                float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 float leftSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
                     _leftLegStateMachine.CyclePhase,
                     _smoothedInputMag,
