@@ -127,6 +127,21 @@ namespace PhysicsDrivenMovement.Character
              "to suppress surrender / boost upright torque through the landing impact.")]
         private float _jumpPostLandingGraceDuration = 0.65f;
 
+        /// <summary>
+        /// Tracks continuous time (in seconds) the character has been ungrounded
+        /// without an active jump. Used to suppress grounded locomotion forces
+        /// when the character has walked off a platform edge.
+        /// </summary>
+        private float _nonJumpUngroundedTimer;
+
+        /// <summary>
+        /// How many seconds of continuous non-jump ungrounded state before grounded
+        /// locomotion forces are suppressed. Short enough to catch edge-falls quickly
+        /// but long enough to ignore normal stride transitions where both feet briefly
+        /// leave the ground.
+        /// </summary>
+        private const float NonJumpUngroundedSuppressionThreshold = 0.04f;
+
         [SerializeField, Range(0f, 1080f)]
         [Tooltip("Maximum rate at which movement input may rotate the facing target sent to BalanceController. " +
                  "0 disables the slew limit and forwards the raw heading immediately.")]
@@ -509,6 +524,16 @@ namespace PhysicsDrivenMovement.Character
             if (_rb == null || _balance == null)
             {
                 return;
+            }
+
+            // STEP 2a: Track continuous non-jump ungrounded time for edge-fall detection.
+            if (!_recentJumpAirborne && !_balance.IsGrounded)
+            {
+                _nonJumpUngroundedTimer += Time.fixedDeltaTime;
+            }
+            else
+            {
+                _nonJumpUngroundedTimer = 0f;
             }
 
             if (_camera == null)
@@ -1065,7 +1090,31 @@ namespace PhysicsDrivenMovement.Character
             if (horizontalVelocity.magnitude < activeMaxSpeed)
             {
                 float leanMultiplier = GetLeanForceMultiplier();
-                _rb.AddForce(worldDirection * (activeMoveForce * leanMultiplier), ForceMode.Force);
+
+                // STEP 3c: When the character is airborne from a non-jump transition (walked
+                //          off an edge), strip the component of the desired force that opposes
+                //          the current facing direction.  This prevents held-reverse input from
+                //          applying full ground braking while falling, while still allowing
+                //          forward and lateral steering (needed for gap traversal).
+                Vector3 force = worldDirection * (activeMoveForce * leanMultiplier);
+                if (_characterState != null &&
+                    _characterState.CurrentState == CharacterStateType.Airborne &&
+                    !_recentJumpAirborne)
+                {
+                    Vector3 facingXZ = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (facingXZ.sqrMagnitude > 0.0001f)
+                    {
+                        facingXZ.Normalize();
+                        float facingAlignment = Vector3.Dot(worldDirection, facingXZ);
+                        if (facingAlignment < 0f)
+                        {
+                            // Remove the backward-facing component of the force
+                            force = (worldDirection - facingXZ * facingAlignment) * (activeMoveForce * leanMultiplier);
+                        }
+                    }
+                }
+
+                _rb.AddForce(force, ForceMode.Force);
             }
 
             if (worldDirection.sqrMagnitude > 0.01f)
@@ -1073,7 +1122,14 @@ namespace PhysicsDrivenMovement.Character
                 bool shouldHoldFacingForCommittedJump = _jumpPhase != JumpPhase.None ||
                     (_recentJumpAirborne && !_balance.IsGrounded);
 
-                if (!shouldHoldFacingForCommittedJump)
+                // Also freeze facing during non-jump airborne to prevent reverse input
+                // from rotating the character backward and then feeding aligned backward
+                // forces through the facing-based clamp above.
+                bool isNonJumpAirborne = _characterState != null &&
+                    _characterState.CurrentState == CharacterStateType.Airborne &&
+                    !_recentJumpAirborne;
+
+                if (!shouldHoldFacingForCommittedJump && !isNonJumpAirborne)
                 {
                     bool forceImmediateFacing = !_hasReceivedMovementInput;
                     UpdateFacingDirection(worldDirection, forceImmediateFacing);

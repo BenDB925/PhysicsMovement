@@ -1139,10 +1139,12 @@ namespace PhysicsDrivenMovement.Character
             //          locomotion coordinator treat intentional jump airborne frames as a
             //          posture-stabilization window, not a second air-steering path. Slice 4's
             //          bounded correction force remains the only airborne translation authority.
-            bool suppressAirborneMoveIntent = _playerMovement.IsRecentJumpAirborne &&
-                                              (_playerMovement.ShouldTreatJumpLaunchAsAirborne ||
-                                               (_balanceController != null && !_balanceController.IsGrounded));
-            if (!suppressAirborneMoveIntent)
+            //          Gate on IsRecentJumpAirborne alone — the previous condition required
+            //          ShouldTreatJumpLaunchAsAirborne OR !IsGrounded, which left a timing gap
+            //          during early launch frames (still grounded, velocity below threshold).
+            //          Those few frames of raw reverse input at full turn severity were enough
+            //          for lean/recovery torques to kill forward carry entirely.
+            if (!_playerMovement.IsRecentJumpAirborne)
             {
                 return desiredInput;
             }

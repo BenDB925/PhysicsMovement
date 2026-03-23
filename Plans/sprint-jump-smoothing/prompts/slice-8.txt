@@ -61,3 +61,13 @@ RULES:
 
 
 
+
+### Mandatory final step -- ping Telegram directly
+After writing agent-slice-status.json, run this PowerShell command to notify Ze directly (replace STATUS and NOTES with actual values):
+
+`powershell
+$body = @{ chat_id = "8630971080"; text = "[SLICE_NAME] STATUS: <pass/fail>. NOTES: <one line summary>" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+`
+
+This is a direct ping independent of OpenClaw announce -- it MUST run as the very last step.

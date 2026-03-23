@@ -1,0 +1,82 @@
+## Slice 5 Fix 2 — Air-Control Reversal: Facing Gate
+
+### What we know
+`JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` fails:
+- Zero-input forward travel: 0.816m (baseline)
+- Reverse-input forward travel: 0.002m (test result)
+- Required: ≥ 70% of baseline = ≥ 0.571m
+
+The character almost completely stops mid-air with reverse input held.
+
+### Root cause (diagnosed)
+`UpdateFacingDirection()` is called every FixedUpdate regardless of whether the character is airborne
+mid-jump. When the player holds `Vector2.down` (backwards) during a jump:
+
+1. `UpdateFacingDirection` tries to rotate the character to face backwards
+2. `BalanceController` sees the character leaning backward (facing opposite to travel)
+3. `ApplyLeanBraking()` fires — it applies -velocity * brakeCoeff based on lean angle
+4. This kills forward carry almost entirely, hence 0.002m
+
+The lean braking path is **input-independent** (physics-driven from lean angle), but the lean angle is
+**input-driven** because `UpdateFacingDirection` is pointing the character backward.
+
+### The fix
+Gate `UpdateFacingDirection` (or the yaw torque it produces) behind `_recentJumpAirborne`:
+
+```csharp
+// In FixedUpdate, where UpdateFacingDirection is called:
+if (!_recentJumpAirborne || _balance.IsGrounded)
+{
+    UpdateFacingDirection(_currentMoveInput);
+}
+```
+
+This means during a jump arc, the character holds its facing from launch — no mid-air yaw rotation.
+The air-control correction force can still trim lateral position (slice 4 feature), but facing won't
+fight the balance controller.
+
+**Important:** Only gate the full yaw update. Do NOT gate `_hasReceivedMovementInput` or any other
+state that feeds into the correction force path.
+
+### Verify the fix makes sense
+After gating, check `UpdateFacingDirection` to understand what it does — confirm it's the yaw/rotation
+driver and not something else:
+```
+Select-String -Path "Assets\Scripts\Character\PlayerMovement.cs" -Pattern "UpdateFacingDirection"
+```
+
+If `UpdateFacingDirection` also sets `_hasReceivedMovementInput = true`, that's fine — that flag feeds
+the correction force, which is gated separately on `_recentJumpAirborne && !IsGrounded`.
+
+### Also fix: WindUp_LowersHipsDuringCrouch
+This test is failing by ~0.00013m — a tiny floating point margin. Check the threshold in `JumpTests.cs`
+and add a small tolerance (0.001m should be more than enough). Do not change `BalanceController.cs`.
+
+### Test filter to verify
+`"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` — should be 26 tests, all passing.
+
+### Coding standards
+- Read `CODING_STANDARDS.md` before making any changes
+- Read `.copilot-instructions.md` for project rules  
+- No magic numbers — use named constants or serialized fields
+- Commit after each meaningful change (incremental commits)
+- Write `agent-slice-status.json` on finish: `{"slice": 5, "status": "pass"|"fail", "notes": "..."}`
+- Log progress to `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` Agent log section
+- No questions — make best call, document reasoning, commit
+
+### Exit criteria
+- All 26 tests in `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` pass
+- `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` passes
+- `SprintJump_SingleJump_DoesNotFaceplant` still passes
+- `WindUp_LowersHipsDuringCrouch` passes
+- Write `agent-slice-status.json` with status "pass"
+
+### Mandatory final step — ping Telegram directly
+After writing agent-slice-status.json, run this PowerShell command to notify Ze directly (replace STATUS and NOTES with actual values):
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[gap-slice-5-fix2] STATUS: <pass/fail>. NOTES: <one line summary>" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
+
+This is a direct ping independent of OpenClaw announce — it MUST run as the very last step.

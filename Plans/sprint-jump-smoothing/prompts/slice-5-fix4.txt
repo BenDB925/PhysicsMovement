@@ -1,0 +1,63 @@
+## Slice 5 Fix 4 — Fix JumpGapOutcomeTests crash in PrepareAirControlScenario
+
+### What's broken
+The test `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` crashes
+Unity's test runner before producing any results. The crash is in `PlayerPrefabTestRig.cs:42`
+(`PlayModeSceneIsolation.ResetToEmptyScene()`).
+
+Root cause: `PrepareAirControlScenario()` calls `_rig?.Dispose()` and then creates a brand new
+`PlayerPrefabTestRig` inside a running coroutine. This resets the scene under the running test,
+which crashes the test runner. You cannot dispose and recreate the rig mid-test.
+
+### The fix
+Rewrite `JumpAirControl_FullReverseInput_RetainsAtLeastSeventyPercentOfForwardTravel` so it:
+1. Sets up the rig ONCE in normal SetUp (or at the start of the test)
+2. Measures baseline (zero input) forward travel in the first run
+3. Respawns/repositions the character on the SAME rig (without Dispose/recreate) for the second run
+4. Measures reverse input forward travel in the second run
+5. Computes ratio and asserts
+
+To reposition without recreating the rig, use `RepositionRagdoll(_rig.RagdollSetup, _rig.HipsBody, spawnPosition)`
+followed by a settle period. This is already used in other tests in this file.
+
+The `PrepareAirControlScenario` helper must NOT call `_rig?.Dispose()` or `PlayerPrefabTestRig.Create()`.
+If it needs to reset platforms, only destroy/recreate the platform GameObjects, not the rig.
+
+### Also verify
+- `GetSinglePlatformNearEdgeSpawnPosition()` exists and is correct (Opus added it)
+- `MeasureJumpAirControlForwardTravel` helper looks correct — just the rig lifecycle is wrong
+- The `GroundOffset = new Vector3(0f, -8f, 0f)` in PrepareAirControlScenario puts the ground
+  8 units below — verify this is intentional (no ground = free fall test) or should be default -0.5f
+
+### Existing tests must stay green
+All 26 tests in `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` must pass.
+The Opus commits to `LocomotionDirector.cs` and `PlayerMovement.cs` (865449a, 6fc560b) must be kept —
+those are the actual runtime fix. Only the test is broken.
+
+### Files to change
+- `Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs` — fix rig lifecycle in the new test
+
+### Files to READ first (do not modify)
+- `Assets/Tests/PlayMode/Utilities/PlayerPrefabTestRig.cs` — understand Create/Dispose/RepositionRagdoll
+- `CODING_STANDARDS.md`
+- `.copilot-instructions.md`
+
+### Test filter to verify
+`"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` — 26 tests, all must pass.
+
+### Coding standards
+- Read CODING_STANDARDS.md and .copilot-instructions.md before touching any code
+- Incremental commits — commit after the fix
+- No questions — make best call, document reasoning, commit
+- Write `agent-slice-status.json` on finish: `{"slice": 5, "status": "pass"|"fail", "notes": "..."}`
+- Log progress to `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` Agent log section
+
+### Mandatory final step — ping Telegram directly
+Run this IMMEDIATELY after writing agent-slice-status.json (before anything else):
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[gap-slice-5-fix4] STATUS: <pass/fail>. NOTES: <one line summary>" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
+
+This MUST run as the very last step regardless of pass or fail.
