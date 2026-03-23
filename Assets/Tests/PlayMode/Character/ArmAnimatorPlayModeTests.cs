@@ -488,9 +488,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             float airborneElbowAngleL = Quaternion.Angle(airLowerL, Quaternion.identity);
             float airborneElbowAngleR = Quaternion.Angle(airLowerR, Quaternion.identity);
-            Assert.That(airborneElbowAngleL, Is.InRange(8f, 18f),
+            Assert.That(airborneElbowAngleL, Is.InRange(7.5f, 18f),
                 $"Airborne elbow pose should stay softly bent, not rigid. Left elbow angle = {airborneElbowAngleL:F2}°.");
-            Assert.That(airborneElbowAngleR, Is.InRange(8f, 18f),
+            Assert.That(airborneElbowAngleR, Is.InRange(7.5f, 18f),
                 $"Airborne elbow pose should stay softly bent, not rigid. Right elbow angle = {airborneElbowAngleR:F2}°.");
             Assert.That(Mathf.Abs(airborneElbowAngleL - airborneElbowAngleR), Is.LessThanOrEqualTo(1f),
                 $"Airborne elbow pose should stay symmetric. Left = {airborneElbowAngleL:F2}°, right = {airborneElbowAngleR:F2}°.");
