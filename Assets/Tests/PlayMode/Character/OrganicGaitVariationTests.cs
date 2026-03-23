@@ -136,6 +136,22 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             _legAnimator.SetOrganicVariationSeedForTest(seed);
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
 
+            // Ramp up to full sprint before collecting -- noise magnitude lerps from
+            // +/-8 (walk) to +/-4 (sprint) based on SprintNormalized. Collecting during
+            // the ramp-up would include walk-level noise and fail the +/-4 assertion.
+            _movement.SetMoveInputForTest(Vector2.up);
+            _movement.SetSprintInputForTest(true);
+            for (int warmUp = 0; warmUp < 600; warmUp++)
+            {
+                yield return new WaitForFixedUpdate();
+                float sprintNorm = (float)typeof(PlayerMovement)
+                    .GetProperty("SprintNormalized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                    ?.GetValue(_movement);
+                if (sprintNorm >= 0.95f) break;
+            }
+            // Reset RNG after warm-up so seed is at a clean start for collection.
+            _legAnimator.SetOrganicVariationSeedForTest(seed);
+
             List<float> recordedAngles = null;
             yield return CollectStepAngles(1f, sprintHeld: true, angles => recordedAngles = angles);
 
@@ -153,16 +169,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             const int seed = 99;
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
 
+            // Run 1: collect angles with known seed.
             (List<float> firstLeftAngles, List<float> firstRightAngles) firstRun = default;
             _legAnimator.SetOrganicVariationSeedForTest(seed);
             yield return CollectPerLegStepAngles(0.4f, sprintHeld: false, result => firstRun = result);
 
-            yield return RecreateRig();
-            yield return PrepareBaseline();
-
-            (List<float> secondLeftAngles, List<float> secondRightAngles) secondRun = default;
-            SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            // Run 2: reset the RNG to the same seed on the SAME rig (same physics state).
+            // Using RecreateRig() caused flakiness because the physics settling lands in a
+            // slightly different position each time, shifting step trigger ordering by run 2.
             _legAnimator.SetOrganicVariationSeedForTest(seed);
+            (List<float> secondLeftAngles, List<float> secondRightAngles) secondRun = default;
             yield return CollectPerLegStepAngles(0.4f, sprintHeld: false, result => secondRun = result);
 
             Assert.That(firstRun.firstLeftAngles, Has.Count.EqualTo(StepSampleCount / 2));
