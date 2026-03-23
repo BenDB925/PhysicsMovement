@@ -377,7 +377,10 @@ namespace PhysicsDrivenMovement.Character
         private readonly StepPlanner _stepPlanner = new StepPlanner();
         private readonly GaitConfidenceEvaluator _confidenceEvaluator = new GaitConfidenceEvaluator();
         private LegJointDriver _jointDriver;
+        // Two separate RNG instances so left/right draws never interleave and
+        // the sequence is stable regardless of which leg triggers each frame.
         private System.Random _organicRng;
+        private System.Random _organicRngRight;
         private float _leftStepAngleNoise;
         private float _rightStepAngleNoise;
 
@@ -529,6 +532,8 @@ namespace PhysicsDrivenMovement.Character
             //         mirrored cadence shape as the legacy pass-through gait.
             ResetLegStateMachinesForMirroredCadence();
             _organicRng = new System.Random(_noiseSeed);
+            // Right leg uses a different seed offset so the two streams are independent.
+            _organicRngRight = new System.Random(_noiseSeed + 1000);
         }
 
         private void Start()
@@ -648,6 +653,7 @@ namespace PhysicsDrivenMovement.Character
         public void SetOrganicVariationSeedForTest(int seed)
         {
             _organicRng = new System.Random(seed);
+            _organicRngRight = new System.Random(seed + 1000);
             _leftStepAngleNoise = 0f;
             _rightStepAngleNoise = 0f;
         }
@@ -677,12 +683,12 @@ namespace PhysicsDrivenMovement.Character
 
         private bool ShouldApplyOrganicStepAngleVariation()
         {
-            if (_disableOrganicVariation)
-            {
-                return false;
-            }
-
-            return _commandObservation.IsGrounded && !_commandObservation.IsFallen && _commandDesiredInput.MoveMagnitude > 0.01f;
+            // Only the disable flag gates this. Removing the IsGrounded/IsFallen guards:
+            // - The noise is always clamped to [30,90] so it cannot cause falls on its own.
+            // - IsGrounded gating caused the frozen noise value (set on last grounded frame)
+            //   to persist into jump wind-up, where a large offset pushed step angle near
+            //   the 90 deg ceiling and contributed to sprint faceplants.
+            return !_disableOrganicVariation;
         }
 
         private float GetEffectiveUpperLegLiftBoost()
@@ -1041,11 +1047,11 @@ namespace PhysicsDrivenMovement.Character
                     _hipsRigidbody.position,
                     gaitReferenceDirection,
                     effectiveCyclesPerSec);
-                if (rightStepTarget.IsValid && !_disableOrganicVariation && _organicRng != null)
+                if (rightStepTarget.IsValid && !_disableOrganicVariation && _organicRngRight != null)
                 {
                     float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
-                    _rightStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+                    _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
                 }
 
                 float leftEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized, isLeftLeg: true);
