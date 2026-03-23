@@ -1079,7 +1079,7 @@ MonoBehaviour:
   _sprintSpeedMultiplier: 1.8
   _sprintBlendDuration: 0.25
   _jumpForce: 175
-  _jumpLaunchHorizontalImpulse: 2600
+  _jumpLaunchHorizontalImpulse: 150
   _jumpAirborneVelocityPreservationFactor: 0.9
   _jumpAirborneVelocityPreservationAcceleration: 32
   _jumpAirControlForceFraction: 0.12
@@ -3292,4 +3292,3 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8b572fb53423d3342926489c3f6bb220, type: 3}
   m_PrefabInstance: {fileID: 800333546158640425}
   m_PrefabAsset: {fileID: 0}
-
