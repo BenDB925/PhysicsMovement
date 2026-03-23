@@ -44,6 +44,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private ConfigurableJoint _upperArmLJoint;
         private ConfigurableJoint _upperArmRJoint;
+        private ConfigurableJoint _lowerArmLJoint;
+        private ConfigurableJoint _lowerArmRJoint;
 
         /// <summary>Rest abduction quaternion for left arm, matching ArmAnimator default (12°).</summary>
         private Quaternion _abductionL;
@@ -431,12 +433,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             var airborneBlendField = typeof(ArmAnimator).GetField("_currentAirborneBlend",
                 BindingFlags.NonPublic | BindingFlags.Instance);
 
+            Quaternion restUpperL = _upperArmLJoint != null ? _upperArmLJoint.targetRotation : Quaternion.identity;
+            Quaternion restUpperR = _upperArmRJoint != null ? _upperArmRJoint.targetRotation : Quaternion.identity;
+            Quaternion restLowerL = _lowerArmLJoint != null ? _lowerArmLJoint.targetRotation : Quaternion.identity;
+            Quaternion restLowerR = _lowerArmRJoint != null ? _lowerArmRJoint.targetRotation : Quaternion.identity;
+
             // Measure rest-pose arm angle (both arms at idle abduction).
             float restAngleL = _upperArmLJoint != null
-                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                ? Quaternion.Angle(restUpperL, Quaternion.identity)
                 : 0f;
             float restAngleR = _upperArmRJoint != null
-                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                ? Quaternion.Angle(restUpperR, Quaternion.identity)
                 : 0f;
             float restAngle = Mathf.Max(restAngleL, restAngleR);
 
@@ -449,11 +456,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return WaitPhysicsFrames(40);
 
             // Measure airborne arm angle — should be visibly larger than rest.
+            Quaternion airUpperL = _upperArmLJoint != null ? _upperArmLJoint.targetRotation : Quaternion.identity;
+            Quaternion airUpperR = _upperArmRJoint != null ? _upperArmRJoint.targetRotation : Quaternion.identity;
+            Quaternion airLowerL = _lowerArmLJoint != null ? _lowerArmLJoint.targetRotation : Quaternion.identity;
+            Quaternion airLowerR = _lowerArmRJoint != null ? _lowerArmRJoint.targetRotation : Quaternion.identity;
+
             float airAngleL = _upperArmLJoint != null
-                ? Quaternion.Angle(_upperArmLJoint.targetRotation, Quaternion.identity)
+                ? Quaternion.Angle(airUpperL, Quaternion.identity)
                 : 0f;
             float airAngleR = _upperArmRJoint != null
-                ? Quaternion.Angle(_upperArmRJoint.targetRotation, Quaternion.identity)
+                ? Quaternion.Angle(airUpperR, Quaternion.identity)
                 : 0f;
             float airAngle = Mathf.Max(airAngleL, airAngleR);
 
@@ -464,6 +476,24 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             float airborneBlend = airborneBlendField != null ? (float)airborneBlendField.GetValue(armAnimator) : -1f;
             Assert.That(airborneBlend, Is.GreaterThanOrEqualTo(0.9f),
                 $"Airborne blend should have ramped to ~1.0. Got {airborneBlend:F3}.");
+
+            float outwardRaiseL = Quaternion.Angle(airUpperL, restUpperL);
+            float outwardRaiseR = Quaternion.Angle(airUpperR, restUpperR);
+            Assert.That(outwardRaiseL, Is.GreaterThan(8f),
+                $"Left arm should visibly raise outward in Airborne. Delta from rest = {outwardRaiseL:F2}°.");
+            Assert.That(outwardRaiseR, Is.GreaterThan(8f),
+                $"Right arm should visibly raise outward in Airborne. Delta from rest = {outwardRaiseR:F2}°.");
+            Assert.That(Mathf.Abs(outwardRaiseL - outwardRaiseR), Is.LessThanOrEqualTo(2f),
+                $"Airborne balance pose should stay symmetric. Left delta = {outwardRaiseL:F2}°, right delta = {outwardRaiseR:F2}°.");
+
+            float airborneElbowAngleL = Quaternion.Angle(airLowerL, Quaternion.identity);
+            float airborneElbowAngleR = Quaternion.Angle(airLowerR, Quaternion.identity);
+            Assert.That(airborneElbowAngleL, Is.InRange(8f, 18f),
+                $"Airborne elbow pose should stay softly bent, not rigid. Left elbow angle = {airborneElbowAngleL:F2}°.");
+            Assert.That(airborneElbowAngleR, Is.InRange(8f, 18f),
+                $"Airborne elbow pose should stay softly bent, not rigid. Right elbow angle = {airborneElbowAngleR:F2}°.");
+            Assert.That(Mathf.Abs(airborneElbowAngleL - airborneElbowAngleR), Is.LessThanOrEqualTo(1f),
+                $"Airborne elbow pose should stay symmetric. Left = {airborneElbowAngleL:F2}°, right = {airborneElbowAngleR:F2}°.");
 
             // Act — land (Airborne → Standing). Restore grounded state first.
             _balance.SetGroundStateForTest(isGrounded: true, isFallen: false);
@@ -618,6 +648,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             _upperArmLJoint = FindRequiredJoint(_hipsGO, "UpperArm_L");
             _upperArmRJoint = FindRequiredJoint(_hipsGO, "UpperArm_R");
+            _lowerArmLJoint = FindRequiredJoint(_hipsGO, "LowerArm_L");
+            _lowerArmRJoint = FindRequiredJoint(_hipsGO, "LowerArm_R");
 
             _movement.SetMoveInputForTest(Vector2.zero);
         }

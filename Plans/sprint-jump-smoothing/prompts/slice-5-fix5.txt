@@ -1,0 +1,82 @@
+## Slice 5 Fix 5 — Sprint Gap Touchdown Detection (LandingFrame=-1)
+
+### What's broken
+`SprintGap_WithRunUp_ClearsGapAndLandsOnFarPlatform` fails:
+- Character physically reaches 3.76m (gap is 3.6m) — it DOES clear the gap
+- `LandingFrame = -1` — touchdown never registers
+- `SprintTouchdownBudgetFrames = 300`
+
+This is a TEST HARNESS problem, not a runtime bug. The character lands correctly.
+
+### Root cause
+`CaptureJumpGapOutcome()` (~line 408) uses this condition to detect touchdown:
+
+```csharp
+bool touchdownStateObserved = wasAirborne &&
+    (_rig.BalanceController.IsGrounded ||
+     _rig.CharacterState.CurrentState != CharacterStateType.Airborne);
+bool groundedOnFarPlatform = touchdownStateObserved && IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position);
+```
+
+The Opus fix in commit `c8f1a34` added `CharacterStateType.Airborne` to `ShouldSuppressLocomotion()`.
+This changes how the character transitions through states on landing, so the old touchdown detection
+conditions may no longer fire together at the right moment.
+
+Specifically: when the character lands on the far platform edge at sprint speed, it may briefly be in
+`Moving` or `Fallen` state while `IsGrounded` is still false (physics settling), and the hips may be
+over the platform before `IsGrounded` latches.
+
+### The fix
+Relax the touchdown detection to also catch:
+- Hips position is over the far platform (`IsTouchdownOnPlatform` returns true)  
+- AND character was airborne at some point
+- Regardless of whether `IsGrounded` has latched yet
+
+The simplest approach: check `IsTouchdownOnPlatform` every frame after `wasAirborne = true`,
+not just on frames where `touchdownStateObserved` is true. The platform bounds check is the
+reliable signal — state/grounded flags are too brittle.
+
+```csharp
+// Replace the current touchdownStateObserved + groundedOnFarPlatform logic with:
+if (wasAirborne && landingFrame < 0 && IsTouchdownOnPlatform(_farPlatform, _rig.Hips.position))
+{
+    landingFrame = frame;
+    landedOnFarPlatform = true;
+}
+```
+
+Check whether `IsTouchdownOnPlatform` already uses raycasts and hips height bounds — it does
+(lines ~560-603). It's robust enough to use as the primary signal without the state guard.
+
+### What NOT to change
+- Do NOT change `SprintTouchdownBudgetFrames` (already 300, that's the max per constraints)
+- Do NOT change any runtime code (PlayerMovement, BalanceController, LocomotionDirector)
+- Do NOT change the Opus commits: `c8f1a34`, `865449a`
+- Keep all existing tests passing
+
+### Test filter
+`"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"` — 26 tests, all must pass.
+
+### Files to change
+- `Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs` — `CaptureJumpGapOutcome()` only
+
+### Files to READ first
+- `Assets/Tests/PlayMode/Character/JumpGapOutcomeTests.cs` — full context of CaptureJumpGapOutcome and IsTouchdownOnPlatform
+- `CODING_STANDARDS.md`
+- `.copilot-instructions.md`
+
+### Coding standards
+- Incremental commits — commit after the fix
+- No questions — make best call, document reasoning, commit
+- Write `agent-slice-status.json` on finish: `{"slice": 5, "status": "pass"|"fail", "notes": "..."}`
+- Log progress to `Plans/sprint-jump-smoothing/04-gap-crossing-and-nimble-jump.md` Agent log section
+
+### Mandatory final step — ping Telegram directly
+Run this IMMEDIATELY after writing agent-slice-status.json:
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[gap-slice-5-fix5] STATUS: <pass/fail>. NOTES: <one line summary>" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
+
+This MUST run regardless of pass or fail.
