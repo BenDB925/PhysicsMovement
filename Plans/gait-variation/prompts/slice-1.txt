@@ -1,0 +1,167 @@
+# Slice 1 -- Foundation + Per-Stride Step Angle Noise
+# Plan 05: Organic Movement & Gait Variation
+# Branch: slice/05-1-step-angle-noise
+
+## Handoff context
+This is the first slice of Plan 05. Plan 04 (gap-crossing) is complete on branch `slice/04-8`.
+You are starting fresh work on a new branch from master.
+
+The character walks with perfectly identical strides every step. This plan adds organic variation.
+Your job: lay the foundation (RNG + test seam) and implement per-stride step angle noise.
+
+Start by checking current state:
+  git -C "H:\Work\PhysicsDrivenMovementDemo" log --oneline -5
+  git -C "H:\Work\PhysicsDrivenMovementDemo" branch
+
+Then create and check out the new branch:
+  git -C "H:\Work\PhysicsDrivenMovementDemo" checkout master
+  git -C "H:\Work\PhysicsDrivenMovementDemo" checkout -b slice/05-1-step-angle-noise
+
+---
+
+## Part A -- Foundation (FIRST commit before any noise code)
+
+File: Assets/Scripts/Character/LegAnimator.cs
+
+1. Add serialized field (with tooltip):
+   [SerializeField, Tooltip("Seed for organic variation RNG. Change to alter the character's movement personality.")]
+   private int _noiseSeed = 42;
+
+2. Add serialized bool (with tooltip):
+   [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
+   private bool _disableOrganicVariation = false;
+
+3. Add private runtime field:
+   private System.Random _organicRng;
+   // NOTE: Always use System.Random, NEVER UnityEngine.Random. UnityEngine.Random is a global
+   // singleton -- using it would make test results depend on whatever else ran before the test.
+
+4. Add private float fields:
+   private float _leftStepAngleNoise;
+   private float _rightStepAngleNoise;
+
+5. In Awake(), after existing component caching, add:
+   _organicRng = new System.Random(_noiseSeed);
+
+6. Add public test seam method (after Awake or near other test seam methods):
+   /// <summary>Resets the organic RNG to a known seed. Call from PlayMode tests for deterministic results.</summary>
+   public void SetOrganicVariationSeedForTest(int seed)
+   {
+       _organicRng = new System.Random(seed);
+       _leftStepAngleNoise = 0f;
+       _rightStepAngleNoise = 0f;
+   }
+
+Commit message: "feat(05-1): add organic variation foundation - RNG seed, disable toggle, test seam"
+
+---
+
+## Part B -- Per-stride step angle noise (SECOND commit)
+
+File: Assets/Scripts/Character/LegAnimator.cs
+
+### Step 1 -- Regenerate noise at step trigger
+
+Find where new step targets are computed (around the ComputeSwingTarget calls, lines ~998-1036).
+When a new non-Invalid StepTarget is computed for the left leg, regenerate _leftStepAngleNoise.
+When a new non-Invalid StepTarget is computed for the right leg, regenerate _rightStepAngleNoise.
+
+Pattern for left leg (mirror for right):
+   if (!_disableOrganicVariation && _organicRng != null)
+   {
+       // Walk bounds: +/-8 deg. Sprint bounds: +/-4 deg. Lerp between based on sprint blend.
+       float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
+       float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
+       _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+   }
+
+### Step 2 -- Apply noise in GetEffectiveStepAngle
+
+GetEffectiveStepAngle is currently leg-agnostic (around line 635-642). You have two options:
+  Option A: Add a bool isLeftLeg parameter to GetEffectiveStepAngle and add the noise inside.
+  Option B: Apply the noise at the two ComputeSwingTarget call sites after calling GetEffectiveStepAngle.
+Use whichever fits the existing code more cleanly. Add a one-line comment saying which option you chose.
+
+The noise addition formula:
+  effectiveStepAngle += isLeftLeg ? _leftStepAngleNoise : _rightStepAngleNoise;
+
+### Step 3 -- Clamp final value
+
+The final effectiveStepAngle passed to any swing computation MUST be clamped to [30, 90] degrees.
+This is the safe range for the current simulation -- outside this range the character can fall.
+  effectiveStepAngle = Mathf.Clamp(effectiveStepAngle, 30f, 90f);
+
+When _disableOrganicVariation is true: skip the noise addition entirely. The clamp can still apply
+but the result should be identical to the pre-plan output.
+
+Commit message: "feat(05-1): per-stride step angle noise +/-8 deg walk / +/-4 deg sprint with safe bounds"
+
+---
+
+## Part C -- Tests (THIRD commit)
+
+Create: Assets/Tests/PlayMode/Character/OrganicGaitVariationTests.cs
+
+### Setup/teardown requirements (MANDATORY -- test isolation)
+Follow the same pattern as JumpTests.cs or MovementQualityTests.cs:
+- Load PlayerRagdoll_Skinned.prefab via AssetDatabase.LoadAssetAtPath
+- Instantiate and wait for settle frames
+- Save and restore Time.fixedDeltaTime, Physics.defaultSolverIterations,
+  Physics.defaultSolverVelocityIterations in [SetUp]/[TearDown]
+- Set project values in SetUp: Time.fixedDeltaTime = 0.01f, solver iterations = 12, velocity iterations = 4
+
+### Test 1: StepAngleNoise_AtWalkSpeed_ShowsVariationWithinBounds
+- Call legAnimator.SetOrganicVariationSeedForTest(42)
+- Set _disableOrganicVariation = false (via reflection or a test seam)
+- Walk forward at ~0.4 input magnitude for long enough to collect 12 step events
+- Record effectiveStepAngle at each step trigger (use the StepAngleDegrees property or expose a
+  test seam -- add a simple internal getter if needed, mark it with a comment)
+- Assert: stddev of recorded angles > 1f (variation exists)
+- Assert: all recorded angles within [30f, 90f]
+- Assert: no recorded angle deviates from the nominal walk step angle by more than 8f
+
+### Test 2: StepAngleNoise_AtSprintSpeed_TighterThanWalk
+- Sprint input (magnitude 1.0, SprintNormalized ~= 1.0)
+- Collect 12 step events
+- Assert: max deviation from nominal sprint step angle <= 4f
+- Assert: all angles within [30f, 90f]
+
+### Test 3: StepAngleNoise_Deterministic_WithSameSeed
+- Run the walk scenario twice, calling SetOrganicVariationSeedForTest(99) before each run
+- Assert: both runs produce identical sequences of step angles (same list)
+
+### Test 4: StepAngleNoise_DisabledByFlag_ProducesIdenticalStrides
+- Set _disableOrganicVariation = true
+- Walk for 12 steps
+- Assert: stddev of step angles < 0.01f (no variation)
+
+Commit message: "test(05-1): step angle noise determinism, bounds, and variation tests"
+
+---
+
+## Constraints
+- NEVER use UnityEngine.Random -- always use _organicRng (System.Random)
+- _disableOrganicVariation = true must produce output identical to before this plan
+- Final effectiveStepAngle MUST be clamped to [30, 90] degrees
+- Sprint variation must be tighter than walk (+/-4 vs +/-8 deg) -- design requirement, not optional
+- Do NOT run the full test suite -- manual only, takes ~1 hour
+  Run only: "OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"
+- Do NOT modify Run-UnityTests.ps1
+- Do NOT ask questions -- make the best call, comment reasoning, move on
+- Commit in three parts: A then B then C (minimum three commits)
+- Write agent-slice-status.json on finish (pass or fail)
+- Update H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md
+  Agent Log table with today's date, result, and one-line notes
+
+## Test runner command
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"
+
+Results: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+
+## Mandatory final step -- Telegram ping
+After writing agent-slice-status.json, send this regardless of pass or fail:
+
+$body = @{ chat_id = "8630971080"; text = "slice/05-1 STATUS: pass/fail. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+
+Replace pass/fail and notes with actual outcome.
