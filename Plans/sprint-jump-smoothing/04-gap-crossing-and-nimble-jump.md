@@ -5,7 +5,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 
 ## Current status
 - State: In progress
-- Current next step: Decide whether Slice 6 airborne-facing contingency is still needed now that the Slice 5 focused gate is back to 26/26, otherwise move on to Slice 7 airborne readability.
+- Current next step: Slice 8 — landing and regression gate
 - **Slice 4 complete**: 25/25 tests green. See progress log.
 - Blockers: None for Slice 5. Focus now shifts to whether any visible midair yaw snapping remains worth a dedicated follow-up slice.
 
@@ -144,6 +144,7 @@ Make the jump feel a bit more nimble without losing the grounded look that the e
 - 2026-03-23 Slice 7: Started after confirming Slice 5 pass in git head + agent-slice-status. Reading the slice plan, ArmAnimator airborne pose path, ArmAnimatorPlayModeTests airborne coverage, and repo coding rules; plan is to make a minimal airborne readability tune, extend the arm tests to lock the intended pose read, then run the focused gap/air-control/landing gate.
 - 2026-03-23 Slice 7: Decision - lean into outward balance instead of extra forward reach. Raised airborne abduction modestly (25° -> 30°), trimmed forward reach (10° -> 6°), and kept more elbow bend (8° -> 12°) so the pose reads steadier in the air without turning into a superhero glide.
 - 2026-03-23 Slice 7: Problem - first airborne test extension was too strict about elbow delta from rest and went red at ~14°. Switched that coverage to the actual pose read instead: elbows must stay softly bent and symmetric in-air, which matches the design intent better than comparing against whichever grounded bend the rig happened to have.
+- 2026-03-23 Slice 7: Finished - tuned airborne arms toward an outward balance pose, extended `ArmAnimatorPlayModeTests` to lock the in-air symmetry/open-bend read, and reran `ArmAnimatorPlayModeTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|AirborneSpringTests` green (37/37). Final slice commit is `polish: tune airborne arm readability (slice 7)` and exit criteria were met.
 - 2026-03-20 Slice 1: Committed gap harness and two red tests (e767276)
 - 2026-03-20 Slice 2: First attempt failed - character spawned 10m from launch edge, progress 0.00m. Retry queued with spawn geometry fix.
 - 2026-03-20 Slice 2 retry: Spawn geometry corrected; standing gap + apex budget + sprint landing stability slice now green, while sprint gap remains intentionally red for Slice 3.
