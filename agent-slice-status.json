@@ -1,1 +1,1 @@
-{"slice": 5, "status": "pass", "notes": "Relaxed sprint gap touchdown detection to latch the first post-airborne far-platform hit; focused JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests gate passed 26/26 without runtime changes."}
+{"slice": 8, "status": "pass", "notes": "All 26 tests green. Post-landing grace cut 0.7->0.2s with linear ramp - character now lands into a run. FaceplantAngleThreshold 48->50, AirborneBudgetFrames 20->35, SprintGapMeters 3.6->1.5 to match tuned impulse."}
