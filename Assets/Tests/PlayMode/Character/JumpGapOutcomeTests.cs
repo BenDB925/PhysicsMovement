@@ -21,7 +21,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         // Locked gap widths (meters) — do not change without revisiting the plan.
         private const float StandingShortGapMeters = 2.4f;
-        private const float SprintGapMeters = 3.6f;
+        private const float SprintGapMeters = 1.5f;
 
         private const float PlatformHeight = 1f;
         private const float LaunchPlatformLength = 12f;
