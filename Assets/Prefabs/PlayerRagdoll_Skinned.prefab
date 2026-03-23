@@ -1091,7 +1091,7 @@ MonoBehaviour:
   _jumpLaunchDuration: 0.1
   _jumpAirborneStateGraceDuration: 0.12
   _jumpAirborneStateVelocityThreshold: 0.1
-  _jumpPostLandingGraceDuration: 0.65
+  _jumpPostLandingGraceDuration: 0.2
   _maxFacingTurnRateDegPerSecond: 540
   _leanReductionStartAngle: 10
   _leanReductionFullAngle: 35

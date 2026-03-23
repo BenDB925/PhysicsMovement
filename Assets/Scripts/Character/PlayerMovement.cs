@@ -35,7 +35,7 @@ namespace PhysicsDrivenMovement.Character
         private const int JumpTelemetryCapacity = 64;
         private const float MinimumSprintReachVelocityPreservationFactor = 0.85f;
         private const float MinimumSprintReachVelocityPreservationAcceleration = 28f;
-        private const float MinimumSprintReachPostLandingGraceDuration = 0.7f;
+        private const float MinimumSprintReachPostLandingGraceDuration = 0.2f;
 
         [SerializeField, Range(0f, 2000f)]
         private float _moveForce = 300f;
@@ -1084,7 +1084,7 @@ namespace PhysicsDrivenMovement.Character
                 float landingProgress = 1f - (_jumpPostLandingGraceTimer / Mathf.Max(0.0001f, _jumpPostLandingGraceDuration));
                 // STEP 3b: Ease the landing-drive return with a squared ramp so the extra sprint
                 //          carry does not immediately shove the ragdoll past the recovery posture.
-                activeMoveForce *= Mathf.Clamp01(landingProgress * landingProgress);
+                activeMoveForce *= Mathf.Clamp01(landingProgress);
             }
 
             if (horizontalVelocity.magnitude < activeMaxSpeed)
