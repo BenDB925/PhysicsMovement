@@ -1,6 +1,1 @@
-{
-  "slice": "5-fix3-opus",
-  "status": "pass",
-  "timestamp": "2026-03-23T09:08:00Z",
-  "notes": "Fixed reverse input erasing forward carry during non-jump airborne. Root cause: character walks off edge during jump wind-up, enters Airborne without _recentJumpAirborne, so full ground forces applied backward. Fix: strip opposing-facing force component + freeze facing during non-jump airborne. 26/26 tests pass, ReverseRetentionRatio=1.169."
-}
+{"slice": 5, "status": "fail", "notes": "Fixed the JumpGapOutcomeTests rig-lifecycle crash so the reversal-retention test now runs and passes on the same rig, but the focused PlayMode gate is still 25/26: SprintGap_WithRunUp_ClearsGapAndLandsOnFarPlatform reaches 3.76m yet never records far-platform touchdown (LandingFrame=-1). Commit: 7bcac4e."}
