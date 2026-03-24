@@ -699,6 +699,7 @@ namespace PhysicsDrivenMovement.Character
         {
             _jointDriver.ResetFrameState();
             _isGaitBiasedForward = false;
+            UpdateLandingSpringRampContactState();
             TickLandingSpringRamp();
 
             if (_playerMovement == null || _characterState == null)
@@ -2385,6 +2386,49 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void UpdateLandingSpringRampContactState()
+        {
+            if (!_isAirborne || _jointDriver == null || _balance == null)
+            {
+                return;
+            }
+
+            if (_balance.IsGrounded)
+            {
+                if (_landingSpringRampTimer <= 0f)
+                {
+                    BeginLandingSpringRamp();
+                }
+
+                return;
+            }
+
+            if (_landingSpringRampTimer > 0f)
+            {
+                CancelLandingSpringRamp(restoreFullSpring: false);
+                _jointDriver.SetSpringMultiplier(_airborneSpringMultiplier);
+            }
+        }
+
+        private void BeginLandingSpringRamp()
+        {
+            if (_jointDriver == null)
+            {
+                return;
+            }
+
+            _landingSpringStartMultiplier = _jointDriver.GetCurrentSpringMultiplier();
+
+            if (_landingSpringRampDuration > 0.0001f)
+            {
+                _landingSpringRampTimer = _landingSpringRampDuration;
+                return;
+            }
+
+            _landingSpringRampTimer = 0f;
+            _jointDriver.SetSpringMultiplier(1f);
+        }
+
         private void CancelLandingSpringRamp(bool restoreFullSpring)
         {
             _landingSpringRampTimer = 0f;
@@ -2423,10 +2467,14 @@ namespace PhysicsDrivenMovement.Character
                 // Exiting airborne (any landing — Standing, Moving, Fallen, GettingUp):
                 // restore full spring stiffness via a landing ramp when configured.
                 _isAirborne = false;
-                if (_landingSpringRampDuration > 0.0001f)
+                if (_landingSpringRampTimer > 0f)
                 {
-                    _landingSpringRampTimer = _landingSpringRampDuration;
-                    _landingSpringStartMultiplier = _airborneSpringMultiplier;
+                    // Ground contact already started the landing ramp while the jump-airborne
+                    // grace window was still holding CharacterState in Airborne.
+                }
+                else if (_jointDriver != null && _jointDriver.GetCurrentSpringMultiplier() < 0.999f)
+                {
+                    BeginLandingSpringRamp();
                 }
                 else
                 {
