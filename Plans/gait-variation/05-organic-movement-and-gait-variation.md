@@ -3,8 +3,8 @@
 **Status:** Active
 **Current next step:** Finish Slice 4A by adding IdleSwayTests, tuning the prefab sway overrides if needed, and running the focused PlayMode filter `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests`.
 
-Active slice checkpoint: `slice/05-4a-idle-sway` now contains the first 4A pass in `LegAnimator.cs` with grounded-only idle sway force application and a successful `dotnet build PhysicsDrivenMovement.Character.csproj` compile check. Outcome tests and final tuning are still pending.
-| 2026-03-24 | 05-4a | GitHub Copilot | wip | Added the first idle-sway force path in `LegAnimator` on `slice/05-4a-idle-sway`. Character assembly build is green; the new outcome tests and focused regression slice still need to run. |
+Active slice checkpoint: `slice/05-4a-idle-sway` now contains the grounded-only idle sway force path in `LegAnimator.cs`, the new `IdleSwayTests.cs` outcome suite, and successful `dotnet build` checks for both `PhysicsDrivenMovement.Character.csproj` and `PhysicsDrivenMovement.Tests.PlayMode.csproj`. Focused Unity PlayMode execution and any prefab tuning are still pending.
+| 2026-03-24 | 05-4a | GitHub Copilot | wip | Added the idle-sway force path in `LegAnimator`, authored `IdleSwayTests`, and verified both the character and PlayMode test assemblies compile on `slice/05-4a-idle-sway`. Focused Unity execution and final prefab tuning are still pending. |
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Planning
