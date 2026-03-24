@@ -1,0 +1,164 @@
+You are implementing Slice 4B of Plan 05 (Organic Movement & Gait Variation) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md (the plan)
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1–4A are complete and merged to master. Current HEAD: 9d789a6.
+
+What exists in LegAnimator.cs:
+- `_idleTimer`, `_swayPhase`, `_swayAmplitudeScale` — idle sway state fields (from 4A)
+- `_idleSwayForce`, `_idleSwayFrequency`, `_idleSwayEnterDelay`, `_idleSwayFadeOutDuration` — 4A params
+- `IdleSwayInputThreshold = 0.05f`, `IdleSwayPlanarSpeedThreshold = 0.05f`, `IdleSwayVerticalSpeedThreshold = 0.1f` — idle detection constants
+- `_disableOrganicVariation` — when true, ALL organic variation is bypassed (sway, bob, noise, asymmetry)
+- `SmoothedInputMag` public property
+- `_hipsRigidbody` — Rigidbody reference
+- `_balance` — reference to BalanceController (check exact field name in code)
+
+What exists in BalanceController.cs:
+- `SetJumpCrouchOffset(float offset)` — existing pattern for additive height offset injection
+- `_standingHipsHeight` serialized field, `StandingHipsHeight` public property
+- `_jumpCrouchHeightOffset` private field used in height calculation
+
+Physics: 100 Hz FixedUpdate, 12 solver iterations.
+
+---
+
+## YOUR TASK: Slice 4B — Idle vertical bob + micro-adjustment step
+
+### Part 1: Vertical bob
+
+**What:** While idle (same condition as 4A sway: SmoothedInputMag < 0.05, planar/vertical speed low, not fallen), add a very gentle vertical oscillation to the hips height target.
+
+**Implementation approach:**
+- Add `SetIdleBobOffset(float offset)` public method to `BalanceController.cs` — stores offset in a new `_idleBobHeightOffset` field
+- Apply it inside BalanceController's height maintenance calculation, additive to `_standingHipsHeight + _jumpCrouchHeightOffset` (i.e. same pattern as `_jumpCrouchHeightOffset`)
+- Drive the offset from `LegAnimator.cs`: compute `bobOffset = sin(_bobPhase) * amplitude * _swayAmplitudeScale` each FixedUpdate and call `_balance.SetIdleBobOffset(bobOffset)`
+- When not idle (or `_disableOrganicVariation`), call `SetIdleBobOffset(0f)` to reset cleanly
+- Bob uses a separate phase accumulator `_bobPhase` (so it's independent of sway phase)
+
+**Serialized fields to add (on LegAnimator):**
+- `_idleBobAmplitude` float — serialized, default 0.004f (metres, ~0.4cm peak)
+- `_idleBobFrequency` float — serialized, default 0.3f (Hz, slow breathing-like)
+
+**Private state to add:**
+- `_bobPhase` float — accumulates: `_bobPhase += 2π * _idleBobFrequency * Time.fixedDeltaTime`
+
+**Gate:** Same idle condition as 4A. Bypassed entirely when `_disableOrganicVariation = true`. Must call `SetIdleBobOffset(0f)` when exiting idle to clean up.
+
+---
+
+### Part 2: Micro-adjustment step
+
+**What:** If the character has been idle for > 2.5s AND has drifted > 1cm from its idle-start position (due to sway), trigger a corrective re-plant on whichever foot is furthest from centre.
+
+**Implementation:**
+- Track `_idleStartPosition` (Vector3) — capture hips position when idle starts (when `_idleTimer` first crosses `_idleSwayEnterDelay`)
+- Track `_lastMicroStepTime` — to rate-limit micro-steps (no more than one per 1.5s)
+- When `_idleTimer > 2.5f` AND `Vector3.Distance(hipsPosition, _idleStartPosition) > 0.01f` AND enough time since last micro-step:
+  - Compare left and right foot lateral distance from hips
+  - Set `_forcePlantLeft = true` or `_forcePlantRight = true` on whichever foot is furthest
+  - Record `_lastMicroStepTime = Time.time`
+- The forced plant should use the normal gait step mechanism — just flag that a step is due, let the normal step planting code handle it. Look at how existing stuck-leg recovery forces a step and follow the same pattern.
+
+**Serialized fields to add (on LegAnimator):**
+- `_microStepIdleDelay` float — serialized, default 2.5f (seconds before micro-step fires)
+- `_microStepDriftThreshold` float — serialized, default 0.01f (metres drift to trigger)
+- `_microStepCooldown` float — serialized, default 1.5f (minimum seconds between micro-steps)
+
+**Exposed for tests:**
+- `internal int MicroStepCount` — increments each time a micro-step fires (so tests can assert it happened)
+
+---
+
+### Tests to write
+
+File: `Assets/Tests/PlayMode/Character/IdleVerticalBobTests.cs`
+
+Test class setup mirrors `IdleSwayTests.cs` — load real prefab, spawn at Vector3(2000,0,0), wait for settle.
+
+**Test 1: `IdleBob_WhenStandingStill_ProducesVerticalOscillation`**
+- Set `_disableOrganicVariation = false`, zero move input
+- Wait 400 frames (4s)
+- Record hips Y position every 10 frames for 200 frames
+- Assert: stddev of recorded Y positions > 0.001f (> 0.1cm variation)
+- Assert: peak-to-peak range < 0.02f (< 2cm sanity cap)
+- Assert: CharacterState != Fallen throughout
+
+**Test 2: `IdleBob_WhenDisableOrganicVariation_NoVerticalDrift`**
+- Set `_disableOrganicVariation = true`
+- Zero input, wait 400 frames
+- Record hips Y every 10 frames for 100 frames
+- Assert: stddev < 0.0005f
+
+**Test 3: `MicroStep_WhenIdleLong_FiresAtLeastOnce`**
+- Set `_disableOrganicVariation = false`, `_microStepIdleDelay = 1.0f` (shortened for test speed), `_microStepDriftThreshold = 0.001f` (very sensitive)
+- Zero input, wait 600 frames (6s)
+- Assert: `MicroStepCount >= 1`
+- Assert: no fall
+
+### Test filter for this slice
+
+`"IdleVerticalBobTests|IdleSwayTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests"`
+
+Target: all tests green (34 existing + 3 new = 37 total).
+
+---
+
+## CONSTRAINTS (non-negotiable)
+
+- Do NOT change the physics path in BalanceController — `SetIdleBobOffset` is additive cosmetic only, same pattern as `SetJumpCrouchOffset`
+- Do NOT modify `PlayerMovement.cs`
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- `_disableOrganicVariation = true` must reproduce exact pre-plan behaviour (no bob, no micro-step)
+- All tuned values go in prefab overrides, NOT as C# field defaults — the defaults listed above are starting points only
+- No questions — make best call, document reasoning in comments, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output:
+- Every file you intend to modify
+- What change you will make in each
+- Whether tests will be run (and which filter)
+
+Then proceed immediately — plan is pre-approved.
+
+---
+
+## BRANCH
+
+Create branch `slice/05-4b-idle-bob` from current master HEAD before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `feat(05-4b): add SetIdleBobOffset to BalanceController` — after BalanceController change
+2. `feat(05-4b): add idle vertical bob and micro-step to LegAnimator` — after LegAnimator changes
+3. `test(05-4b): add IdleVerticalBobTests` — after test file
+4. `fix(05-4b): ...` — any tuning needed
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"05-4b","status":"pass","branch":"slice/05-4b-idle-bob","notes":"<one line summary>"}`
+- Commit: `chore: slice 05-4b complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-4b STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
