@@ -1,10 +1,10 @@
 # Plan 06 — Landing Preparation & Post-Landing Recovery
 
-**Status:** In Progress
+**Status:** Complete (slices 1–3 shipped; slice 4 deferred — landing feels correct without it)
 **Branch prefix:** `slice/06-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\landing-prep\prompts\`
 
-**Latest progress:** Slice 1 is complete on `slice/06-1-spring-ramp`. Gradual landing spring restoration now ramps back to full stiffness over a prefab-tuned 0.06s duration with a 0.5 curve, and the focused PlayMode slice (`LandingRecoveryTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests`) finished 29/29 green on 2026-03-24.
+**Latest progress:** All three primary slices complete and merged to master (2026-03-24). Slice 1 (spring ramp, 29/29), Slice 2 (tilt suppression + counter-lean, 32/32), Slice 3 (horizontal damping, 35/35). Landing confirmed feeling correct in playtesting. Slice 4 (pre-landing leg extension) deferred — not needed.
 
 ---
 
