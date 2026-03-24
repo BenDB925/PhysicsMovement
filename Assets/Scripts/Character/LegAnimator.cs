@@ -55,6 +55,26 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Seconds used to fade idle sway back to zero once movement resumes.")]
         private float _idleSwayFadeOutDuration = 0.3f;
 
+        [SerializeField, Range(0f, 0.02f)]
+        [Tooltip("Peak vertical height offset in metres applied to the hips target while idling to create a gentle breathing-like bob.")]
+        private float _idleBobAmplitude = 0.004f;
+
+        [SerializeField, Range(0.05f, 2f)]
+        [Tooltip("Frequency in Hz of the idle vertical bob sine wave.")]
+        private float _idleBobFrequency = 0.3f;
+
+        [SerializeField, Range(0.5f, 10f)]
+        [Tooltip("Seconds the character must remain idle before a corrective micro-step can fire.")]
+        private float _microStepIdleDelay = 2.5f;
+
+        [SerializeField, Range(0.001f, 0.05f)]
+        [Tooltip("Minimum hips drift distance in metres from the idle-start position before a micro-step is requested.")]
+        private float _microStepDriftThreshold = 0.01f;
+
+        [SerializeField, Range(0.1f, 5f)]
+        [Tooltip("Minimum seconds between idle micro-steps.")]
+        private float _microStepCooldown = 1.5f;
+
         // Test-only seam: suppress per-stride noise draws without suppressing asymmetry.
         // Allows tests to measure the pure asymmetry multiplier in isolation.
         private bool _disableStepAngleNoiseForTest = false;
@@ -264,6 +284,9 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Sibling CharacterState component used to gate gait on posture state.</summary>
         private CharacterState _characterState;
 
+        /// <summary>Sibling BalanceController component used to inject idle bob height offsets.</summary>
+        private BalanceController _balance;
+
         /// <summary>Hips Rigidbody used to read world-space velocity for movement direction.</summary>
         private Rigidbody _hipsRigidbody;
 
@@ -275,12 +298,6 @@ namespace PhysicsDrivenMovement.Character
         /// phase with a naturally small starting rotation amplitude.
         /// </summary>
         private float _phase;
-
-        // ── Smoothed target angles for frame-to-frame interpolation ─────────
-        private float _smoothedLeftSwingDeg;
-        private float _smoothedRightSwingDeg;
-        private float _smoothedLeftKneeDeg;
-        private float _smoothedRightKneeDeg;
 
         /// <summary>
         /// Smoothed version of the actual move input magnitude, in the range [0, 1].
@@ -295,6 +312,15 @@ namespace PhysicsDrivenMovement.Character
         private float _idleTimer;
         private float _swayPhase;
         private float _swayAmplitudeScale;
+        private float _bobPhase;
+        private Vector3 _idleStartPosition;
+        private bool _hasIdleStartPosition;
+        private float _lastMicroStepTime = float.NegativeInfinity;
+        private bool _forcePlantLeft;
+        private bool _forcePlantRight;
+        private bool _idleMicroStepActive;
+        private LocomotionLeg _idleMicroStepLeg = LocomotionLeg.Left;
+        private int _microStepCount;
 
         /// <summary>Counter incremented each FixedUpdate; used to gate debug logging every 10 frames.</summary>
         private int _debugFrameCounter;
@@ -420,8 +446,11 @@ namespace PhysicsDrivenMovement.Character
 
         private const float IdleSwayInputThreshold = 0.05f;
         private const float IdleSwayPlanarSpeedThreshold = 0.05f;
+        private const float IdleSwayLateralSpeedLatchThreshold = 0.12f;
+        private const float IdleSwayForwardSpeedThreshold = 0.05f;
         private const float IdleSwayVerticalSpeedThreshold = 0.1f;
         private const float IdleSwayResidualLateralVelocityThreshold = 0.001f;
+        private const float IdleMicroStepMinimumBlendWeight = 0.25f;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -450,6 +479,7 @@ namespace PhysicsDrivenMovement.Character
         internal float KneeAngleDegrees => GetEffectiveKneeAngle();
         internal Vector3 LeftFootWorldPosition => _footL != null ? _footL.position : Vector3.zero;
         internal Vector3 RightFootWorldPosition => _footR != null ? _footR.position : Vector3.zero;
+        internal int MicroStepCount => _microStepCount;
 
         /// <summary>
         /// True while the stuck-leg recovery pose is being actively applied.
@@ -505,6 +535,11 @@ namespace PhysicsDrivenMovement.Character
             if (!TryGetComponent(out _characterState))
             {
                 Debug.LogError("[LegAnimator] Missing CharacterState on this GameObject.", this);
+            }
+
+            if (!TryGetComponent(out _balance))
+            {
+                Debug.LogWarning("[LegAnimator] Missing BalanceController on this GameObject; idle bob will be disabled.", this);
             }
 
             if (!TryGetComponent(out _hipsRigidbody))
@@ -634,7 +669,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_playerMovement == null || _characterState == null)
             {
-                ResetIdleSwayState();
+                ResetIdleOrganicState();
                 return;
             }
 
@@ -644,7 +679,7 @@ namespace PhysicsDrivenMovement.Character
                 _suppressIncomingCommandFrame = true;
                 _phase = 0f;
                 _smoothedInputMag = 0f;
-                ResetIdleSwayState();
+                ResetIdleOrganicState();
                 _confidenceEvaluator.Reset();
                 ResetLegStateMachinesToIdle();
                 _jointDriver.SetAllTargetsToIdentity();
@@ -663,7 +698,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
-                ResetIdleSwayState();
+                ResetIdleOrganicState();
                 _confidenceEvaluator.Reset();
                 ResetLegStateMachinesToIdle();
                 _jointDriver.SetAllTargetsToIdentity();
@@ -672,9 +707,9 @@ namespace PhysicsDrivenMovement.Character
 
             ApplyCommandFrame();
 
-            // STEP 7: Apply idle sway as a tiny hips perturbation so balance recovery
-            //         produces the visible weight shift instead of a scripted pose change.
-            ApplyIdleSway();
+            // STEP 7: Apply idle organic variation through the existing balance and gait
+            //         systems so sway, bob, and corrective micro-steps all stay physics-led.
+            ApplyIdleOrganicVariation();
 
             // STEP 8: Debug logging — write one line every 10 FixedUpdate frames when enabled.
             if (_debugLog)
@@ -713,33 +748,33 @@ namespace PhysicsDrivenMovement.Character
             _rightStepAngleNoise = 0f;
             _leftLateralNoise = 0f;
             _rightLateralNoise = 0f;
-            ResetIdleSwayState();
+            _microStepCount = 0;
+            _lastMicroStepTime = float.NegativeInfinity;
+            ResetIdleOrganicState();
         }
 
-        private void ApplyIdleSway()
+        private void ApplyIdleOrganicVariation()
         {
             if (_hipsRigidbody == null)
             {
+                ResetIdleOrganicState();
                 return;
             }
 
-            bool bypassIdleSway = _disableOrganicVariation ||
-                                  _characterState.CurrentState == CharacterStateType.Airborne ||
-                                  !_commandObservation.IsGrounded;
-            if (bypassIdleSway)
+            bool bypassIdleOrganicVariation = _disableOrganicVariation ||
+                                              _characterState.CurrentState == CharacterStateType.Airborne ||
+                                              !_commandObservation.IsGrounded;
+            if (bypassIdleOrganicVariation)
             {
-                ResetIdleSwayState();
+                ResetIdleOrganicState();
                 return;
             }
 
             float deltaTime = Time.fixedDeltaTime;
-            float phaseAdvance = Mathf.PI * 2f * _idleSwayFrequency * deltaTime;
+            float swayPhaseAdvance = Mathf.PI * 2f * _idleSwayFrequency * deltaTime;
+            float bobPhaseAdvance = Mathf.PI * 2f * _idleBobFrequency * deltaTime;
             bool hasMoveIntent = _commandDesiredInput.MoveMagnitude >= IdleSwayInputThreshold;
-            bool isStableStandingIdle = _characterState.CurrentState == CharacterStateType.Standing &&
-                                        !hasMoveIntent &&
-                                        _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedThreshold &&
-                                        Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
-            bool isIdle = isStableStandingIdle && _smoothedInputMag < IdleSwayInputThreshold;
+            bool idleMicroStepInProgress = HasIdleMicroStepMotionRequest();
 
             Vector3 lateralAxis = Vector3.ProjectOnPlane(transform.right, Vector3.up);
             if (lateralAxis.sqrMagnitude < 0.0001f)
@@ -751,7 +786,31 @@ namespace PhysicsDrivenMovement.Character
                 lateralAxis.Normalize();
             }
 
-            float lateralVelocity = Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis);
+            Vector3 forwardAxis = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (forwardAxis.sqrMagnitude < 0.0001f)
+            {
+                forwardAxis = Vector3.forward;
+            }
+            else
+            {
+                forwardAxis.Normalize();
+            }
+
+            float forwardSpeed = Mathf.Abs(Vector3.Dot(_hipsRigidbody.linearVelocity, forwardAxis));
+            float lateralVelocity = Mathf.Abs(Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis));
+            bool isStableStandingIdle = _characterState.CurrentState == CharacterStateType.Standing &&
+                                        !hasMoveIntent &&
+                                        _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedThreshold &&
+                                        Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
+            bool keepIdleLatched = _swayAmplitudeScale > 0f &&
+                                   _characterState.CurrentState == CharacterStateType.Standing &&
+                                   !hasMoveIntent &&
+                                   lateralVelocity < IdleSwayLateralSpeedLatchThreshold &&
+                                   forwardSpeed < IdleSwayForwardSpeedThreshold &&
+                                   Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
+            bool isIdle = (isStableStandingIdle || keepIdleLatched) &&
+                          _smoothedInputMag < IdleSwayInputThreshold &&
+                          !idleMicroStepInProgress;
 
             if (isIdle)
             {
@@ -759,39 +818,165 @@ namespace PhysicsDrivenMovement.Character
                 float fadeInDuration = Mathf.Max(0.0001f, _idleSwayEnterDelay);
                 _swayAmplitudeScale = Mathf.Clamp01(_idleTimer / fadeInDuration);
 
-                _swayPhase = Mathf.Repeat(_swayPhase + phaseAdvance, Mathf.PI * 2f);
+                _swayPhase = Mathf.Repeat(_swayPhase + swayPhaseAdvance, Mathf.PI * 2f);
+                _bobPhase = Mathf.Repeat(_bobPhase + bobPhaseAdvance, Mathf.PI * 2f);
+
+                if (!_hasIdleStartPosition && _idleTimer >= _idleSwayEnterDelay)
+                {
+                    _idleStartPosition = _hipsRigidbody.position;
+                    _hasIdleStartPosition = true;
+                }
+
                 float swayForce = Mathf.Sin(_swayPhase) * _idleSwayForce * _swayAmplitudeScale;
                 _hipsRigidbody.AddForce(lateralAxis * swayForce, ForceMode.Force);
+
+                if (_balance != null)
+                {
+                    float bobOffset = Mathf.Sin(_bobPhase) * _idleBobAmplitude * _swayAmplitudeScale;
+                    _balance.SetIdleBobOffset(bobOffset);
+                }
+
+                TryQueueIdleMicroStep(lateralAxis);
                 return;
             }
 
             _idleTimer = 0f;
-            if (_swayAmplitudeScale <= 0f && Mathf.Abs(lateralVelocity) < IdleSwayResidualLateralVelocityThreshold)
+            _hasIdleStartPosition = false;
+            if (_balance != null)
+            {
+                _balance.SetIdleBobOffset(0f);
+            }
+
+            if (_swayAmplitudeScale <= 0f && lateralVelocity < IdleSwayResidualLateralVelocityThreshold)
             {
                 _swayPhase = 0f;
+                _bobPhase = 0f;
                 return;
             }
 
             float fadeOutDuration = Mathf.Max(0.0001f, _idleSwayFadeOutDuration);
             _swayAmplitudeScale = Mathf.MoveTowards(_swayAmplitudeScale, 0f, deltaTime / fadeOutDuration);
 
-            if (Mathf.Abs(lateralVelocity) >= IdleSwayResidualLateralVelocityThreshold)
+            if (lateralVelocity >= IdleSwayResidualLateralVelocityThreshold)
             {
-                _hipsRigidbody.AddForce(lateralAxis * -lateralVelocity, ForceMode.VelocityChange);
+                float signedLateralVelocity = Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis);
+                _hipsRigidbody.AddForce(lateralAxis * -signedLateralVelocity, ForceMode.VelocityChange);
                 lateralVelocity = 0f;
             }
 
-            if (_swayAmplitudeScale <= 0f && Mathf.Abs(lateralVelocity) < IdleSwayResidualLateralVelocityThreshold)
+            if (_swayAmplitudeScale <= 0f && lateralVelocity < IdleSwayResidualLateralVelocityThreshold)
             {
                 _swayPhase = 0f;
+                _bobPhase = 0f;
             }
         }
 
-        private void ResetIdleSwayState()
+        private void TryQueueIdleMicroStep(Vector3 lateralAxis)
+        {
+            if (!_hasIdleStartPosition ||
+                _idleMicroStepActive ||
+                _forcePlantLeft ||
+                _forcePlantRight ||
+                _footL == null ||
+                _footR == null)
+            {
+                return;
+            }
+
+            if (_idleTimer <= _microStepIdleDelay)
+            {
+                return;
+            }
+
+            if (Time.time - _lastMicroStepTime < _microStepCooldown)
+            {
+                return;
+            }
+
+            if (Vector3.Distance(_hipsRigidbody.position, _idleStartPosition) <= _microStepDriftThreshold)
+            {
+                return;
+            }
+
+            float leftLateralDistance = Mathf.Abs(GetFootLateralOffsetFromHips(_footL, lateralAxis));
+            float rightLateralDistance = Mathf.Abs(GetFootLateralOffsetFromHips(_footR, lateralAxis));
+
+            _idleMicroStepActive = true;
+            if (leftLateralDistance >= rightLateralDistance)
+            {
+                _forcePlantLeft = true;
+                _idleMicroStepLeg = LocomotionLeg.Left;
+            }
+            else
+            {
+                _forcePlantRight = true;
+                _idleMicroStepLeg = LocomotionLeg.Right;
+            }
+
+            _lastMicroStepTime = Time.time;
+            _microStepCount++;
+        }
+
+        private bool HasIdleMicroStepMotionRequest()
+        {
+            if (_forcePlantLeft || _forcePlantRight)
+            {
+                return true;
+            }
+
+            if (!_idleMicroStepActive)
+            {
+                return false;
+            }
+
+            LegStateMachine trackedStateMachine = GetTrackedIdleMicroStepStateMachine();
+            return trackedStateMachine == null || trackedStateMachine.CurrentState != LegStateType.Stance;
+        }
+
+        private void RefreshIdleMicroStepProgress()
+        {
+            _forcePlantLeft = false;
+            _forcePlantRight = false;
+
+            if (!_idleMicroStepActive)
+            {
+                return;
+            }
+
+            LegStateMachine trackedStateMachine = GetTrackedIdleMicroStepStateMachine();
+            if (trackedStateMachine == null || trackedStateMachine.CurrentState == LegStateType.Stance)
+            {
+                _idleMicroStepActive = false;
+            }
+        }
+
+        private void CancelIdleMicroStepMotion()
+        {
+            _forcePlantLeft = false;
+            _forcePlantRight = false;
+            _idleMicroStepActive = false;
+        }
+
+        private LegStateMachine GetTrackedIdleMicroStepStateMachine()
+        {
+            return _idleMicroStepLeg == LocomotionLeg.Right
+                ? _rightLegStateMachine
+                : _leftLegStateMachine;
+        }
+
+        private void ResetIdleOrganicState()
         {
             _idleTimer = 0f;
             _swayPhase = 0f;
             _swayAmplitudeScale = 0f;
+            _bobPhase = 0f;
+            _idleStartPosition = Vector3.zero;
+            _hasIdleStartPosition = false;
+            CancelIdleMicroStepMotion();
+            if (_balance != null)
+            {
+                _balance.SetIdleBobOffset(0f);
+            }
         }
 
         private float GetEffectiveStepAngle()
@@ -885,6 +1070,7 @@ namespace PhysicsDrivenMovement.Character
             if (state == CharacterStateType.Fallen ||
                 state == CharacterStateType.GettingUp)
             {
+                CancelIdleMicroStepMotion();
                 _phase = 0f;
                 _smoothedInputMag = 0f;
                 _prevInputDir = Vector2.zero;
@@ -905,6 +1091,7 @@ namespace PhysicsDrivenMovement.Character
             // with boosted knee bend so the character visibly loads the spring.
             if (_isJumpWindUp)
             {
+                CancelIdleMicroStepMotion();
                 _confidenceEvaluator.Reset();
                 EnsureLegStateMachines();
                 LegStateFrame bracedLeft = BuildStateFrame(_leftLegStateMachine);
@@ -935,6 +1122,7 @@ namespace PhysicsDrivenMovement.Character
             // bend) so the character visibly springs upward from the crouch.
             if (_isJumpLaunch)
             {
+                CancelIdleMicroStepMotion();
                 _confidenceEvaluator.Reset();
                 EnsureLegStateMachines();
                 LegStateFrame launchLeft = BuildStateFrame(_leftLegStateMachine);
@@ -986,11 +1174,30 @@ namespace PhysicsDrivenMovement.Character
                 isMoving = false;
             }
 
+            EnsureLegStateMachines();
+
+            if (desiredInput.HasMoveIntent || state != CharacterStateType.Standing || !observation.IsGrounded)
+            {
+                CancelIdleMicroStepMotion();
+            }
+
+            bool keepIdleMicroStepRunning = state == CharacterStateType.Standing &&
+                                           observation.IsGrounded &&
+                                           !desiredInput.HasMoveIntent &&
+                                           HasIdleMicroStepMotionRequest();
+            if (keepIdleMicroStepRunning)
+            {
+                isMoving = true;
+            }
+
             Vector2 currentInputDir = inputMagnitude > 0.01f
                 ? desiredInput.MoveInput.normalized
                 : Vector2.zero;
 
-            bool restarting = !_wasMoving && isMoving && _smoothedInputMag < 0.05f;
+            bool restarting = !_wasMoving &&
+                              isMoving &&
+                              _smoothedInputMag < 0.05f &&
+                              !keepIdleMicroStepRunning;
             bool sharpTurn = _prevInputDir.sqrMagnitude > 0.01f &&
                              currentInputDir.sqrMagnitude > 0.01f &&
                              Vector2.Dot(_prevInputDir, currentInputDir) < 0.5f;
@@ -1041,10 +1248,9 @@ namespace PhysicsDrivenMovement.Character
                 ? desiredInput.MoveWorldDirection
                 : observation.BodyForward;
 
-            EnsureLegStateMachines();
-
             if (_isRecovering)
             {
+                CancelIdleMicroStepMotion();
                 _confidenceEvaluator.Reset();
                 _leftLegStateMachine.ForceState(
                     LegStateType.RecoveryStep,
@@ -1106,6 +1312,11 @@ namespace PhysicsDrivenMovement.Character
                 float t = Mathf.Clamp01(_idleBlendSpeed * Time.fixedDeltaTime);
                 float velocityMag01 = Mathf.Clamp01(horizontalSpeedGate / 2f);
                 float amplitudeTarget = Mathf.Max(inputMagnitude, velocityMag01);
+                if (keepIdleMicroStepRunning)
+                {
+                    amplitudeTarget = Mathf.Max(amplitudeTarget, IdleMicroStepMinimumBlendWeight);
+                }
+
                 _smoothedInputMag = Mathf.Lerp(_smoothedInputMag, amplitudeTarget, t);
 
                 bool bothFeetBehind = false;
@@ -1120,21 +1331,29 @@ namespace PhysicsDrivenMovement.Character
 
                 // STEP 2: Chapter 3.4 gives sharp turns and recovery explicit per-leg ownership
                 //         instead of pushing one body-level reason through both legs.
+                bool forceIdleCatchStepLeft = _forcePlantLeft;
+                bool forceIdleCatchStepRight = _forcePlantRight;
+                bool forceIdleCatchStep = forceIdleCatchStepLeft || forceIdleCatchStepRight;
+
                 LocomotionLeg weakSupportLeg = LocomotionLeg.Left;
                 bool promoteWeakSupportRecovery = desiredInput.HasMoveIntent &&
                     TryGetWeakSupportRecoveryLeg(observation, out weakSupportLeg);
-                bool promoteRecoveryOverride = desiredInput.HasMoveIntent &&
-                    (observation.IsLocomotionCollapsed || bothFeetFarBehind || promoteWeakSupportRecovery);
-                bool forceCatchStep = desiredInput.HasMoveIntent &&
-                    (observation.IsLocomotionCollapsed || bothFeetFarBehind);
+                bool promoteRecoveryOverride = forceIdleCatchStep ||
+                    (desiredInput.HasMoveIntent &&
+                    (observation.IsLocomotionCollapsed || bothFeetFarBehind || promoteWeakSupportRecovery));
+                bool forceCatchStep = forceIdleCatchStep ||
+                    (desiredInput.HasMoveIntent &&
+                    (observation.IsLocomotionCollapsed || bothFeetFarBehind));
                 bool hasTurnAsymmetry = TryGetTurnLegRoles(
                     desiredInput,
                     observation,
                     out LocomotionLeg outsideLeg,
                     out LocomotionLeg insideLeg);
-                LocomotionLeg recoveryLeg = promoteWeakSupportRecovery
-                    ? weakSupportLeg
-                    : SelectRecoveryLeg(gaitReferenceDirection, observation);
+                LocomotionLeg recoveryLeg = forceIdleCatchStep
+                    ? (forceIdleCatchStepLeft ? LocomotionLeg.Left : LocomotionLeg.Right)
+                    : promoteWeakSupportRecovery
+                        ? weakSupportLeg
+                        : SelectRecoveryLeg(gaitReferenceDirection, observation);
 
                 LegStateTransitionReason leftTransitionReason = DetermineLegTransitionReason(
                     LocomotionLeg.Left,
@@ -1303,6 +1522,8 @@ namespace PhysicsDrivenMovement.Character
                     _smoothedInputMag,
                     rightStepTarget);
 
+                RefreshIdleMicroStepProgress();
+
                 // STEP 3: Estimate whether the explicit per-leg controller still has enough
                 //         observation confidence to keep divergent gait roles active, then
                 //         blend the emitted commands toward a stable mirrored fallback gait
@@ -1434,10 +1655,6 @@ namespace PhysicsDrivenMovement.Character
             _suppressIncomingCommandFrame = false;
             _phase = 0f;
             _smoothedInputMag = 0f;
-            _smoothedLeftSwingDeg = 0f;
-            _smoothedRightSwingDeg = 0f;
-            _smoothedLeftKneeDeg = 0f;
-            _smoothedRightKneeDeg = 0f;
             _prevInputDir = Vector2.zero;
             _wasMoving = false;
             _stuckFrameCounter = 0;
@@ -1449,7 +1666,9 @@ namespace PhysicsDrivenMovement.Character
             _rightStepAngleNoise = 0f;
             _leftLateralNoise = 0f;
             _rightLateralNoise = 0f;
-            ResetIdleSwayState();
+            _microStepCount = 0;
+            _lastMicroStepTime = float.NegativeInfinity;
+            ResetIdleOrganicState();
             _confidenceEvaluator.Reset();
             ResetLegStateMachinesToIdle();
             _jointDriver.SetSpringMultiplier(1f);
@@ -2010,6 +2229,24 @@ namespace PhysicsDrivenMovement.Character
                 referenceDirection);
 
             return forwardDot;
+        }
+
+        private float GetFootLateralOffsetFromHips(Transform footTransform, Vector3 lateralAxis)
+        {
+            if (footTransform == null)
+            {
+                return 0f;
+            }
+
+            lateralAxis = Vector3.ProjectOnPlane(lateralAxis, Vector3.up);
+            if (lateralAxis.sqrMagnitude < 0.0001f)
+            {
+                lateralAxis = Vector3.right;
+            }
+
+            lateralAxis.Normalize();
+            Vector3 hipToFoot = footTransform.position - transform.position;
+            return Vector3.Dot(new Vector3(hipToFoot.x, 0f, hipToFoot.z), lateralAxis);
         }
 
         private float GetPointForwardOffsetFromHips(Vector3 point, Vector3 referenceDirection)

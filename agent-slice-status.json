@@ -1,1 +1,1 @@
-{"slice":"05-4a","status":"pass","branch":"slice/05-4a-idle-sway","notes":"Idle sway landed in LegAnimator with tuned prefab overrides and the focused PlayMode slice finished 31/31 green."}
+{"slice":"05-4b","status":"pass","branch":"slice/05-4b-idle-bob","notes":"Centered idle bob plus micro-step landed with bob-specific BalanceController support, and the focused PlayMode slice finished 30/30 green."}

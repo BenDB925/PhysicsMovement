@@ -539,16 +539,25 @@ namespace PhysicsDrivenMovement.Character
 
         internal LandingWindowTelemetrySample CurrentLandingWindowTelemetrySample => _currentLandingWindowTelemetrySample;
 
-        // ─── Jump Crouch Offset (C8.5) ────────────────────────────────────
+        // ─── Additive Height Offsets ──────────────────────────────────────
 
         /// <summary>Additive offset applied to the height-maintenance target during jump wind-up.</summary>
         private float _jumpCrouchHeightOffset;
+
+        /// <summary>Additive offset applied to the height-maintenance target during idle bob.</summary>
+        private float _idleBobHeightOffset;
 
         /// <summary>
         /// Set a temporary height offset for the jump wind-up crouch.
         /// Pass a negative value to lower the hips.
         /// </summary>
         public void SetJumpCrouchOffset(float offset) { _jumpCrouchHeightOffset = offset; }
+
+        /// <summary>
+        /// Set a temporary height offset for idle vertical bob.
+        /// Pass a positive or negative value to nudge the hips target up or down.
+        /// </summary>
+        public void SetIdleBobOffset(float offset) { _idleBobHeightOffset = offset; }
 
         /// <summary>Clear the jump crouch offset, restoring normal height maintenance.</summary>
         public void ClearJumpCrouchOffset() { _jumpCrouchHeightOffset = 0f; }
@@ -633,6 +642,7 @@ namespace PhysicsDrivenMovement.Character
             _reversalWeightShiftTimer = 0f;
             _reversalWeightShiftDirection = Vector3.zero;
             _jumpCrouchHeightOffset = 0f;
+            _idleBobHeightOffset = 0f;
             _landingAbsorbTimer = 0f;
 
             if (_ragdollSetup != null)
@@ -1279,13 +1289,29 @@ namespace PhysicsDrivenMovement.Character
 
                 // C8.5d: Landing absorption lowers the height target during the squat.
                 float landingHeightOffset = _landingAbsorbHeightOffset * landingAbsorbBlend;
-                float hipsHeightError = (_standingHipsHeight + _jumpCrouchHeightOffset - landingHeightOffset + groundContactHeight + anticipatedStepHeight) - _rb.position.y;
-                if (hipsHeightError > 0f)
+                float targetHipsHeight = _standingHipsHeight +
+                                         _jumpCrouchHeightOffset +
+                                         _idleBobHeightOffset -
+                                         landingHeightOffset +
+                                         groundContactHeight +
+                                         anticipatedStepHeight;
+                float hipsHeightError = targetHipsHeight - _rb.position.y;
+                bool hasIdleBobOffset = !Mathf.Approximately(_idleBobHeightOffset, 0f);
+                bool allowIdleBobDownwardCorrection = _idleBobHeightOffset < 0f;
+                if (hipsHeightError > 0f || hasIdleBobOffset)
                 {
                     float heightScale = commandHeightScale;
                     float heightForce = hipsHeightError * (_heightMaintenanceStrength * heightScale)
                                         - _rb.linearVelocity.y * (_heightMaintenanceDamping * heightScale);
-                    heightForce = Mathf.Max(0f, heightForce);
+                    if (hasIdleBobOffset)
+                    {
+                        heightForce += _idleBobHeightOffset * (_heightMaintenanceStrength * heightScale);
+                    }
+
+                    if (!allowIdleBobDownwardCorrection)
+                    {
+                        heightForce = Mathf.Max(0f, heightForce);
+                    }
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
                 }
             }
