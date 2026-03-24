@@ -1050,11 +1050,18 @@ namespace PhysicsDrivenMovement.Character
 
                 if (leftStepTarget.IsValid && !_disableOrganicVariation)
                 {
-                    float newWidthBias = Mathf.Clamp(leftStepTarget.WidthBias + _leftLateralNoise, -0.5f, 0.5f);
+                    Vector3 leftForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (leftForward.sqrMagnitude < 0.0001f)
+                    {
+                        leftForward = Vector3.forward;
+                    }
+
+                    Vector3 leftLateral = Vector3.Cross(Vector3.up, leftForward.normalized);
+                    Vector3 leftLandingPosition = leftStepTarget.LandingPosition + leftLateral * _leftLateralNoise;
                     leftStepTarget = new StepTarget(
-                        leftStepTarget.LandingPosition,
+                        leftLandingPosition,
                         leftStepTarget.DesiredTiming,
-                        newWidthBias,
+                        leftStepTarget.WidthBias,
                         leftStepTarget.BrakingBias,
                         leftStepTarget.Confidence,
                         leftStepTarget.RequestedClearanceHeight);
@@ -1084,11 +1091,18 @@ namespace PhysicsDrivenMovement.Character
 
                 if (rightStepTarget.IsValid && !_disableOrganicVariation)
                 {
-                    float newWidthBias = Mathf.Clamp(rightStepTarget.WidthBias + _rightLateralNoise, -0.5f, 0.5f);
+                    Vector3 rightForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (rightForward.sqrMagnitude < 0.0001f)
+                    {
+                        rightForward = Vector3.forward;
+                    }
+
+                    Vector3 rightLateral = Vector3.Cross(Vector3.up, rightForward.normalized);
+                    Vector3 rightLandingPosition = rightStepTarget.LandingPosition + rightLateral * _rightLateralNoise;
                     rightStepTarget = new StepTarget(
-                        rightStepTarget.LandingPosition,
+                        rightLandingPosition,
                         rightStepTarget.DesiredTiming,
-                        newWidthBias,
+                        rightStepTarget.WidthBias,
                         rightStepTarget.BrakingBias,
                         rightStepTarget.Confidence,
                         rightStepTarget.RequestedClearanceHeight);
