@@ -414,6 +414,8 @@ namespace PhysicsDrivenMovement.Character
         internal float StepAngleDegrees => GetEffectiveStepAngle();
         internal float LeftStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: true);
         internal float RightStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: false);
+        // Test diagnostic: expose the sprint value seen by GetEffectiveStepAngle
+        internal float CurrentSprintNormalizedForTest => GetCurrentSprintNormalized();
 
         internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
 
