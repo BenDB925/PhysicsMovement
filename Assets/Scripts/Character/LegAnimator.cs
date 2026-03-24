@@ -696,10 +696,12 @@ namespace PhysicsDrivenMovement.Character
             // Asymmetry is a pure multiplier (e.g. 1.04 = 4% longer left stride).
             // Suppressed during any jump phase (wind-up through landing grace) and when
             // organic variation is disabled, so sprint-jump stability tests are unaffected.
+            // Asymmetry is suppressed at sprint and during any jump phase -- it is a walk-only
+            // organic feature. Sprint and jump must be clean and symmetric.
             float asymmetry = 1.0f;
-            if (!_disableOrganicVariation &&
-                !_isJumpWindUp && !_isJumpLaunch &&
-                (_playerMovement == null || !_playerMovement.IsRecentJumpAirborne))
+            bool isJumping = _isJumpWindUp || _isJumpLaunch ||
+                             (_playerMovement != null && _playerMovement.IsRecentJumpAirborne);
+            if (!_disableOrganicVariation && !isJumping && sprintNormalized < 0.1f)
             {
                 asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
             }
