@@ -1296,12 +1296,22 @@ namespace PhysicsDrivenMovement.Character
                                          groundContactHeight +
                                          anticipatedStepHeight;
                 float hipsHeightError = targetHipsHeight - _rb.position.y;
-                if (hipsHeightError > 0f)
+                bool hasIdleBobOffset = !Mathf.Approximately(_idleBobHeightOffset, 0f);
+                bool allowIdleBobDownwardCorrection = _idleBobHeightOffset < 0f;
+                if (hipsHeightError > 0f || hasIdleBobOffset)
                 {
                     float heightScale = commandHeightScale;
                     float heightForce = hipsHeightError * (_heightMaintenanceStrength * heightScale)
                                         - _rb.linearVelocity.y * (_heightMaintenanceDamping * heightScale);
-                    heightForce = Mathf.Max(0f, heightForce);
+                    if (hasIdleBobOffset)
+                    {
+                        heightForce += _idleBobHeightOffset * (_heightMaintenanceStrength * heightScale);
+                    }
+
+                    if (!allowIdleBobDownwardCorrection)
+                    {
+                        heightForce = Mathf.Max(0f, heightForce);
+                    }
                     _rb.AddForce(Vector3.up * heightForce, ForceMode.Force);
                 }
             }

@@ -832,10 +832,7 @@ namespace PhysicsDrivenMovement.Character
 
                 if (_balance != null)
                 {
-                    // BalanceController height maintenance only supplies upward support, so a
-                    // one-sided bob envelope survives the additive path without changing physics.
-                    float bobWave = Mathf.Sin(_bobPhase) * 0.5f + 0.5f;
-                    float bobOffset = bobWave * _idleBobAmplitude * _swayAmplitudeScale;
+                    float bobOffset = Mathf.Sin(_bobPhase) * _idleBobAmplitude * _swayAmplitudeScale;
                     _balance.SetIdleBobOffset(bobOffset);
                 }
 
