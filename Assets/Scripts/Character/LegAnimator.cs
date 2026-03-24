@@ -696,15 +696,14 @@ namespace PhysicsDrivenMovement.Character
 
             // Asymmetry is a walk-only feature: suppressed at sprint and during any jump phase.
             // Sprint and jump must remain clean and symmetric (stability tests require it).
+            // Threshold 0.01f: effectively "sprint input off" -- SprintNormalized ramps toward 0
+            // when sprint is not held, reaching near-zero within a few physics frames.
             bool isJumping = _isJumpWindUp || _isJumpLaunch ||
                              (_playerMovement != null && _playerMovement.IsRecentJumpAirborne);
-            if (!_disableOrganicVariation && !isJumping && sprintNormalized < 0.5f)
+            if (!_disableOrganicVariation && !isJumping && sprintNormalized < 0.01f)
             {
-                float asymmetryBlend = 1f - Mathf.Clamp01(sprintNormalized / 0.5f);
                 float asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
-                // Lerp smoothly to 1.0 as sprint rises, so there's no step discontinuity.
-                float blendedAsymmetry = Mathf.Lerp(1f, asymmetry, asymmetryBlend);
-                effectiveStepAngle *= blendedAsymmetry;
+                effectiveStepAngle *= asymmetry;
             }
 
             // Per-stride noise on top of asymmetry baseline.
