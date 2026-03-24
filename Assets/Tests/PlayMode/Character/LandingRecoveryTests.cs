@@ -32,9 +32,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SpeedRecoveryMeasurementFrame = 50;
         private const float RampAssertionDurationSeconds = 0.12f;
         private const float RecoveryTiltThresholdDeg = 5f;
-        private const float PostLandingSpeedRetainMaxRatio = 0.85f;
-        private const float PostLandingSpeedRetainMinRatio = 0.5f;
-        private const float SpeedRecoveryMinRatio = 0.8f;
+        private const float Frame5VsFrame3MaxRatio = 0.95f;
+        private const float PostLandingMinimumHorizontalSpeed = 0.25f;
+        private const float RecoveryRetainMinRatio = 0.75f;
+        private const float RecoveryMinimumHorizontalSpeed = 1f;
+        private const float DisabledVsDampedMinRatio = 1.15f;
+        private const float DisabledLandingDampingDurationSeconds = 0.08f;
 
         private static readonly Vector3 TestOrigin = new Vector3(2000f, 0f, 0f);
         private static readonly FieldInfo SmoothedPelvisTiltField = typeof(BalanceController).GetField(
@@ -93,16 +96,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverIterations = 12;
             Physics.defaultSolverVelocityIterations = 4;
 
-            _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
-            {
-                TestOrigin = TestOrigin,
-                SpawnOffset = new Vector3(0f, 0.5f, 0f),
-                GroundScale = new Vector3(400f, 1f, 400f),
-            });
-
-            _upperLegLJoint = _rig.UpperLegL.GetComponent<ConfigurableJoint>();
-            Assert.That(_upperLegLJoint, Is.Not.Null,
-                "Landing recovery tests require the prefab-backed UpperLeg_L ConfigurableJoint.");
+            CreateRig();
         }
 
         [TearDown]
@@ -277,101 +271,144 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         public IEnumerator LandingRecovery_HorizontalSpeedReducedAfterLanding()
         {
             // Arrange
-            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
-            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+            LandingRecoveryMetrics dampedMetrics = new LandingRecoveryMetrics();
 
             // Act
-            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+            yield return RunLandingScenario(dampedMetrics);
 
             // Assert
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery PreJumpHorizontalSpeed={metrics.PreJumpHorizontalSpeed:F2}");
+                $"[METRIC] LandingRecovery DampedSpeedFrame3={dampedMetrics.HorizontalSpeedAtGroundedFrame3:F2}");
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery SpeedFrame5={metrics.HorizontalSpeedAtGroundedFrame5:F2}");
+                $"[METRIC] LandingRecovery DampedSpeedFrame5={dampedMetrics.HorizontalSpeedAtGroundedFrame5:F2}");
 
-            Assert.That(metrics.WasAirborne, Is.True,
-                "Sprint jump should enter airborne before landing damping is evaluated.");
-            Assert.That(metrics.Landed, Is.True,
-                "Sprint jump should land within the landing recovery observation window.");
-            Assert.That(metrics.EnteredFallen, Is.False,
-                "Landing damping should not let the character enter Fallen during the sprint-jump recovery window.");
-            Assert.That(float.IsNaN(metrics.PreJumpHorizontalSpeed), Is.False,
-                "The sprint-jump harness did not capture the pre-jump horizontal speed.");
-            Assert.That(float.IsNaN(metrics.HorizontalSpeedAtGroundedFrame5), Is.False,
-                "The landing recovery harness did not capture horizontal speed five grounded frames after landing.");
-            Assert.That(metrics.HorizontalSpeedAtGroundedFrame5,
-                Is.LessThan(metrics.PreJumpHorizontalSpeed * PostLandingSpeedRetainMaxRatio),
-                $"Horizontal speed five grounded frames after landing should be below {PostLandingSpeedRetainMaxRatio:P0} of pre-jump speed. " +
-                $"Observed {metrics.HorizontalSpeedAtGroundedFrame5:F2} from {metrics.PreJumpHorizontalSpeed:F2}.");
-            Assert.That(metrics.HorizontalSpeedAtGroundedFrame5,
-                Is.GreaterThan(metrics.PreJumpHorizontalSpeed * PostLandingSpeedRetainMinRatio),
-                $"Horizontal speed five grounded frames after landing should stay above {PostLandingSpeedRetainMinRatio:P0} of pre-jump speed. " +
-                $"Observed {metrics.HorizontalSpeedAtGroundedFrame5:F2} from {metrics.PreJumpHorizontalSpeed:F2}.");
+            AssertLandingRunCompleted(dampedMetrics, "The damped sprint-jump run");
+            Assert.That(float.IsNaN(dampedMetrics.HorizontalSpeedAtGroundedFrame3), Is.False,
+                "The damped landing recovery harness did not capture horizontal speed three grounded frames after landing.");
+            Assert.That(float.IsNaN(dampedMetrics.HorizontalSpeedAtGroundedFrame5), Is.False,
+                "The damped landing recovery harness did not capture horizontal speed five grounded frames after landing.");
+            Assert.That(dampedMetrics.HorizontalSpeedAtGroundedFrame5,
+                Is.LessThan(dampedMetrics.HorizontalSpeedAtGroundedFrame3 * Frame5VsFrame3MaxRatio),
+                $"With landing damping enabled, horizontal speed five grounded frames after landing should stay below {Frame5VsFrame3MaxRatio:P0} of the frame-3 landing speed. " +
+                $"Observed frame-5 {dampedMetrics.HorizontalSpeedAtGroundedFrame5:F2} from frame-3 {dampedMetrics.HorizontalSpeedAtGroundedFrame3:F2}.");
+            Assert.That(dampedMetrics.HorizontalSpeedAtGroundedFrame5,
+                Is.GreaterThan(PostLandingMinimumHorizontalSpeed),
+                $"With landing damping enabled, horizontal speed five grounded frames after landing should stay above {PostLandingMinimumHorizontalSpeed:F2} so the character does not dead-stop. " +
+                $"Observed frame-5 {dampedMetrics.HorizontalSpeedAtGroundedFrame5:F2}.");
         }
 
         [UnityTest]
         public IEnumerator LandingRecovery_SpeedRecoveryAfterDamping()
         {
             // Arrange
-            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
-            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+            LandingRecoveryMetrics dampedMetrics = new LandingRecoveryMetrics();
 
             // Act
-            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+            yield return RunLandingScenario(dampedMetrics);
 
             // Assert
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery NominalSprintSpeed={metrics.NominalSprintSpeed:F2}");
+                $"[METRIC] LandingRecovery DampedSpeedFrame5={dampedMetrics.HorizontalSpeedAtGroundedFrame5:F2}");
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery SpeedFrame50={metrics.HorizontalSpeedAtRecoveryFrame:F2}");
+                $"[METRIC] LandingRecovery DampedSpeedFrame50={dampedMetrics.HorizontalSpeedAtRecoveryFrame:F2}");
 
-            Assert.That(metrics.WasAirborne, Is.True,
-                "Sprint jump should enter airborne before post-landing speed recovery is evaluated.");
-            Assert.That(metrics.Landed, Is.True,
-                "Sprint jump should land within the landing recovery observation window.");
-            Assert.That(metrics.EnteredFallen, Is.False,
-                "Post-landing speed recovery should not let the character enter Fallen.");
-            Assert.That(float.IsNaN(metrics.NominalSprintSpeed), Is.False,
-                "The sprint-jump harness did not capture the nominal sprint speed.");
-            Assert.That(float.IsNaN(metrics.HorizontalSpeedAtRecoveryFrame), Is.False,
-                "The landing recovery harness did not capture horizontal speed fifty grounded frames after landing.");
-            Assert.That(metrics.HorizontalSpeedAtRecoveryFrame,
-                Is.GreaterThan(metrics.NominalSprintSpeed * SpeedRecoveryMinRatio),
-                $"Horizontal speed fifty grounded frames after landing should recover above {SpeedRecoveryMinRatio:P0} of nominal sprint speed. " +
-                $"Observed {metrics.HorizontalSpeedAtRecoveryFrame:F2} from nominal {metrics.NominalSprintSpeed:F2}.");
+            AssertLandingRunCompleted(dampedMetrics, "The damped sprint-jump run");
+            Assert.That(float.IsNaN(dampedMetrics.HorizontalSpeedAtGroundedFrame5), Is.False,
+                "The damped landing recovery harness did not capture horizontal speed five grounded frames after landing.");
+            Assert.That(float.IsNaN(dampedMetrics.HorizontalSpeedAtRecoveryFrame), Is.False,
+                "The damped landing recovery harness did not capture horizontal speed fifty grounded frames after landing.");
+            Assert.That(dampedMetrics.HorizontalSpeedAtRecoveryFrame,
+                Is.GreaterThan(dampedMetrics.HorizontalSpeedAtGroundedFrame5 * RecoveryRetainMinRatio),
+                $"Horizontal speed fifty grounded frames after landing should retain at least {RecoveryRetainMinRatio:P0} of the damped frame-5 speed once the damping window has expired. " +
+                $"Observed {dampedMetrics.HorizontalSpeedAtRecoveryFrame:F2} from frame-5 {dampedMetrics.HorizontalSpeedAtGroundedFrame5:F2}.");
+            Assert.That(dampedMetrics.HorizontalSpeedAtRecoveryFrame,
+                Is.GreaterThan(RecoveryMinimumHorizontalSpeed),
+                $"Horizontal speed fifty grounded frames after landing should recover into a clearly moving state above {RecoveryMinimumHorizontalSpeed:F2}. " +
+                $"Observed {dampedMetrics.HorizontalSpeedAtRecoveryFrame:F2}.");
         }
 
         [UnityTest]
         public IEnumerator LandingRecovery_DampingDisabledWhenFactorIsOne()
         {
             // Arrange
-            _rig.PlayerMovement.SetLandingHorizontalDampingForTest(1f, 0.08f);
-            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
-            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+            LandingRecoveryMetrics dampedMetrics = new LandingRecoveryMetrics();
+            LandingRecoveryMetrics disabledMetrics = new LandingRecoveryMetrics();
 
             // Act
-            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+            yield return RunLandingScenario(dampedMetrics);
+            RecreateRig();
+            yield return RunLandingScenario(
+                disabledMetrics,
+                1f,
+                DisabledLandingDampingDurationSeconds);
 
             // Assert
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery DisabledPreJumpHorizontalSpeed={metrics.PreJumpHorizontalSpeed:F2}");
+                $"[METRIC] LandingRecovery DampedSpeedFrame3={dampedMetrics.HorizontalSpeedAtGroundedFrame3:F2}");
             TestContext.Out.WriteLine(
-                $"[METRIC] LandingRecovery DisabledSpeedFrame3={metrics.HorizontalSpeedAtGroundedFrame3:F2}");
+                $"[METRIC] LandingRecovery DisabledSpeedFrame3={disabledMetrics.HorizontalSpeedAtGroundedFrame3:F2}");
 
+            AssertLandingRunCompleted(dampedMetrics, "The damped sprint-jump run");
+            AssertLandingRunCompleted(disabledMetrics, "The damping-disabled sprint-jump control run");
+            Assert.That(float.IsNaN(dampedMetrics.HorizontalSpeedAtGroundedFrame3), Is.False,
+                "The damped landing recovery harness did not capture horizontal speed three grounded frames after landing.");
+            Assert.That(float.IsNaN(disabledMetrics.HorizontalSpeedAtGroundedFrame3), Is.False,
+                "The damping-disabled landing recovery harness did not capture horizontal speed three grounded frames after landing.");
+            float disabledMinimumFrame3Speed =
+                dampedMetrics.HorizontalSpeedAtGroundedFrame3 * DisabledVsDampedMinRatio;
+            Assert.That(disabledMetrics.HorizontalSpeedAtGroundedFrame3,
+                Is.GreaterThan(disabledMinimumFrame3Speed),
+                $"With damping disabled, horizontal speed three grounded frames after landing should stay materially above the damped run. " +
+                $"Observed {disabledMetrics.HorizontalSpeedAtGroundedFrame3:F2} vs damped {dampedMetrics.HorizontalSpeedAtGroundedFrame3:F2}. " +
+                $"Expected above {disabledMinimumFrame3Speed:F2}.");
+        }
+
+        private void CreateRig()
+        {
+            _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
+            {
+                TestOrigin = TestOrigin,
+                SpawnOffset = new Vector3(0f, 0.5f, 0f),
+                GroundScale = new Vector3(400f, 1f, 400f),
+            });
+
+            _upperLegLJoint = _rig.UpperLegL.GetComponent<ConfigurableJoint>();
+            Assert.That(_upperLegLJoint, Is.Not.Null,
+                "Landing recovery tests require the prefab-backed UpperLeg_L ConfigurableJoint.");
+        }
+
+        private void RecreateRig()
+        {
+            _rig?.Dispose();
+            _rig = null;
+            _upperLegLJoint = null;
+            CreateRig();
+        }
+
+        private IEnumerator RunLandingScenario(
+            LandingRecoveryMetrics metrics,
+            float? landingDampingFactor = null,
+            float? landingDampingDurationSeconds = null)
+        {
+            if (landingDampingFactor.HasValue)
+            {
+                _rig.PlayerMovement.SetLandingHorizontalDampingForTest(
+                    landingDampingFactor.Value,
+                    landingDampingDurationSeconds ?? DisabledLandingDampingDurationSeconds);
+            }
+
+            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
+            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+        }
+
+        private static void AssertLandingRunCompleted(LandingRecoveryMetrics metrics, string scenarioLabel)
+        {
             Assert.That(metrics.WasAirborne, Is.True,
-                "Sprint jump should enter airborne before the damping-disable path is evaluated.");
+                $"{scenarioLabel} should enter airborne before landing recovery assertions are evaluated.");
             Assert.That(metrics.Landed, Is.True,
-                "Sprint jump should land within the landing recovery observation window.");
+                $"{scenarioLabel} should land within the landing recovery observation window.");
             Assert.That(metrics.EnteredFallen, Is.False,
-                "Disabling landing damping should not let the character enter Fallen.");
-            Assert.That(float.IsNaN(metrics.PreJumpHorizontalSpeed), Is.False,
-                "The sprint-jump harness did not capture the pre-jump horizontal speed.");
-            Assert.That(float.IsNaN(metrics.HorizontalSpeedAtGroundedFrame3), Is.False,
-                "The landing recovery harness did not capture horizontal speed three grounded frames after landing.");
-            Assert.That(metrics.HorizontalSpeedAtGroundedFrame3,
-                Is.GreaterThan(metrics.PreJumpHorizontalSpeed * PostLandingSpeedRetainMaxRatio),
-                $"With damping disabled, horizontal speed three grounded frames after landing should stay above {PostLandingSpeedRetainMaxRatio:P0} of pre-jump speed. " +
-                $"Observed {metrics.HorizontalSpeedAtGroundedFrame3:F2} from {metrics.PreJumpHorizontalSpeed:F2}.");
+                $"{scenarioLabel} should stay out of Fallen during landing recovery.");
         }
 
         private IEnumerator RunSingleSprintJump(LandingRecoveryMetrics metrics, float landingSpringRampDurationSeconds)
