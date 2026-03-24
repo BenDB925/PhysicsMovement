@@ -62,16 +62,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             yield return PrepareBaseline();
 
-            // Disable per-stride noise so we measure the pure asymmetry multiplier in isolation.
+            // Suppress per-stride noise draws so we measure the pure asymmetry multiplier.
             // Noise is ±8° at walk which overwhelms a 4% signal over 12 samples.
             _legAnimator.SetOrganicVariationSeedForTest(42);
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            SetPrivateField(_legAnimator, "_disableStepAngleNoiseForTest", true);
             SetPrivateField(_legAnimator, "_leftStrideAsymmetry", 1.04f);
             SetPrivateField(_legAnimator, "_rightStrideAsymmetry", 1.0f);
-            SetPrivateField(_legAnimator, "_leftStepAngleNoise", 0f);
-            SetPrivateField(_legAnimator, "_rightStepAngleNoise", 0f);
-            SetPrivateField(_legAnimator, "_leftLateralNoise", 0f);
-            SetPrivateField(_legAnimator, "_rightLateralNoise", 0f);
 
             (List<float> leftAngles, List<float> rightAngles) samples = default;
             yield return CollectPerLegStepAngles(0.5f, samplesOut => samples = samplesOut);

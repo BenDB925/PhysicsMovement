@@ -39,6 +39,9 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
         private bool _disableOrganicVariation = false;
 
+        // Test-only seam: suppress per-stride noise draws without suppressing asymmetry.
+        // Allows tests to measure the pure asymmetry multiplier in isolation.
+        private bool _disableStepAngleNoiseForTest = false;
         [SerializeField, Tooltip("Stride length multiplier for the left leg. 1.0 = symmetric. Values slightly above 1.0 give a subtle natural asymmetry (e.g. 1.04).")]
         private float _leftStrideAsymmetry = 1.0f;
 
@@ -722,7 +725,7 @@ namespace PhysicsDrivenMovement.Character
             // - IsGrounded gating caused the frozen noise value (set on last grounded frame)
             //   to persist into jump wind-up, where a large offset pushed step angle near
             //   the 90 deg ceiling and contributed to sprint faceplants.
-            return !_disableOrganicVariation;
+            return !_disableOrganicVariation && !_disableStepAngleNoiseForTest;
         }
 
         private float GetEffectiveUpperLegLiftBoost()
@@ -1068,7 +1071,10 @@ namespace PhysicsDrivenMovement.Character
                 {
                     float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
-                    _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+                    if (!_disableStepAngleNoiseForTest)
+                        _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+                    else
+                        _organicRng.NextDouble(); // keep RNG advancing for determinism
 
                     // Lateral draw uses its own stream so it never shifts the step-angle sequence.
                     float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
@@ -1112,7 +1118,10 @@ namespace PhysicsDrivenMovement.Character
                 {
                     float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
-                    _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
+                    if (!_disableStepAngleNoiseForTest)
+                        _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
+                    else
+                        _organicRngRight.NextDouble(); // keep RNG advancing for determinism
 
                     // Lateral draw uses its own stream so it never shifts the step-angle sequence.
                     float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
