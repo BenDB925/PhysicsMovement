@@ -692,22 +692,20 @@ namespace PhysicsDrivenMovement.Character
         {
             float effectiveStepAngle = Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
 
-            // Apply natural stride asymmetry first, then add per-stride noise around that baseline.
-            // Asymmetry is a pure multiplier (e.g. 1.04 = 4% longer left stride).
-            // Suppressed during any jump phase (wind-up through landing grace) and when
-            // organic variation is disabled, so sprint-jump stability tests are unaffected.
-            // Asymmetry is suppressed at sprint and during any jump phase -- it is a walk-only
-            // organic feature. Sprint and jump must be clean and symmetric.
-            float asymmetry = 1.0f;
+            // Asymmetry is a walk-only feature: suppressed at sprint and during any jump phase.
+            // Sprint and jump must remain clean and symmetric (stability tests require it).
             bool isJumping = _isJumpWindUp || _isJumpLaunch ||
                              (_playerMovement != null && _playerMovement.IsRecentJumpAirborne);
-            if (!_disableOrganicVariation && !isJumping && sprintNormalized < 0.1f)
+            if (!_disableOrganicVariation && !isJumping && sprintNormalized < 0.5f)
             {
-                asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
+                float asymmetryBlend = 1f - Mathf.Clamp01(sprintNormalized / 0.5f);
+                float asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
+                // Lerp smoothly to 1.0 as sprint rises, so there's no step discontinuity.
+                float blendedAsymmetry = Mathf.Lerp(1f, asymmetry, asymmetryBlend);
+                effectiveStepAngle *= blendedAsymmetry;
             }
-            effectiveStepAngle *= asymmetry;
 
-            // Option A: add a per-leg parameter here so every caller reuses the same bounded noise path.
+            // Per-stride noise on top of asymmetry baseline.
             if (ShouldApplyOrganicStepAngleVariation())
             {
                 effectiveStepAngle += isLeftLeg ? _leftStepAngleNoise : _rightStepAngleNoise;
@@ -2021,4 +2019,5 @@ namespace PhysicsDrivenMovement.Character
         }
     }
 }
+
 
