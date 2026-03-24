@@ -1,8 +1,10 @@
 # Plan 06 — Landing Preparation & Post-Landing Recovery
 
-**Status:** Planning
+**Status:** In Progress
 **Branch prefix:** `slice/06-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\landing-prep\prompts\`
+
+**Latest progress:** Slice 1 is complete on `slice/06-1-spring-ramp`. Gradual landing spring restoration now ramps back to full stiffness over a prefab-tuned 0.06s duration with a 0.5 curve, and the focused PlayMode slice (`LandingRecoveryTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests`) finished 29/29 green on 2026-03-24.
 
 ---
 
@@ -87,6 +89,12 @@ PD at 5x boost aggressively corrects… toward a forward-leaning target
 
 ### Slice 1 — Gradual Spring Restoration (Primary Fix)
 **Files:** `LegAnimator.cs`, `LegJointDriver.cs` (if needed)
+
+**Status:** Complete (2026-03-24)
+
+**Implemented:** `LegAnimator` now starts a landing spring ramp instead of snapping directly to full stiffness, restarts the ramp from real touchdown contact even while `CharacterState` is still in airborne grace, and cancels any active ramp when jump wind-up / launch re-enters the airborne path. `LegJointDriver` exposes the current spring multiplier for test observation. Prefab overrides currently use `_landingSpringRampDuration = 0.06` and `_landingSpringRampCurve = 0.5`.
+
+**Verification:** Added `LandingRecoveryTests` and updated `AirborneSpringTests` to pin legacy instant-restore assertions to the explicit `duration = 0` compatibility path. Focused PlayMode verification on `LandingRecoveryTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests` finished 29/29 green.
 
 **What:** Replace the instant 0.15x → 1.0x spring snap with a time-based ramp over a tunable duration.
 
