@@ -220,6 +220,12 @@ namespace PhysicsDrivenMovement.Character
                  "0.15 = legs go loose/dangly mid-air; 1.0 = no change. Restored to 1.0 on landing.")]
         private float _airborneSpringMultiplier = 0.15f;
 
+        [SerializeField, Tooltip("Seconds to ramp leg spring from airborne stiffness to full after landing. 0 = instant (legacy behaviour).")]
+        private float _landingSpringRampDuration = 0.12f;
+
+        [SerializeField, Tooltip("Exponent for the spring ramp curve. 0.5 = square-root ease (fast start), 1.0 = linear, 2.0 = slow start. 0.5 is recommended.")]
+        private float _landingSpringRampCurve = 0.5f;
+
         // ── Angular Velocity Gait Gate (Phase 3T — GAP-2 fix) ──────────────
 
         [SerializeField, Range(0f, 20f)]
@@ -374,6 +380,12 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Cached total duration (hold + blend-out) for phase computation.</summary>
         private float _landingAbsorbTotalDuration;
 
+        /// <summary>Counts down the remaining landing spring ramp duration after touchdown.</summary>
+        private float _landingSpringRampTimer;
+
+        /// <summary>Captures the airborne spring multiplier used as the landing ramp start value.</summary>
+        private float _landingSpringStartMultiplier;
+
         // ── Angular Velocity Gait Gate — Hysteresis (Phase 3T — GAP-2 fix) ─
 
         /// <summary>
@@ -477,6 +489,7 @@ namespace PhysicsDrivenMovement.Character
         internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
 
         internal float KneeAngleDegrees => GetEffectiveKneeAngle();
+        internal float CurrentSpringMultiplier => _jointDriver != null ? _jointDriver.GetCurrentSpringMultiplier() : 1f;
         internal Vector3 LeftFootWorldPosition => _footL != null ? _footL.position : Vector3.zero;
         internal Vector3 RightFootWorldPosition => _footR != null ? _footR.position : Vector3.zero;
         internal int MicroStepCount => _microStepCount;
@@ -504,6 +517,11 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public void SetJumpWindUp(bool active, float kneeBendBoostDeg)
         {
+            if (active)
+            {
+                CancelLandingSpringRamp(restoreFullSpring: true);
+            }
+
             _isJumpWindUp = active;
             _jumpWindUpKneeBendBoost = active ? kneeBendBoostDeg : 0f;
         }
@@ -515,7 +533,22 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public void SetJumpLaunch(bool active)
         {
+            if (active)
+            {
+                CancelLandingSpringRamp(restoreFullSpring: true);
+            }
+
             _isJumpLaunch = active;
+        }
+
+        /// <summary>
+        /// Overrides the landing spring ramp duration for PlayMode tests that need
+        /// deterministic legacy-vs-ramped landing coverage.
+        /// </summary>
+        /// <param name="duration">Ramp duration in seconds. Zero forces the legacy instant restore path.</param>
+        public void SetLandingSpringRampDurationForTest(float duration)
+        {
+            _landingSpringRampDuration = duration;
         }
 
         /// <summary>Absolute path to the debug gait log file.</summary>
@@ -666,6 +699,8 @@ namespace PhysicsDrivenMovement.Character
         {
             _jointDriver.ResetFrameState();
             _isGaitBiasedForward = false;
+            UpdateLandingSpringRampContactState();
+            TickLandingSpringRamp();
 
             if (_playerMovement == null || _characterState == null)
             {
@@ -1668,6 +1703,8 @@ namespace PhysicsDrivenMovement.Character
             _rightLateralNoise = 0f;
             _microStepCount = 0;
             _lastMicroStepTime = float.NegativeInfinity;
+            _landingSpringRampTimer = 0f;
+            _landingSpringStartMultiplier = _airborneSpringMultiplier;
             ResetIdleOrganicState();
             _confidenceEvaluator.Reset();
             ResetLegStateMachinesToIdle();
@@ -2327,6 +2364,82 @@ namespace PhysicsDrivenMovement.Character
             }
         }
 
+        private void TickLandingSpringRamp()
+        {
+            if (_landingSpringRampTimer <= 0f || _jointDriver == null)
+            {
+                return;
+            }
+
+            _landingSpringRampTimer -= Time.fixedDeltaTime;
+
+            float normalizedDuration = Mathf.Max(0.0001f, _landingSpringRampDuration);
+            float t = 1f - Mathf.Clamp01(_landingSpringRampTimer / normalizedDuration);
+            float curvedT = Mathf.Pow(t, Mathf.Max(0.01f, _landingSpringRampCurve));
+            float currentMultiplier = Mathf.Lerp(_landingSpringStartMultiplier, 1f, curvedT);
+            _jointDriver.SetSpringMultiplier(currentMultiplier);
+
+            if (_landingSpringRampTimer <= 0f)
+            {
+                _landingSpringRampTimer = 0f;
+                _jointDriver.SetSpringMultiplier(1f);
+            }
+        }
+
+        private void UpdateLandingSpringRampContactState()
+        {
+            if (!_isAirborne || _jointDriver == null || _balance == null)
+            {
+                return;
+            }
+
+            if (_balance.IsGrounded)
+            {
+                if (_landingSpringRampTimer <= 0f)
+                {
+                    BeginLandingSpringRamp();
+                }
+
+                return;
+            }
+
+            if (_landingSpringRampTimer > 0f)
+            {
+                CancelLandingSpringRamp(restoreFullSpring: false);
+                _jointDriver.SetSpringMultiplier(_airborneSpringMultiplier);
+            }
+        }
+
+        private void BeginLandingSpringRamp()
+        {
+            if (_jointDriver == null)
+            {
+                return;
+            }
+
+            _landingSpringStartMultiplier = _jointDriver.GetCurrentSpringMultiplier();
+
+            if (_landingSpringRampDuration > 0.0001f)
+            {
+                _landingSpringRampTimer = _landingSpringRampDuration;
+                return;
+            }
+
+            _landingSpringRampTimer = 0f;
+            _jointDriver.SetSpringMultiplier(1f);
+        }
+
+        private void CancelLandingSpringRamp(bool restoreFullSpring)
+        {
+            _landingSpringRampTimer = 0f;
+            _landingSpringStartMultiplier = _airborneSpringMultiplier;
+
+            if (restoreFullSpring && _jointDriver != null)
+            {
+                _jointDriver.SetSpringMultiplier(1f);
+            }
+        }
+
         /// <summary>
         /// Reacts to <see cref="CharacterState.OnStateChanged"/> events.
         /// Entering <see cref="CharacterStateType.Airborne"/>: reduces all leg joint springs
@@ -2342,6 +2455,7 @@ namespace PhysicsDrivenMovement.Character
             if (newState == CharacterStateType.Airborne)
             {
                 // Entering airborne: loosen springs so legs dangle naturally.
+                CancelLandingSpringRamp(restoreFullSpring: false);
                 _isAirborne = true;
                 _isJumpWindUp = false;
                 _jumpWindUpKneeBendBoost = 0f;
@@ -2351,9 +2465,21 @@ namespace PhysicsDrivenMovement.Character
             else if (previousState == CharacterStateType.Airborne)
             {
                 // Exiting airborne (any landing — Standing, Moving, Fallen, GettingUp):
-                // restore full spring stiffness.
+                // restore full spring stiffness via a landing ramp when configured.
                 _isAirborne = false;
-                _jointDriver.SetSpringMultiplier(1f);
+                if (_landingSpringRampTimer > 0f)
+                {
+                    // Ground contact already started the landing ramp while the jump-airborne
+                    // grace window was still holding CharacterState in Airborne.
+                }
+                else if (_jointDriver != null && _jointDriver.GetCurrentSpringMultiplier() < 0.999f)
+                {
+                    BeginLandingSpringRamp();
+                }
+                else
+                {
+                    _jointDriver.SetSpringMultiplier(1f);
+                }
 
                 // C8.5d: Start landing absorption knee-bend boost on clean landings.
                 if (newState == CharacterStateType.Standing || newState == CharacterStateType.Moving)
@@ -2374,6 +2500,7 @@ namespace PhysicsDrivenMovement.Character
                 _jumpWindUpKneeBendBoost = 0f;
                 _isJumpLaunch = false;
                 _landingAbsorbTimer = 0f;
+                CancelLandingSpringRamp(restoreFullSpring: false);
             }
         }
     }

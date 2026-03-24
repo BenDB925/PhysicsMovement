@@ -34,6 +34,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     {
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private static readonly Vector3 TestOrigin = new Vector3(1200f, 0f, 1200f);
+        private static readonly MethodInfo SetLandingSpringRampDurationMethod = typeof(LegAnimator).GetMethod(
+            "SetLandingSpringRampDurationForTest",
+            BindingFlags.Instance | BindingFlags.Public);
 
         // ── Test Rig ────────────────────────────────────────────────────────
 
@@ -200,6 +203,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             // ── Arrange ──────────────────────────────────────────────────────
             yield return null;
+            SetLandingSpringRampDurationForCompatibility(0f);
 
             // Capture baseline springs for all four joints.
             float baselineUL = _upperLegLJoint.slerpDrive.positionSpring;
@@ -507,6 +511,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             // Wait for Start() to run so CaptureBaselineDrives has executed.
             yield return null;
             yield return new WaitForFixedUpdate();
+            SetLandingSpringRampDurationForCompatibility(0f);
 
             // Capture baseline spring value.
             float baseline = _upperLegLJoint.slerpDrive.positionSpring;
@@ -544,6 +549,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                     "Likely cause: SetLegSpringMultiplier overwrote the baseline instead of " +
                     "preserving CaptureBaselineDrives values.");
             }
+        }
+
+        private void SetLandingSpringRampDurationForCompatibility(float duration)
+        {
+            if (SetLandingSpringRampDurationMethod != null)
+            {
+                SetLandingSpringRampDurationMethod.Invoke(_legAnimator, new object[] { duration });
+                return;
+            }
+
+            SetPrivateField(_legAnimator, "_landingSpringRampDuration", duration);
         }
     }
 }

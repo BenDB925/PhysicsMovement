@@ -1,1 +1,1 @@
-{"slice":"05-4b","status":"pass","branch":"slice/05-4b-idle-bob","notes":"Centered idle bob plus micro-step landed with bob-specific BalanceController support, and the focused PlayMode slice finished 30/30 green."}
+{"slice":"06-1","status":"pass","branch":"slice/06-1-spring-ramp","notes":"Gradual landing spring restoration shipped with new LandingRecovery coverage, and the focused PlayMode slice finished 29/29 green."}

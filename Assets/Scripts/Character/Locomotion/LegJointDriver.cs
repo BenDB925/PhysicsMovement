@@ -24,6 +24,7 @@ namespace PhysicsDrivenMovement.Character
         private JointDrive _baselineUpperLegRDrive;
         private JointDrive _baselineLowerLegLDrive;
         private JointDrive _baselineLowerLegRDrive;
+        private float _currentSpringMultiplier = 1f;
 
         private Vector3 _worldSwingAxis;
         private Vector3 _upperLegLTargetEuler;
@@ -55,6 +56,7 @@ namespace PhysicsDrivenMovement.Character
             if (_upperLegR != null) { _baselineUpperLegRDrive = _upperLegR.slerpDrive; }
             if (_lowerLegL != null) { _baselineLowerLegLDrive = _lowerLegL.slerpDrive; }
             if (_lowerLegR != null) { _baselineLowerLegRDrive = _lowerLegR.slerpDrive; }
+            _currentSpringMultiplier = 1f;
         }
 
         internal void ResetFrameState()
@@ -92,12 +94,19 @@ namespace PhysicsDrivenMovement.Character
             if (_lowerLegR != null) { _lowerLegR.targetRotation = Quaternion.identity; }
         }
 
+        internal float GetCurrentSpringMultiplier()
+        {
+            return _currentSpringMultiplier;
+        }
+
         /// <summary>
         /// Multiplies the baseline spring by <paramref name="multiplier"/> on all four leg joints.
         /// 0 = fully limp; 1 = full stiffness. Damper stays at baseline.
         /// </summary>
         internal void SetSpringMultiplier(float multiplier)
         {
+            _currentSpringMultiplier = multiplier;
+
             if (_baselineUpperLegLDrive.positionSpring <= 0f)
             {
                 return;
