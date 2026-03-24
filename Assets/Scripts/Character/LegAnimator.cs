@@ -446,7 +446,7 @@ namespace PhysicsDrivenMovement.Character
 
         private const float IdleSwayInputThreshold = 0.05f;
         private const float IdleSwayPlanarSpeedThreshold = 0.05f;
-        private const float IdleSwayPlanarSpeedLatchThreshold = 0.25f;
+        private const float IdleSwayLateralSpeedLatchThreshold = 0.12f;
         private const float IdleSwayForwardSpeedThreshold = 0.05f;
         private const float IdleSwayVerticalSpeedThreshold = 0.1f;
         private const float IdleSwayResidualLateralVelocityThreshold = 0.001f;
@@ -776,6 +776,16 @@ namespace PhysicsDrivenMovement.Character
             bool hasMoveIntent = _commandDesiredInput.MoveMagnitude >= IdleSwayInputThreshold;
             bool idleMicroStepInProgress = HasIdleMicroStepMotionRequest();
 
+            Vector3 lateralAxis = Vector3.ProjectOnPlane(transform.right, Vector3.up);
+            if (lateralAxis.sqrMagnitude < 0.0001f)
+            {
+                lateralAxis = Vector3.right;
+            }
+            else
+            {
+                lateralAxis.Normalize();
+            }
+
             Vector3 forwardAxis = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
             if (forwardAxis.sqrMagnitude < 0.0001f)
             {
@@ -787,6 +797,7 @@ namespace PhysicsDrivenMovement.Character
             }
 
             float forwardSpeed = Mathf.Abs(Vector3.Dot(_hipsRigidbody.linearVelocity, forwardAxis));
+            float lateralVelocity = Mathf.Abs(Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis));
             bool isStableStandingIdle = _characterState.CurrentState == CharacterStateType.Standing &&
                                         !hasMoveIntent &&
                                         _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedThreshold &&
@@ -794,24 +805,12 @@ namespace PhysicsDrivenMovement.Character
             bool keepIdleLatched = _swayAmplitudeScale > 0f &&
                                    _characterState.CurrentState == CharacterStateType.Standing &&
                                    !hasMoveIntent &&
-                                   _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedLatchThreshold &&
+                                   lateralVelocity < IdleSwayLateralSpeedLatchThreshold &&
                                    forwardSpeed < IdleSwayForwardSpeedThreshold &&
                                    Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
             bool isIdle = (isStableStandingIdle || keepIdleLatched) &&
                           _smoothedInputMag < IdleSwayInputThreshold &&
                           !idleMicroStepInProgress;
-
-            Vector3 lateralAxis = Vector3.ProjectOnPlane(transform.right, Vector3.up);
-            if (lateralAxis.sqrMagnitude < 0.0001f)
-            {
-                lateralAxis = Vector3.right;
-            }
-            else
-            {
-                lateralAxis.Normalize();
-            }
-
-            float lateralVelocity = Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis);
 
             if (isIdle)
             {
@@ -848,7 +847,7 @@ namespace PhysicsDrivenMovement.Character
                 _balance.SetIdleBobOffset(0f);
             }
 
-            if (_swayAmplitudeScale <= 0f && Mathf.Abs(lateralVelocity) < IdleSwayResidualLateralVelocityThreshold)
+            if (_swayAmplitudeScale <= 0f && lateralVelocity < IdleSwayResidualLateralVelocityThreshold)
             {
                 _swayPhase = 0f;
                 _bobPhase = 0f;
@@ -858,13 +857,14 @@ namespace PhysicsDrivenMovement.Character
             float fadeOutDuration = Mathf.Max(0.0001f, _idleSwayFadeOutDuration);
             _swayAmplitudeScale = Mathf.MoveTowards(_swayAmplitudeScale, 0f, deltaTime / fadeOutDuration);
 
-            if (Mathf.Abs(lateralVelocity) >= IdleSwayResidualLateralVelocityThreshold)
+            if (lateralVelocity >= IdleSwayResidualLateralVelocityThreshold)
             {
-                _hipsRigidbody.AddForce(lateralAxis * -lateralVelocity, ForceMode.VelocityChange);
+                float signedLateralVelocity = Vector3.Dot(_hipsRigidbody.linearVelocity, lateralAxis);
+                _hipsRigidbody.AddForce(lateralAxis * -signedLateralVelocity, ForceMode.VelocityChange);
                 lateralVelocity = 0f;
             }
 
-            if (_swayAmplitudeScale <= 0f && Mathf.Abs(lateralVelocity) < IdleSwayResidualLateralVelocityThreshold)
+            if (_swayAmplitudeScale <= 0f && lateralVelocity < IdleSwayResidualLateralVelocityThreshold)
             {
                 _swayPhase = 0f;
                 _bobPhase = 0f;
