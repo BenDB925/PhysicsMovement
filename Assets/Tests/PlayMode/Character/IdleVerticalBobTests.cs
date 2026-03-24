@@ -125,7 +125,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return WaitForPhysicsFrames(MicroStepObservationFrames, assertNotFallen: true);
 
             // Assert
-            Assert.That(_legAnimator.MicroStepCount, Is.GreaterThanOrEqualTo(1), "Idle sway drift should eventually request at least one corrective micro-step.");
+            Assert.That(GetPropertyValue<int>(_legAnimator, "MicroStepCount"), Is.GreaterThanOrEqualTo(1), "Idle sway drift should eventually request at least one corrective micro-step.");
             Assert.That(_characterState.CurrentState, Is.Not.EqualTo(CharacterStateType.Fallen));
         }
 
@@ -237,6 +237,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             FieldInfo field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, $"Could not find private field '{fieldName}' on {instance.GetType().Name}.");
             field.SetValue(instance, value);
+        }
+
+        private static T GetPropertyValue<T>(object instance, string propertyName)
+        {
+            PropertyInfo property = instance.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(property, Is.Not.Null, $"Could not find property '{propertyName}' on {instance.GetType().Name}.");
+            return (T)property.GetValue(instance);
         }
 
         private static float StandardDeviation(IReadOnlyList<float> samples)
