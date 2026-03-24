@@ -1,0 +1,152 @@
+You are implementing Slice 4A of Plan 05 (Organic Movement & Gait Variation) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md (the plan)
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1–3 are complete and merged to master. Current HEAD: 3e5f072.
+
+What exists:
+- `LegAnimator.cs` has `_noiseSeed`, `_disableOrganicVariation`, `_disableStepAngleNoiseForTest`, `_organicRng`, `_organicRngRight`, `_organicRngLateralLeft`, `_organicRngLateralRight`, `SetOrganicVariationSeedForTest(int seed)`
+- `_leftStrideAsymmetry` / `_rightStrideAsymmetry` serialized fields (prefab: 1.04 / 1.0)
+- Per-stride step angle noise (±8° walk, ±4° sprint), lateral placement noise (±2.5cm walk, ±1cm sprint)
+- 31/31 PlayMode tests green
+
+Key values to know:
+- `BalanceController._surrenderAngleThreshold` = 80° (prefab may differ — read prefab value before tuning)
+- `LegAnimator.SmoothedInputMag` = public property, 0 when idle, 1 at full input
+- Physics: 100 Hz FixedUpdate, 12 solver iterations
+
+---
+
+## YOUR TASK: Slice 4A — Idle lateral sway
+
+### What to build
+
+When the character has been idle (SmoothedInputMag < 0.05) for > 0.5s (50 physics frames), apply a gentle lateral perturbation force to the hips Rigidbody at ~0.8Hz using a sine wave. Let the balance controller react naturally — micro-steps and weight shifts emerge from its normal recovery, NOT from scripted animation.
+
+**Physics-first approach:**
+- Apply the force via `Rigidbody.AddForce` on the hips Rigidbody (lateral axis, world space)
+- Amplitude: small enough to stay inside the balance controller's upright correction deadzone
+- Start value: force producing ~0.8cm lateral COM displacement peak-to-peak
+- Frequency: ~0.8Hz sine wave (period = 1.25s = 125 physics frames)
+- Fade in: lerp perturbation from 0 over the 0.5s entry delay
+- Fade out: lerp amplitude to 0 over 0.3s (30 frames) when SmoothedInputMag rises above 0.05
+
+**Implementation location:** `LegAnimator.cs` — add idle sway logic inside `FixedUpdate` (or a dedicated method called from FixedUpdate). LegAnimator already has a reference to the hips Rigidbody.
+
+**Gate:** Bypassed entirely when `_disableOrganicVariation = true`. No sway when fallen.
+
+**Serialized fields to add (on LegAnimator):**
+- `_idleSwayForce` float — serialized, default 15f (Newtons). This is the tuning knob.
+- `_idleSwayFrequency` float — serialized, default 0.8f (Hz)
+- `_idleSwayEnterDelay` float — serialized, default 0.5f (seconds)
+- `_idleSwayFadeOutDuration` float — serialized, default 0.3f (seconds)
+
+**Private state to add:**
+- `_idleTimer` float — counts up while SmoothedInputMag < 0.05, resets when above
+- `_swayPhase` float — tracks sine phase in radians (accumulate: `_swayPhase += 2π * _idleSwayFrequency * Time.fixedDeltaTime`)
+- `_swayAmplitudeScale` float — current amplitude scale [0,1], lerps in/out
+
+**Hips Rigidbody reference:** LegAnimator already caches `_hipsRb` (or similar). Check the existing field names before adding a new one.
+
+### Tests to write
+
+File: `Assets/Tests/PlayMode/Character/IdleSwayTests.cs`
+
+Test class setup mirrors existing test classes (load real prefab, spawn at Vector3(2000,0,0), wait for settle). Look at `OrganicGaitVariationTests.cs` for the pattern.
+
+**Test 1: `IdleSway_WhenStandingStill_ProducesLateralMovement`**
+- Set `_disableOrganicVariation = false`, zero move input
+- Wait 400 frames (4s at 100Hz)
+- Record hips lateral (X) position every 10 frames for 200 frames
+- Assert: stddev of recorded positions > 0.002f (> 0.2cm variation)
+- Assert: peak-to-peak range < 0.05f (< 5cm — sanity cap)
+- Assert: CharacterState != Fallen throughout
+
+**Test 2: `IdleSway_FadesOutOnMovementInput`**
+- Set `_disableOrganicVariation = false`, zero move input, wait 400 frames to establish sway
+- Record lateral position stddev over 30 frames (baseline: should be > 0.002f)
+- Apply forward move input (0, 1)
+- Wait 50 frames (0.5s)
+- Record lateral position stddev over 30 frames again
+- Assert: post-input stddev < 0.002f (sway faded out)
+- Assert: no fall
+
+**Test 3: `IdleSway_WhenDisableOrganicVariation_NoLateralDrift`**
+- Set `_disableOrganicVariation = true`
+- Zero input, wait 400 frames
+- Record lateral positions over 100 frames
+- Assert: stddev < 0.001f (effectively zero sway)
+
+### Test filter for this slice
+
+Run after implementation:
+`"IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests"`
+
+Target: all tests green (31 existing + 3 new = 34 total).
+
+---
+
+## CONSTRAINTS (non-negotiable)
+
+- NEVER use `UnityEngine.Random` — all RNG uses `System.Random` with `_noiseSeed`
+- `_disableOrganicVariation = true` must reproduce exact pre-plan behaviour (no force applied)
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- All tuned values (force magnitude, frequency) go in prefab overrides, NOT as C# field defaults
+- Default `_idleSwayForce = 15f` is a starting point — adjust if tests require it, but keep it reasonable
+- Do NOT modify `BalanceController.cs`, `PlayerMovement.cs`, or any physics parameters
+- No questions — make best call, document reasoning in comments, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output:
+- Every file you intend to modify
+- What change you will make in each
+- Whether tests will be run (and which filter)
+
+Then proceed immediately — no pause for confirmation needed (plan is pre-approved).
+
+---
+
+## COMMIT PATTERN
+
+Make incremental commits:
+1. `feat(05-4a): add idle sway logic to LegAnimator` — after LegAnimator changes compile
+2. `test(05-4a): add IdleSwayTests` — after test file written
+3. `fix(05-4a): ...` — for any tuning needed to pass tests
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"05-4a","status":"pass","branch":"slice/05-4a-idle-sway","notes":"<one line summary>"}`
+- Commit: `chore: slice 05-4a complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+After committing, send a Telegram message:
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-4a STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
+
+Replace pass/fail, N/N, and summary with actual results.
+
+---
+
+## BRANCH
+
+Create branch `slice/05-4a-idle-sway` from current master HEAD before starting.
