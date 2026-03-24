@@ -39,6 +39,12 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
         private bool _disableOrganicVariation = false;
 
+        [SerializeField, Tooltip("Stride length multiplier for the left leg. 1.0 = symmetric. Values slightly above 1.0 give a subtle natural asymmetry (e.g. 1.04).")]
+        private float _leftStrideAsymmetry = 1.0f;
+
+        [SerializeField, Tooltip("Stride length multiplier for the right leg. 1.0 = symmetric.")]
+        private float _rightStrideAsymmetry = 1.0f;
+
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
                  "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
@@ -685,6 +691,14 @@ namespace PhysicsDrivenMovement.Character
         private float GetEffectiveStepAngle(float sprintNormalized, bool isLeftLeg)
         {
             float effectiveStepAngle = Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
+
+            // Apply natural stride asymmetry first, then add per-stride noise around that baseline.
+            float asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
+            if (_disableOrganicVariation)
+            {
+                asymmetry = 1.0f;
+            }
+            effectiveStepAngle *= asymmetry;
 
             // Option A: add a per-leg parameter here so every caller reuses the same bounded noise path.
             if (ShouldApplyOrganicStepAngleVariation())
