@@ -1048,7 +1048,11 @@ namespace PhysicsDrivenMovement.Character
                     _leftLateralNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * latNoiseMag;
                 }
 
-                if (leftStepTarget.IsValid && !_disableOrganicVariation)
+                // Lateral position shift only on grounded strides -- shifting foot placement
+                // mid-air or on a landing step destabilises the character (63+ deg tilt observed
+                // on second consecutive jump landing). Step angle noise is fine airborne because
+                // it only affects swing shape; landing position shifts are not.
+                if (leftStepTarget.IsValid && !_disableOrganicVariation && observation.IsGrounded)
                 {
                     Vector3 leftForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
                     if (leftForward.sqrMagnitude < 0.0001f)
@@ -1089,7 +1093,7 @@ namespace PhysicsDrivenMovement.Character
                     _rightLateralNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * latNoiseMag;
                 }
 
-                if (rightStepTarget.IsValid && !_disableOrganicVariation)
+                if (rightStepTarget.IsValid && !_disableOrganicVariation && observation.IsGrounded)
                 {
                     Vector3 rightForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
                     if (rightForward.sqrMagnitude < 0.0001f)
