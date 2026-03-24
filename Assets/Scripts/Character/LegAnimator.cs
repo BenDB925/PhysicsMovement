@@ -446,6 +446,8 @@ namespace PhysicsDrivenMovement.Character
 
         private const float IdleSwayInputThreshold = 0.05f;
         private const float IdleSwayPlanarSpeedThreshold = 0.05f;
+        private const float IdleSwayPlanarSpeedLatchThreshold = 0.25f;
+        private const float IdleSwayForwardSpeedThreshold = 0.05f;
         private const float IdleSwayVerticalSpeedThreshold = 0.1f;
         private const float IdleSwayResidualLateralVelocityThreshold = 0.001f;
         private const float IdleMicroStepMinimumBlendWeight = 0.25f;
@@ -772,12 +774,30 @@ namespace PhysicsDrivenMovement.Character
             float swayPhaseAdvance = Mathf.PI * 2f * _idleSwayFrequency * deltaTime;
             float bobPhaseAdvance = Mathf.PI * 2f * _idleBobFrequency * deltaTime;
             bool hasMoveIntent = _commandDesiredInput.MoveMagnitude >= IdleSwayInputThreshold;
+            bool idleMicroStepInProgress = HasIdleMicroStepMotionRequest();
+
+            Vector3 forwardAxis = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (forwardAxis.sqrMagnitude < 0.0001f)
+            {
+                forwardAxis = Vector3.forward;
+            }
+            else
+            {
+                forwardAxis.Normalize();
+            }
+
+            float forwardSpeed = Mathf.Abs(Vector3.Dot(_hipsRigidbody.linearVelocity, forwardAxis));
             bool isStableStandingIdle = _characterState.CurrentState == CharacterStateType.Standing &&
                                         !hasMoveIntent &&
                                         _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedThreshold &&
                                         Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
-            bool idleMicroStepInProgress = HasIdleMicroStepMotionRequest();
-            bool isIdle = isStableStandingIdle &&
+            bool keepIdleLatched = _swayAmplitudeScale > 0f &&
+                                   _characterState.CurrentState == CharacterStateType.Standing &&
+                                   !hasMoveIntent &&
+                                   _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedLatchThreshold &&
+                                   forwardSpeed < IdleSwayForwardSpeedThreshold &&
+                                   Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
+            bool isIdle = (isStableStandingIdle || keepIdleLatched) &&
                           _smoothedInputMag < IdleSwayInputThreshold &&
                           !idleMicroStepInProgress;
 
