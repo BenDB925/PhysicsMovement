@@ -1,1 +1,1 @@
-{"slice": 5, "status": "pass", "notes": "Relaxed sprint gap touchdown detection to latch the first post-airborne far-platform hit; focused JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests gate passed 26/26 without runtime changes."}
+{"slice":"05-2","status":"pass","branch":"slice/05-2-lateral-placement-noise","notes":"Lateral foot placement noise +/-0.15 walk / +/-0.07 sprint. 28/28 green. Key fix: separate RNG streams per noise type."}

@@ -1,0 +1,169 @@
+# Slice 2 -- Per-Stride Lateral Foot Placement Variation
+# Plan 05: Organic Movement & Gait Variation
+# Branch: slice/05-2-lateral-placement-noise
+
+## Handoff context
+Slice 1 (step angle noise) is complete on branch slice/05-1-step-angle-noise, HEAD 9bac284.
+The organic variation foundation is already in place in LegAnimator.cs:
+  - _organicRng (System.Random, left leg)
+  - _organicRngRight (System.Random, right leg)
+  - _noiseSeed (SerializeField, default 42)
+  - _disableOrganicVariation (SerializeField bool)
+  - SetOrganicVariationSeedForTest(int seed) -- public test seam
+Both RNG streams are reset together by SetOrganicVariationSeedForTest.
+
+Start by checking current state:
+  git -C "H:\Work\PhysicsDrivenMovementDemo" log --oneline -5
+  git -C "H:\Work\PhysicsDrivenMovementDemo" branch
+
+Create the new branch from slice/05-1-step-angle-noise (NOT master):
+  git -C "H:\Work\PhysicsDrivenMovementDemo" checkout slice/05-1-step-angle-noise
+  git -C "H:\Work\PhysicsDrivenMovementDemo" checkout -b slice/05-2-lateral-placement-noise
+
+---
+
+## What this slice does
+Adds per-stride lateral foot placement noise. Each time a new step target is computed,
+the foot lands slightly wider or narrower than the default. This is independent of the
+step angle noise from slice 1 -- it affects WHERE the foot plants, not the swing angle.
+
+The existing StepTarget struct already has a WidthBias field (float, clamped -1..1 by its
+constructor). WidthBias is already consumed by StepPlanner and flows through to the final
+landing position. This slice perturbs WidthBias at the LegAnimator level, after the planner
+has done its job, by storing a per-stride lateral noise value and adding it when the step
+target is rebuilt with the modified WidthBias.
+
+---
+
+## Part A -- Add lateral noise fields and generation (FIRST commit)
+
+File: Assets/Scripts/Character/LegAnimator.cs
+
+### Step 1 -- Add noise fields (near the existing _leftStepAngleNoise / _rightStepAngleNoise)
+  private float _leftLateralNoise;
+  private float _rightLateralNoise;
+
+### Step 2 -- Reset in SetOrganicVariationSeedForTest
+  _leftLateralNoise = 0f;
+  _rightLateralNoise = 0f;
+
+### Step 3 -- Generate noise at step trigger
+In the same block where _leftStepAngleNoise is generated (when leftStepTarget.IsValid),
+also generate _leftLateralNoise. Mirror for right. Use the SAME draw as step angle
+(one NextDouble() call per leg per step), but it must be a SEPARATE draw -- do NOT
+reuse the step angle draw. The order must be: angle draw first, then lateral draw.
+Keep this order fixed and document it with a comment so future slices know which
+draw index is which.
+
+  // Draw order per leg per step: [0] step angle noise, [1] lateral noise.
+  // Do not reorder -- tests rely on this sequence.
+  float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
+  _leftLateralNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+
+Design: +/-0.15 at walk speed, +/-0.07 at sprint. Sprint is tighter (same principle as
+step angle). WidthBias is already clamped to [-1, 1] by the StepTarget constructor so
+there is no need to clamp here -- but do NOT pass a value that would push a normal
+WidthBias past +/-0.5 to avoid overriding the planner's turn/catch-step logic.
+Clamp the final value passed as WidthBias to [-0.5, 0.5] as a safety ceiling.
+
+### Step 4 -- Apply noise when rebuilding the StepTarget
+After leftStepTarget is computed (and lateral noise generated), rebuild the target
+with the perturbed WidthBias:
+
+  if (leftStepTarget.IsValid && !_disableOrganicVariation)
+  {
+      float newWidthBias = Mathf.Clamp(leftStepTarget.WidthBias + _leftLateralNoise, -0.5f, 0.5f);
+      leftStepTarget = new StepTarget(
+          leftStepTarget.LandingPosition,
+          leftStepTarget.DesiredTiming,
+          newWidthBias,
+          leftStepTarget.BrakingBias,
+          leftStepTarget.Confidence,
+          leftStepTarget.RequestedClearanceHeight);
+  }
+
+Mirror for right. Place this rebuild AFTER the noise generation block.
+
+Commit message: "feat(05-2): per-stride lateral foot placement noise +/-0.15 walk / +/-0.07 sprint"
+
+---
+
+## Part B -- Tests (SECOND commit)
+
+Create: Assets/Tests/PlayMode/Character/LateralPlacementNoiseTests.cs
+
+### Setup/teardown requirements (MANDATORY -- test isolation)
+Follow the same pattern as OrganicGaitVariationTests.cs:
+- Load PlayerRagdoll_Skinned.prefab via AssetDatabase.LoadAssetAtPath
+- Instantiate and wait for settle frames
+- Save and restore Time.fixedDeltaTime, Physics.defaultSolverIterations,
+  Physics.defaultSolverVelocityIterations in [SetUp]/[TearDown]
+- Set project values in SetUp: Time.fixedDeltaTime = 0.01f, solver iterations = 12,
+  velocity iterations = 4
+
+### What to measure
+You need to observe the lateral position of each foot landing relative to the hips.
+Use the foot Transform positions (_footL, _footR) -- expose a test getter if they are
+private. Measure lateral offset = Vector3.Dot(footPos - hipsPos, lateralAxis) where
+lateralAxis = Vector3.Cross(Vector3.up, forward).normalized.
+
+Expose a minimal test getter if needed:
+  internal Vector3 LeftFootWorldPosition => _footL != null ? _footL.position : Vector3.zero;
+  internal Vector3 RightFootWorldPosition => _footR != null ? _footR.position : Vector3.zero;
+
+### Test 1: LateralNoise_AtWalkSpeed_ShowsVariationWithinBounds
+- SetOrganicVariationSeedForTest(42), _disableOrganicVariation = false
+- Walk forward (magnitude 0.5) for enough frames to collect 10 left-foot landings
+- A landing = left foot transitions from moving to planted (step target becomes valid
+  then foot velocity drops near zero) -- OR simply sample foot X position at each
+  leftStepTarget.IsValid trigger using the same pattern as OrganicGaitVariationTests
+- Assert: stddev of lateral offsets > 0.005f (variation exists)
+- Assert: all lateral offsets within [-0.35f, 0.35f] (BaseStepWidth +/- max noise)
+
+### Test 2: LateralNoise_AtSprintSpeed_TighterThanWalk
+- Same pattern, sprint input, wait for SprintNormalized >= 0.95 before collecting
+- Collect 10 left-foot lateral offsets
+- Assert: stddev of sprint lateral offsets < stddev of walk lateral offsets
+  (sprint variation is tighter by design: 0.07 vs 0.15)
+
+### Test 3: LateralNoise_DisabledByFlag_ProducesConsistentFootPlacement
+- _disableOrganicVariation = true
+- Collect 10 foot landings
+- Assert: stddev < 0.005f (no variation when disabled)
+
+### Test 4: LateralNoise_DoesNotDestabilise_WalkStraight
+- Enable organic variation, walk straight for 500 frames
+- Assert: character does not fall (same pattern as WalkStraight_NoFalls in
+  MovementQualityTests.cs -- check IsFallen on BalanceController)
+
+Commit message: "test(05-2): lateral placement noise variation, bounds, and stability coverage"
+
+---
+
+## Constraints
+- NEVER use UnityEngine.Random -- always _organicRng / _organicRngRight
+- _disableOrganicVariation = true must reproduce output identical to before this slice
+- Final WidthBias passed to StepTarget constructor must be clamped to [-0.5, 0.5]
+- Sprint lateral noise must be tighter than walk (0.07 vs 0.15)
+- Draw order per leg per step: [0] step angle, [1] lateral -- document and preserve
+- Do NOT run the full test suite -- manual only
+  Run only: "LateralPlacementNoiseTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests"
+- Do NOT modify Run-UnityTests.ps1
+- Do NOT ask questions -- make the best call, comment reasoning, move on
+- Minimum 2 commits: A (implementation) then B (tests)
+- Write agent-slice-status.json on finish (pass or fail)
+- Create H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md
+  if it does not exist, then append an Agent Log table entry with today's date, result, and notes
+
+## Test runner command
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "LateralPlacementNoiseTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests"
+
+Results: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+
+## Mandatory final step -- Telegram ping
+After writing agent-slice-status.json, send this regardless of pass or fail:
+
+$body = @{ chat_id = "8630971080"; text = "slice/05-2 STATUS: pass/fail. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+
+Replace pass/fail and notes with actual outcome.

@@ -33,6 +33,12 @@ namespace PhysicsDrivenMovement.Character
              "the visible stride without changing step-target planning. Default 75°.")]
         private float _sprintStepAngle = 75f;
 
+        [SerializeField, Tooltip("Seed for organic variation RNG. Change to alter the character's movement personality.")]
+        private int _noiseSeed = 42;
+
+        [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
+        private bool _disableOrganicVariation = false;
+
         [SerializeField, Range(0.1f, 5f)]
         [Tooltip("Scales actual horizontal speed (m/s) to gait cycles per second. " +
                  "At 2 m/s with scale 1.5 → 3 cycles/sec. " +
@@ -371,6 +377,17 @@ namespace PhysicsDrivenMovement.Character
         private readonly StepPlanner _stepPlanner = new StepPlanner();
         private readonly GaitConfidenceEvaluator _confidenceEvaluator = new GaitConfidenceEvaluator();
         private LegJointDriver _jointDriver;
+        // Two separate RNG instances so left/right draws never interleave and
+        // the sequence is stable regardless of which leg triggers each frame.
+        private System.Random _organicRng;
+        private System.Random _organicRngRight;
+        // Separate lateral streams so lateral draws never shift the step-angle draw sequence.
+        private System.Random _organicRngLateralLeft;
+        private System.Random _organicRngLateralRight;
+        private float _leftStepAngleNoise;
+        private float _rightStepAngleNoise;
+        private float _leftLateralNoise;
+        private float _rightLateralNoise;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -389,10 +406,14 @@ namespace PhysicsDrivenMovement.Character
         public float SmoothedInputMag => _smoothedInputMag;
 
         internal float StepAngleDegrees => GetEffectiveStepAngle();
+        internal float LeftStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: true);
+        internal float RightStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: false);
 
         internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
 
         internal float KneeAngleDegrees => GetEffectiveKneeAngle();
+        internal Vector3 LeftFootWorldPosition => _footL != null ? _footL.position : Vector3.zero;
+        internal Vector3 RightFootWorldPosition => _footR != null ? _footR.position : Vector3.zero;
 
         /// <summary>
         /// True while the stuck-leg recovery pose is being actively applied.
@@ -517,6 +538,12 @@ namespace PhysicsDrivenMovement.Character
             // STEP 6: Seed the per-leg state machines so Chapter 3.2 starts from the same
             //         mirrored cadence shape as the legacy pass-through gait.
             ResetLegStateMachinesForMirroredCadence();
+            _organicRng = new System.Random(_noiseSeed);
+            // Right leg uses a different seed offset so the two streams are independent.
+            _organicRngRight = new System.Random(_noiseSeed + 1000);
+            // Lateral streams use separate offsets so lateral draws never shift step-angle sequences.
+            _organicRngLateralLeft = new System.Random(_noiseSeed + 2000);
+            _organicRngLateralRight = new System.Random(_noiseSeed + 3000);
         }
 
         private void Start()
@@ -632,6 +659,19 @@ namespace PhysicsDrivenMovement.Character
             return _playerMovement != null ? Mathf.Clamp01(_playerMovement.SprintNormalized) : 0f;
         }
 
+        /// <summary>Resets the organic RNG to a known seed. Call from PlayMode tests for deterministic results.</summary>
+        public void SetOrganicVariationSeedForTest(int seed)
+        {
+            _organicRng = new System.Random(seed);
+            _organicRngRight = new System.Random(seed + 1000);
+            _organicRngLateralLeft = new System.Random(seed + 2000);
+            _organicRngLateralRight = new System.Random(seed + 3000);
+            _leftStepAngleNoise = 0f;
+            _rightStepAngleNoise = 0f;
+            _leftLateralNoise = 0f;
+            _rightLateralNoise = 0f;
+        }
+
         private float GetEffectiveStepAngle()
         {
             return GetEffectiveStepAngle(GetCurrentSprintNormalized());
@@ -639,7 +679,30 @@ namespace PhysicsDrivenMovement.Character
 
         private float GetEffectiveStepAngle(float sprintNormalized)
         {
-            return Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
+            return GetEffectiveStepAngle(sprintNormalized, isLeftLeg: true);
+        }
+
+        private float GetEffectiveStepAngle(float sprintNormalized, bool isLeftLeg)
+        {
+            float effectiveStepAngle = Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
+
+            // Option A: add a per-leg parameter here so every caller reuses the same bounded noise path.
+            if (ShouldApplyOrganicStepAngleVariation())
+            {
+                effectiveStepAngle += isLeftLeg ? _leftStepAngleNoise : _rightStepAngleNoise;
+            }
+
+            return Mathf.Clamp(effectiveStepAngle, 30f, 90f);
+        }
+
+        private bool ShouldApplyOrganicStepAngleVariation()
+        {
+            // Only the disable flag gates this. Removing the IsGrounded/IsFallen guards:
+            // - The noise is always clamped to [30,90] so it cannot cause falls on its own.
+            // - IsGrounded gating caused the frozen noise value (set on last grounded frame)
+            //   to persist into jump wind-up, where a large offset pushed step angle near
+            //   the 90 deg ceiling and contributed to sprint faceplants.
+            return !_disableOrganicVariation;
         }
 
         private float GetEffectiveUpperLegLiftBoost()
@@ -899,7 +962,6 @@ namespace PhysicsDrivenMovement.Character
 
             if (isMoving)
             {
-                float effectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 float effectiveUpperLegLiftBoost = GetEffectiveUpperLegLiftBoost(desiredInput.SprintNormalized);
                 float effectiveKneeAngle = GetEffectiveKneeAngle(desiredInput.SprintNormalized);
                 float effectiveCyclesPerSec = GetEffectiveCadenceCyclesPerSecond(
@@ -972,29 +1034,6 @@ namespace PhysicsDrivenMovement.Character
                     phaseAdvance,
                     forceCatchStep && recoveryLeg == LocomotionLeg.Right);
 
-                float leftSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
-                    _leftLegStateMachine.CyclePhase,
-                    _smoothedInputMag,
-                    leftStateFrame.State,
-                    effectiveStepAngle,
-                    effectiveUpperLegLiftBoost);
-                float rightSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
-                    _rightLegStateMachine.CyclePhase,
-                    _smoothedInputMag,
-                    rightStateFrame.State,
-                    effectiveStepAngle,
-                    effectiveUpperLegLiftBoost);
-
-                if (bothFeetBehind)
-                {
-                    float strandedBias = effectiveStepAngle * _smoothedInputMag;
-                    leftSwingDeg += strandedBias;
-                    rightSwingDeg += strandedBias;
-                    _isGaitBiasedForward = true;
-                }
-
-                float kneeBendDeg = effectiveKneeAngle * _smoothedInputMag;
-
                 StepTarget leftStepTarget = _stepPlanner.ComputeSwingTarget(
                     LocomotionLeg.Left,
                     _leftLegStateMachine.CyclePhase,
@@ -1005,6 +1044,40 @@ namespace PhysicsDrivenMovement.Character
                     _hipsRigidbody.position,
                     gaitReferenceDirection,
                     effectiveCyclesPerSec);
+                if (leftStepTarget.IsValid && !_disableOrganicVariation && _organicRng != null)
+                {
+                    float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
+                    float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
+                    _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+
+                    // Lateral draw uses its own stream so it never shifts the step-angle sequence.
+                    float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
+                    _leftLateralNoise = (float)(_organicRngLateralLeft.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                }
+
+                // Lateral position shift only on grounded strides -- shifting foot placement
+                // mid-air or on a landing step destabilises the character (63+ deg tilt observed
+                // on second consecutive jump landing). Step angle noise is fine airborne because
+                // it only affects swing shape; landing position shifts are not.
+                if (leftStepTarget.IsValid && !_disableOrganicVariation && observation.IsGrounded)
+                {
+                    Vector3 leftForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (leftForward.sqrMagnitude < 0.0001f)
+                    {
+                        leftForward = Vector3.forward;
+                    }
+
+                    Vector3 leftLateral = Vector3.Cross(Vector3.up, leftForward.normalized);
+                    Vector3 leftLandingPosition = leftStepTarget.LandingPosition + leftLateral * _leftLateralNoise;
+                    leftStepTarget = new StepTarget(
+                        leftLandingPosition,
+                        leftStepTarget.DesiredTiming,
+                        leftStepTarget.WidthBias,
+                        leftStepTarget.BrakingBias,
+                        leftStepTarget.Confidence,
+                        leftStepTarget.RequestedClearanceHeight);
+                }
+
                 StepTarget rightStepTarget = _stepPlanner.ComputeSwingTarget(
                     LocomotionLeg.Right,
                     _rightLegStateMachine.CyclePhase,
@@ -1015,6 +1088,61 @@ namespace PhysicsDrivenMovement.Character
                     _hipsRigidbody.position,
                     gaitReferenceDirection,
                     effectiveCyclesPerSec);
+                if (rightStepTarget.IsValid && !_disableOrganicVariation && _organicRngRight != null)
+                {
+                    float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
+                    float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
+                    _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
+
+                    // Lateral draw uses its own stream so it never shifts the step-angle sequence.
+                    float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
+                    _rightLateralNoise = (float)(_organicRngLateralRight.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                }
+
+                if (rightStepTarget.IsValid && !_disableOrganicVariation && observation.IsGrounded)
+                {
+                    Vector3 rightForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                    if (rightForward.sqrMagnitude < 0.0001f)
+                    {
+                        rightForward = Vector3.forward;
+                    }
+
+                    Vector3 rightLateral = Vector3.Cross(Vector3.up, rightForward.normalized);
+                    Vector3 rightLandingPosition = rightStepTarget.LandingPosition + rightLateral * _rightLateralNoise;
+                    rightStepTarget = new StepTarget(
+                        rightLandingPosition,
+                        rightStepTarget.DesiredTiming,
+                        rightStepTarget.WidthBias,
+                        rightStepTarget.BrakingBias,
+                        rightStepTarget.Confidence,
+                        rightStepTarget.RequestedClearanceHeight);
+                }
+
+                float leftEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized, isLeftLeg: true);
+                float rightEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized, isLeftLeg: false);
+                float leftSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
+                    _leftLegStateMachine.CyclePhase,
+                    _smoothedInputMag,
+                    leftStateFrame.State,
+                    leftEffectiveStepAngle,
+                    effectiveUpperLegLiftBoost);
+                float rightSwingDeg = LegExecutionProfileResolver.BuildSwingAngleFromPhase(
+                    _rightLegStateMachine.CyclePhase,
+                    _smoothedInputMag,
+                    rightStateFrame.State,
+                    rightEffectiveStepAngle,
+                    effectiveUpperLegLiftBoost);
+
+                if (bothFeetBehind)
+                {
+                    float leftStrandedBias = leftEffectiveStepAngle * _smoothedInputMag;
+                    float rightStrandedBias = rightEffectiveStepAngle * _smoothedInputMag;
+                    leftSwingDeg += leftStrandedBias;
+                    rightSwingDeg += rightStrandedBias;
+                    _isGaitBiasedForward = true;
+                }
+
+                float kneeBendDeg = effectiveKneeAngle * _smoothedInputMag;
 
                 LegCommandOutput explicitLeftCommand = new LegCommandOutput(
                     LocomotionLeg.Left,
@@ -1052,12 +1180,13 @@ namespace PhysicsDrivenMovement.Character
                     _minimumStateMachineConfidenceExit,
                     _fallbackGaitBlendRiseSpeed,
                     _fallbackGaitBlendFallSpeed);
+                float fallbackEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized);
                 _confidenceEvaluator.ApplyFallback(
                     ref explicitLeftCommand,
                     ref explicitRightCommand,
                     gaitReferenceDirection,
                     bothFeetBehind,
-                    effectiveStepAngle,
+                    fallbackEffectiveStepAngle,
                     effectiveKneeAngle,
                     effectiveUpperLegLiftBoost);
 
@@ -1176,6 +1305,10 @@ namespace PhysicsDrivenMovement.Character
             _recoveryFrameCounter = 0;
             _recoveryCooldownFrameCounter = 0;
             _isGaitBiasedForward = false;
+            _leftStepAngleNoise = 0f;
+            _rightStepAngleNoise = 0f;
+            _leftLateralNoise = 0f;
+            _rightLateralNoise = 0f;
             _confidenceEvaluator.Reset();
             ResetLegStateMachinesToIdle();
             _jointDriver.SetSpringMultiplier(1f);
@@ -1190,13 +1323,14 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            float effectiveStepAngle = GetEffectiveStepAngle(_commandDesiredInput.SprintNormalized);
+            float leftEffectiveStepAngle = GetEffectiveStepAngle(_commandDesiredInput.SprintNormalized, isLeftLeg: true);
+            float rightEffectiveStepAngle = GetEffectiveStepAngle(_commandDesiredInput.SprintNormalized, isLeftLeg: false);
             float effectiveKneeAngle = GetEffectiveKneeAngle(_commandDesiredInput.SprintNormalized);
 
             LegExecutionProfileResolver.Resolve(
                 _leftLegCommand,
                 _useStateDrivenExecution,
-                effectiveStepAngle,
+                leftEffectiveStepAngle,
                 effectiveKneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
@@ -1206,7 +1340,7 @@ namespace PhysicsDrivenMovement.Character
             LegExecutionProfileResolver.Resolve(
                 _rightLegCommand,
                 _useStateDrivenExecution,
-                effectiveStepAngle,
+                rightEffectiveStepAngle,
                 effectiveKneeAngle,
                 _stepUpClearanceReferenceHeight,
                 _stepUpClearanceSwingBoost,
@@ -1215,10 +1349,10 @@ namespace PhysicsDrivenMovement.Character
                 out float rightKneeBendDeg);
 
             Vector3 gaitForward = LegJointDriver.GetWorldGaitForward(_commandDesiredInput, _commandObservation);
-            leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, effectiveStepAngle, leftSwingDeg);
-            rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, effectiveStepAngle, rightSwingDeg);
-            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, effectiveStepAngle, effectiveKneeAngle, ref leftSwingDeg, ref leftKneeBendDeg);
-            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, effectiveStepAngle, effectiveKneeAngle, ref rightSwingDeg, ref rightKneeBendDeg);
+            leftSwingDeg = ApplyStepTargetReachFloor(_leftLegCommand, _footL, gaitForward, leftEffectiveStepAngle, leftSwingDeg);
+            rightSwingDeg = ApplyStepTargetReachFloor(_rightLegCommand, _footR, gaitForward, rightEffectiveStepAngle, rightSwingDeg);
+            ApplyStepTargetLandingHeightFloor(_leftLegCommand, _footL, leftEffectiveStepAngle, effectiveKneeAngle, ref leftSwingDeg, ref leftKneeBendDeg);
+            ApplyStepTargetLandingHeightFloor(_rightLegCommand, _footR, rightEffectiveStepAngle, effectiveKneeAngle, ref rightSwingDeg, ref rightKneeBendDeg);
             ApplyStepUpSupportLegExtension(
                 _leftLegCommand,
                 _footR,
@@ -1866,3 +2000,4 @@ namespace PhysicsDrivenMovement.Character
         }
     }
 }
+
