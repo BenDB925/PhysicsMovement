@@ -1,9 +1,9 @@
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
-**Current next step:** Finish Slice 4B by adding `IdleVerticalBobTests`, applying the prefab overrides for the new idle-bob and micro-step fields, and running the focused PlayMode regression slice.
+**Current next step:** Finish Slice 4B by applying the prefab overrides for the new idle-bob and micro-step fields, then run the focused PlayMode regression slice that now includes `IdleVerticalBobTests`.
 
-Active slice checkpoint: `slice/05-4a-idle-sway` now contains the gated idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Focused PlayMode verification via `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests` finished `31/31` green on 2026-03-24. Slice 4B is in progress on `slice/05-4b-idle-bob`; `BalanceController.SetIdleBobOffset` plus the `LegAnimator` idle bob and micro-step runtime path are in place, and the next step is the focused PlayMode coverage plus prefab tuning.
+Active slice checkpoint: `slice/05-4a-idle-sway` now contains the gated idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Focused PlayMode verification via `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests` finished `31/31` green on 2026-03-24. Slice 4B is in progress on `slice/05-4b-idle-bob`; `BalanceController.SetIdleBobOffset`, the `LegAnimator` idle bob plus micro-step runtime path, and the new `IdleVerticalBobTests` PlayMode suite are in place, and the next step is prefab tuning plus the focused PlayMode regression slice.
 | 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 # Plan 05 — Organic Movement & Gait Variation
 
