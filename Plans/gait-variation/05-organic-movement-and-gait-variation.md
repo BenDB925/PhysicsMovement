@@ -1,10 +1,10 @@
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
-**Current next step:** Finish Slice 4A by adding IdleSwayTests, tuning the prefab sway overrides if needed, and running the focused PlayMode filter `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests`.
+**Current next step:** Start Slice 4B (idle vertical bob + micro-adjustment step) now that Slice 4A is green on the focused regression slice.
 
-Active slice checkpoint: `slice/05-4a-idle-sway` now contains the grounded-only idle sway force path in `LegAnimator.cs`, the new `IdleSwayTests.cs` outcome suite, and successful `dotnet build` checks for both `PhysicsDrivenMovement.Character.csproj` and `PhysicsDrivenMovement.Tests.PlayMode.csproj`. Focused Unity PlayMode execution and any prefab tuning are still pending.
-| 2026-03-24 | 05-4a | GitHub Copilot | wip | Added the idle-sway force path in `LegAnimator`, authored `IdleSwayTests`, and verified both the character and PlayMode test assemblies compile on `slice/05-4a-idle-sway`. Focused Unity execution and final prefab tuning are still pending. |
+Active slice checkpoint: `slice/05-4a-idle-sway` now contains the gated idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Focused PlayMode verification via `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests` finished `31/31` green on 2026-03-24.
+| 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Planning
@@ -220,5 +220,6 @@ Slice 7 gate: `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|MovementQ
 |------|-------|-------|--------|-------|
 | 2026-03-23 | Plan | Opus review | — | Critical gaps identified; plan revised |
 | 2026-03-24 | 05-3 | OpenClaw main | fail | Added serialized stride asymmetry fields, prefab defaults, and new StrideAsymmetryTests. Target slice tests improved from 27/31 to 30/31 green after isolating organic-noise tests and softening the asymmetry path, but SprintJumpStabilityTests still regresses (Landing #1 peak tilt 55.9° > 50° in TwoConsecutiveJumps). |
+| 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 
-**Current next step:** Investigate why stride asymmetry is still leaking into sprint-jump landing posture and neutralise that path without losing the walk-speed left/right ratio coverage.
+**Current next step:** Start Slice 4B (idle vertical bob + micro-adjustment step) now that Slice 4A is complete and the focused gait-variation regression slice is green again.

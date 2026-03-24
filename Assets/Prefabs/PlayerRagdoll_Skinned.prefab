@@ -961,8 +961,8 @@ MonoBehaviour:
   _sprintStepAngle: 75
   _noiseSeed: 42
   _disableOrganicVariation: 0
-  _idleSwayForce: 30
-  _idleSwayFrequency: 0.8
+  _idleSwayForce: 33
+  _idleSwayFrequency: 1
   _idleSwayEnterDelay: 0.5
   _idleSwayFadeOutDuration: 0.3
   _leftStrideAsymmetry: 1.04

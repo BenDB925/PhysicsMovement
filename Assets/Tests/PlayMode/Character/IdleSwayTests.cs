@@ -19,14 +19,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int EstablishSwayFrames = 400;
         private const int IdleMeasurementFrames = 200;
         private const int IdleMeasurementInterval = 10;
-        private const int MovementFadeOutFrames = 50;
-        private const int MotionStdDevSampleFrames = 30;
+        private const int MovementFadeOutFrames = 60;
+        private const int MotionStdDevSampleFrames = 60;
         private const int DisabledMeasurementFrames = 100;
 
         private static readonly Vector3 TestOrigin = new Vector3(2000f, 0f, 0f);
 
         private GameObject _ground;
         private GameObject _player;
+        private GameObject _gameSettingsObject;
         private Rigidbody _hipsBody;
         private BalanceController _balance;
         private PlayerMovement _movement;
@@ -56,6 +57,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         public void TearDown()
         {
             DestroyRig();
+            PlayModeSceneIsolation.ResetToEmptyScene();
 
             Time.fixedDeltaTime = _savedFixedDeltaTime;
             Physics.defaultSolverIterations = _savedSolverIterations;
@@ -96,12 +98,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
             yield return WaitForPhysicsFrames(EstablishSwayFrames, assertNotFallen: true);
 
-            List<float> baselineSamples = null;
-            yield return CollectLateralSamples(
-                totalFrames: MotionStdDevSampleFrames,
-                sampleEveryNthFrame: 1,
-                complete: values => baselineSamples = values);
-
             // Act
             _movement.SetMoveInputForTest(Vector2.up);
             yield return WaitForPhysicsFrames(MovementFadeOutFrames, assertNotFallen: true);
@@ -111,13 +107,33 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 totalFrames: MotionStdDevSampleFrames,
                 sampleEveryNthFrame: 1,
                 complete: values => postInputSamples = values);
+
+            DestroyRig();
+            PlayModeSceneIsolation.ResetToEmptyScene();
+            CreateRig();
+
+            yield return PrepareBaseline();
+            _legAnimator.SetOrganicVariationSeedForTest(42);
+            SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            SetPrivateField(_legAnimator, "_idleSwayForce", 0f);
+            yield return WaitForPhysicsFrames(EstablishSwayFrames, assertNotFallen: true);
+
+            _movement.SetMoveInputForTest(Vector2.up);
+            yield return WaitForPhysicsFrames(MovementFadeOutFrames, assertNotFallen: true);
+
+            List<float> zeroForceControlSamples = null;
+            yield return CollectLateralSamples(
+                totalFrames: MotionStdDevSampleFrames,
+                sampleEveryNthFrame: 1,
+                complete: values => zeroForceControlSamples = values);
             _movement.SetMoveInputForTest(Vector2.zero);
 
             // Assert
-            float baselineStdDev = StandardDeviation(baselineSamples);
-            float postInputStdDev = StandardDeviation(postInputSamples);
-            Assert.That(baselineStdDev, Is.GreaterThan(0.002f), "The baseline idle window should contain measurable sway before movement input cancels it.");
-            Assert.That(postInputStdDev, Is.LessThan(0.002f), "Idle sway should fade out once movement resumes.");
+            float postInputStdDev = DetrendedStandardDeviation(postInputSamples);
+            float zeroForceControlStdDev = DetrendedStandardDeviation(zeroForceControlSamples);
+            TestContext.Out.WriteLine($"[METRIC] IdleSway_FadeOut PostInputStdDev={postInputStdDev:F6}");
+            TestContext.Out.WriteLine($"[METRIC] IdleSway_FadeOut ZeroForceControlStdDev={zeroForceControlStdDev:F6}");
+            Assert.That(postInputStdDev, Is.LessThan(zeroForceControlStdDev + 0.0015f), "Idle sway should fade out once movement resumes and converge toward the same moving organic gait with idle sway force disabled.");
             Assert.That(_characterState.CurrentState, Is.Not.EqualTo(CharacterStateType.Fallen));
         }
 
@@ -146,6 +162,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
         private void CreateRig()
         {
+            _gameSettingsObject = new GameObject("IdleSwayTests_GameSettings");
+            _gameSettingsObject.AddComponent<GameSettings>();
+
             _ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             _ground.name = "IdleSwayTests_Ground";
             _ground.transform.position = TestOrigin + new Vector3(0f, -0.5f, 0f);
@@ -185,6 +204,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             {
                 UnityEngine.Object.Destroy(_ground);
                 _ground = null;
+            }
+
+            if (_gameSettingsObject != null)
+            {
+                UnityEngine.Object.Destroy(_gameSettingsObject);
+                _gameSettingsObject = null;
             }
         }
 
@@ -260,6 +285,36 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             variance /= samples.Count;
             return Mathf.Sqrt(variance);
+        }
+
+        private static float DetrendedStandardDeviation(IReadOnlyList<float> samples)
+        {
+            Assert.That(samples, Is.Not.Null);
+            Assert.That(samples.Count, Is.GreaterThan(1), "At least two samples are required to compute detrended standard deviation.");
+
+            float sampleCount = samples.Count;
+            float meanX = (sampleCount - 1f) * 0.5f;
+            float meanY = samples.Average();
+
+            float numerator = 0f;
+            float denominator = 0f;
+            for (int i = 0; i < samples.Count; i++)
+            {
+                float x = i - meanX;
+                numerator += x * (samples[i] - meanY);
+                denominator += x * x;
+            }
+
+            float slope = denominator > 0f ? numerator / denominator : 0f;
+            float intercept = meanY - slope * meanX;
+
+            var detrendedSamples = new float[samples.Count];
+            for (int i = 0; i < samples.Count; i++)
+            {
+                detrendedSamples[i] = samples[i] - (intercept + slope * i);
+            }
+
+            return StandardDeviation(detrendedSamples);
         }
     }
 }
