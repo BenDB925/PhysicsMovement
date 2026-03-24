@@ -9,23 +9,31 @@ using UnityEngine.TestTools;
 namespace PhysicsDrivenMovement.Tests.PlayMode
 {
     /// <summary>
-    /// Outcome-based PlayMode coverage for Plan 06 Slice 1 landing recovery.
-    /// Verifies that spring restoration ramps after touchdown and keeps sprint-jump
-    /// landing tilt within the locked quality thresholds.
+    /// Outcome-based PlayMode coverage for Plan 06 landing recovery slices 1 and 2.
+    /// Verifies that touchdown spring restoration ramps after landing and that the
+    /// landing pelvis target no longer spikes forward during sprint-jump recovery.
     /// </summary>
     public class LandingRecoveryTests
     {
         private const int SettleFrames = 80;
         private const float FaceplantAngleThreshold = 50f;
         private const float PeakLandingTiltTarget = 35f;
+        private const float CounterLeanPeakLandingTiltTarget = 25f;
+        private const float MaxForwardPelvisTiltAfterLandingDeg = 2f;
         private const int SprintRampFrames = 500;
         private const int MeasurementWindowFrames = 150;
+        private const int PelvisTiltMeasurementFrames = 20;
         private const int PostJumpObservationFrames = 260;
         private const int JumpReadyWindowFrames = 30;
         private const int JumpReadyStabilityFrames = 3;
+        private const int RecoveryTimeTargetFrames = 30;
         private const float RampAssertionDurationSeconds = 0.12f;
+        private const float RecoveryTiltThresholdDeg = 5f;
 
         private static readonly Vector3 TestOrigin = new Vector3(2000f, 0f, 0f);
+        private static readonly FieldInfo SmoothedPelvisTiltField = typeof(BalanceController).GetField(
+            "_smoothedPelvisTiltDeg",
+            BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo SetLandingSpringRampDurationMethod = typeof(LegAnimator).GetMethod(
             "SetLandingSpringRampDurationForTest",
             BindingFlags.Instance | BindingFlags.Public);
@@ -50,7 +58,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             public bool WasAirborne;
             public bool Landed;
             public bool EnteredFallen;
+            public float MaxForwardPelvisTiltAfterLanding;
             public float PeakTiltAfterLanding;
+            public int FramesToRecoverUpright = -1;
             public float FirstGroundedSpringMultiplier = float.NaN;
             public float SpringMultiplierAfterRamp = float.NaN;
         }
@@ -171,6 +181,81 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 $"Peak post-landing tilt was {metrics.PeakTiltAfterLanding:F1}°, above the faceplant threshold of {FaceplantAngleThreshold:F1}°.");
         }
 
+        [UnityTest]
+        public IEnumerator LandingRecovery_NoPelvisTiltSpikeOnLanding()
+        {
+            // Arrange
+            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
+            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+
+            // Act
+            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+
+            // Assert
+            TestContext.Out.WriteLine(
+                $"[METRIC] LandingRecovery MaxForwardPelvisTilt={metrics.MaxForwardPelvisTiltAfterLanding:F2}");
+
+            Assert.That(metrics.WasAirborne, Is.True,
+                "Sprint jump should enter airborne before landing pelvis tilt is evaluated.");
+            Assert.That(metrics.Landed, Is.True,
+                "Sprint jump should land within the landing recovery observation window.");
+            Assert.That(metrics.EnteredFallen, Is.False,
+                "Pelvis tilt suppression should keep the character out of Fallen during landing recovery.");
+            Assert.That(metrics.MaxForwardPelvisTiltAfterLanding, Is.LessThanOrEqualTo(MaxForwardPelvisTiltAfterLandingDeg),
+                $"Landing absorb should prevent forward pelvis tilt spikes above {MaxForwardPelvisTiltAfterLandingDeg:F1}°. " +
+                $"Observed {metrics.MaxForwardPelvisTiltAfterLanding:F2}° in the first {PelvisTiltMeasurementFrames} grounded frames.");
+        }
+
+        [UnityTest]
+        public IEnumerator LandingRecovery_PeakTiltFurtherReducedWithCounterLean()
+        {
+            // Arrange
+            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
+            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+
+            // Act
+            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+
+            // Assert
+            TestContext.Out.WriteLine(
+                $"[METRIC] LandingRecovery CounterLeanPeakTilt={metrics.PeakTiltAfterLanding:F1}");
+
+            Assert.That(metrics.WasAirborne, Is.True,
+                "Sprint jump should enter airborne before the counter-lean tilt target is evaluated.");
+            Assert.That(metrics.Landed, Is.True,
+                "Sprint jump should land within the landing recovery observation window.");
+            Assert.That(metrics.EnteredFallen, Is.False,
+                "Counter-lean validation should stay in Standing or Moving, not Fallen.");
+            Assert.That(metrics.PeakTiltAfterLanding, Is.LessThan(CounterLeanPeakLandingTiltTarget),
+                $"Peak post-landing tilt was {metrics.PeakTiltAfterLanding:F1}°, above the Slice 2 target of {CounterLeanPeakLandingTiltTarget:F1}°.");
+        }
+
+        [UnityTest]
+        public IEnumerator LandingRecovery_RecoveryTimeImproved()
+        {
+            // Arrange
+            float landingSpringRampDurationSeconds = GetLandingSpringRampDuration(_rig.LegAnimator);
+            LandingRecoveryMetrics metrics = new LandingRecoveryMetrics();
+
+            // Act
+            yield return RunSingleSprintJump(metrics, landingSpringRampDurationSeconds);
+
+            // Assert
+            TestContext.Out.WriteLine(
+                $"[METRIC] LandingRecovery FramesToRecoverUpright={metrics.FramesToRecoverUpright}");
+
+            Assert.That(metrics.WasAirborne, Is.True,
+                "Sprint jump should enter airborne before recovery time is evaluated.");
+            Assert.That(metrics.Landed, Is.True,
+                "Sprint jump should land within the landing recovery observation window.");
+            Assert.That(metrics.EnteredFallen, Is.False,
+                "Recovery time validation should not enter Fallen.");
+            Assert.That(metrics.FramesToRecoverUpright, Is.GreaterThanOrEqualTo(0),
+                $"Upright angle never dropped below {RecoveryTiltThresholdDeg:F1}° within the measurement window.");
+            Assert.That(metrics.FramesToRecoverUpright, Is.LessThan(RecoveryTimeTargetFrames),
+                $"Recovery took {metrics.FramesToRecoverUpright} frames, above the Slice 2 target of {RecoveryTimeTargetFrames} frames.");
+        }
+
         private IEnumerator RunSingleSprintJump(LandingRecoveryMetrics metrics, float landingSpringRampDurationSeconds)
         {
             yield return _rig.WarmUp(SettleFrames, renderFrames: 0);
@@ -241,11 +326,25 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 UpdateAirborneAndFallState(metrics);
                 float currentMultiplier = GetCurrentSpringMultiplier(_rig.LegAnimator, baselineSpring);
                 float currentRampTimer = GetLandingSpringRampTimer(_rig.LegAnimator);
-                metrics.PeakTiltAfterLanding = Mathf.Max(metrics.PeakTiltAfterLanding, _rig.BalanceController.UprightAngle);
+                float uprightAngle = _rig.BalanceController.UprightAngle;
+                metrics.PeakTiltAfterLanding = Mathf.Max(metrics.PeakTiltAfterLanding, uprightAngle);
 
                 if (landingFrame == 0)
                 {
                     metrics.FirstGroundedSpringMultiplier = currentMultiplier;
+                }
+
+                if (landingFrame < PelvisTiltMeasurementFrames)
+                {
+                    float smoothedPelvisTilt = GetSmoothedPelvisTiltDeg(_rig.BalanceController);
+                    metrics.MaxForwardPelvisTiltAfterLanding = Mathf.Max(
+                        metrics.MaxForwardPelvisTiltAfterLanding,
+                        smoothedPelvisTilt);
+                }
+
+                if (metrics.FramesToRecoverUpright < 0 && uprightAngle < RecoveryTiltThresholdDeg)
+                {
+                    metrics.FramesToRecoverUpright = landingFrame;
                 }
 
                 bool rampRestarted = currentRampTimer > 0f &&
@@ -341,6 +440,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(LandingSpringRampTimerField, Is.Not.Null,
                 "LegAnimator must expose the _landingSpringRampTimer field for landing recovery verification.");
             return (float)LandingSpringRampTimerField.GetValue(legAnimator);
+        }
+
+        private static float GetSmoothedPelvisTiltDeg(BalanceController balanceController)
+        {
+            Assert.That(SmoothedPelvisTiltField, Is.Not.Null,
+                "BalanceController must expose the _smoothedPelvisTiltDeg field for landing recovery verification.");
+            return (float)SmoothedPelvisTiltField.GetValue(balanceController);
         }
 
         private float GetCurrentSpringMultiplier(LegAnimator legAnimator, float baselineSpring)
