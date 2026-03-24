@@ -1,0 +1,183 @@
+You are implementing Slice 1 of Plan 06 (Landing Preparation & Post-Landing Recovery) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\landing-prep\06-landing-preparation-and-recovery.md
+
+---
+
+## HANDOFF CONTEXT
+
+Plan 05 (gait variation) is complete and merged to master. Current HEAD: cb1ab63.
+
+The problem: after a sprint jump, the character lands with a ~45° forward lean and takes ~0.5s to recover before locomotion resumes. Root cause (verified in code): `LegAnimator.OnCharacterStateChanged` calls `_jointDriver.SetSpringMultiplier(1f)` in a single frame — a 6.7× snap from 0.15x (airborne) to 1.0x (full stiffness). This creates a rigid-impact event where horizontal momentum pivots the torso forward over suddenly-rigid feet.
+
+The exact line (LegAnimator.cs, `OnCharacterStateChanged` method, in the `else if (previousState == CharacterStateType.Airborne)` block):
+```
+_jointDriver.SetSpringMultiplier(1f);  // ← THIS IS THE SNAP — replace with ramp
+```
+
+---
+
+## YOUR TASK: Slice 1 — Gradual Spring Restoration
+
+### What to build
+
+Replace the instant spring snap on landing with a time-based ramp.
+
+**New serialized fields on LegAnimator:**
+```csharp
+[SerializeField, Tooltip("Seconds to ramp leg spring from airborne stiffness to full after landing. 0 = instant (legacy behaviour).")]
+private float _landingSpringRampDuration = 0.12f;
+
+[SerializeField, Tooltip("Exponent for the spring ramp curve. 0.5 = square-root ease (fast start), 1.0 = linear, 2.0 = slow start. 0.5 is recommended.")]
+private float _landingSpringRampCurve = 0.5f;
+```
+
+**New private state on LegAnimator:**
+```csharp
+private float _landingSpringRampTimer;     // counts down from _landingSpringRampDuration
+private float _landingSpringStartMultiplier; // captures airborne multiplier at touchdown
+```
+
+**In `OnCharacterStateChanged`, replace the instant snap:**
+
+```csharp
+// BEFORE:
+_jointDriver.SetSpringMultiplier(1f);
+
+// AFTER:
+if (_landingSpringRampDuration > 0.0001f)
+{
+    _landingSpringRampTimer = _landingSpringRampDuration;
+    _landingSpringStartMultiplier = _airborneSpringMultiplier;
+    // Don't call SetSpringMultiplier here — FixedUpdate drives the ramp
+}
+else
+{
+    _jointDriver.SetSpringMultiplier(1f); // instant fallback
+}
+```
+
+**In `FixedUpdate`, drive the ramp (add near the top of FixedUpdate, before other logic):**
+
+```csharp
+if (_landingSpringRampTimer > 0f)
+{
+    _landingSpringRampTimer -= Time.fixedDeltaTime;
+    float t = 1f - Mathf.Clamp01(_landingSpringRampTimer / _landingSpringRampDuration);
+    float curvedT = Mathf.Pow(t, Mathf.Max(0.01f, _landingSpringRampCurve));
+    float currentMul = Mathf.Lerp(_landingSpringStartMultiplier, 1f, curvedT);
+    _jointDriver.SetSpringMultiplier(currentMul);
+
+    if (_landingSpringRampTimer <= 0f)
+    {
+        _jointDriver.SetSpringMultiplier(1f); // ensure clean finish
+    }
+}
+```
+
+**IMPORTANT — cancel ramp if entering airborne again (wind-up entry or state change):**
+In `OnCharacterStateChanged`, when `newState == CharacterStateType.Airborne`:
+```csharp
+_landingSpringRampTimer = 0f; // cancel any active landing ramp
+```
+Also in `SetJumpWindUpPose()` (or wherever wind-up is entered): cancel the ramp and snap spring to 1f before applying the wind-up pose. Ensure the ramp doesn't interfere with jump launches.
+
+**Test seam — add this public method:**
+```csharp
+public void SetLandingSpringRampDurationForTest(float duration)
+{
+    _landingSpringRampDuration = duration;
+}
+```
+
+---
+
+### Tests to write
+
+New file: `Assets/Tests/PlayMode/Character/LandingRecoveryTests.cs`
+
+Inherit the same setup pattern as existing test classes (load real prefab via `AssetDatabase.LoadAssetAtPath`, spawn at `new Vector3(2000f, 0f, 0f)`, wait for settle). Look at `SprintJumpStabilityTests.cs` for the full jump test pattern.
+
+**Test constants:**
+```csharp
+private const float FaceplantAngleThreshold = 50f; // must match SprintJumpStabilityTests
+private const float PeakLandingTiltTarget = 35f;   // Slice 1 quality target
+private const int SprintRampFrames = 500;
+private const int MeasurementWindowFrames = 150;   // frames to measure post-landing
+```
+
+**Test 1: `LandingRecovery_SpringRampsGraduallyAfterLanding`**
+- Sprint for `SprintRampFrames`, jump once (same setup as `SprintJumpStabilityTests`)
+- After `IsGrounded` becomes true post-jump, record spring multiplier via a test-exposed property (`internal float CurrentSpringMultiplier => _jointDriver.GetCurrentSpringMultiplier()` — add this if it doesn't exist, or use reflection)
+- On the very first frame of being grounded: assert spring multiplier < 1.0f (ramp is active)
+- After `_landingSpringRampDuration * 100f + 5` frames (ramp duration + buffer): assert spring multiplier == 1.0f (ramp complete)
+- Assert: no fall throughout
+
+**Test 2: `LandingRecovery_PeakTiltReducedAfterSprintJump`**
+- Sprint for `SprintRampFrames`, jump once
+- After landing, record peak `balance.UprightAngleDeg` (or `CharacterState` tilt) for `MeasurementWindowFrames` frames
+- Assert: peak tilt < `PeakLandingTiltTarget` (35°)
+- Assert: no fall
+
+**Test 3: `LandingRecovery_ExistingFaceplantTestStillPasses`**
+- Same setup as `SprintJump_SingleJump_DoesNotFaceplant` in SprintJumpStabilityTests
+- Assert: peak tilt < `FaceplantAngleThreshold` (50°) — this is a regression guard
+
+---
+
+## Test filter
+
+`"LandingRecoveryTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"`
+
+Target: all green (new 3 + existing relevant).
+
+---
+
+## CONSTRAINTS
+
+- Do NOT touch `_jumpLaunchHorizontalImpulse`, `_jumpForce`, `_kP`, `_kD`, or `_airborneSpringMultiplier`
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- All new parameters (`_landingSpringRampDuration`, `_landingSpringRampCurve`) go in prefab overrides — do not change C# defaults from the values in this prompt
+- `_landingSpringRampDuration = 0` must reproduce exact original instant-snap behaviour
+- No questions — make best call, document reasoning, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output every file you'll modify and what you'll change. Then proceed — plan is pre-approved.
+
+---
+
+## BRANCH
+
+Create branch `slice/06-1-spring-ramp` from master HEAD before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `feat(06-1): gradual spring restoration ramp on landing` — LegAnimator changes
+2. `test(06-1): add LandingRecoveryTests` — test file
+3. `fix(06-1): ...` — any tuning
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"06-1","status":"pass","branch":"slice/06-1-spring-ramp","notes":"<one line>"}`
+- Commit: `chore: slice 06-1 complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-06-1 STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
