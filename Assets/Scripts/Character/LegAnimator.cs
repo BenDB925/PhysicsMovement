@@ -381,6 +381,9 @@ namespace PhysicsDrivenMovement.Character
         // the sequence is stable regardless of which leg triggers each frame.
         private System.Random _organicRng;
         private System.Random _organicRngRight;
+        // Separate lateral streams so lateral draws never shift the step-angle draw sequence.
+        private System.Random _organicRngLateralLeft;
+        private System.Random _organicRngLateralRight;
         private float _leftStepAngleNoise;
         private float _rightStepAngleNoise;
         private float _leftLateralNoise;
@@ -538,6 +541,9 @@ namespace PhysicsDrivenMovement.Character
             _organicRng = new System.Random(_noiseSeed);
             // Right leg uses a different seed offset so the two streams are independent.
             _organicRngRight = new System.Random(_noiseSeed + 1000);
+            // Lateral streams use separate offsets so lateral draws never shift step-angle sequences.
+            _organicRngLateralLeft = new System.Random(_noiseSeed + 2000);
+            _organicRngLateralRight = new System.Random(_noiseSeed + 3000);
         }
 
         private void Start()
@@ -658,6 +664,8 @@ namespace PhysicsDrivenMovement.Character
         {
             _organicRng = new System.Random(seed);
             _organicRngRight = new System.Random(seed + 1000);
+            _organicRngLateralLeft = new System.Random(seed + 2000);
+            _organicRngLateralRight = new System.Random(seed + 3000);
             _leftStepAngleNoise = 0f;
             _rightStepAngleNoise = 0f;
             _leftLateralNoise = 0f;
@@ -1042,10 +1050,9 @@ namespace PhysicsDrivenMovement.Character
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
                     _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
 
-                    // Draw order per leg per step: [0] step angle noise, [1] lateral noise.
-                    // Do not reorder -- tests rely on this sequence.
+                    // Lateral draw uses its own stream so it never shifts the step-angle sequence.
                     float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
-                    _leftLateralNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                    _leftLateralNoise = (float)(_organicRngLateralLeft.NextDouble() * 2.0 - 1.0) * latNoiseMag;
                 }
 
                 // Lateral position shift only on grounded strides -- shifting foot placement
@@ -1087,10 +1094,9 @@ namespace PhysicsDrivenMovement.Character
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
                     _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
 
-                    // Draw order per leg per step: [0] step angle noise, [1] lateral noise.
-                    // Do not reorder -- tests rely on this sequence.
+                    // Lateral draw uses its own stream so it never shifts the step-angle sequence.
                     float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
-                    _rightLateralNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                    _rightLateralNoise = (float)(_organicRngLateralRight.NextDouble() * 2.0 - 1.0) * latNoiseMag;
                 }
 
                 if (rightStepTarget.IsValid && !_disableOrganicVariation && observation.IsGrounded)
@@ -1994,3 +2000,4 @@ namespace PhysicsDrivenMovement.Character
         }
     }
 }
+
