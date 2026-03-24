@@ -383,6 +383,8 @@ namespace PhysicsDrivenMovement.Character
         private System.Random _organicRngRight;
         private float _leftStepAngleNoise;
         private float _rightStepAngleNoise;
+        private float _leftLateralNoise;
+        private float _rightLateralNoise;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -407,6 +409,8 @@ namespace PhysicsDrivenMovement.Character
         internal float UpperLegLiftBoostDegrees => GetEffectiveUpperLegLiftBoost();
 
         internal float KneeAngleDegrees => GetEffectiveKneeAngle();
+        internal Vector3 LeftFootWorldPosition => _footL != null ? _footL.position : Vector3.zero;
+        internal Vector3 RightFootWorldPosition => _footR != null ? _footR.position : Vector3.zero;
 
         /// <summary>
         /// True while the stuck-leg recovery pose is being actively applied.
@@ -656,6 +660,8 @@ namespace PhysicsDrivenMovement.Character
             _organicRngRight = new System.Random(seed + 1000);
             _leftStepAngleNoise = 0f;
             _rightStepAngleNoise = 0f;
+            _leftLateralNoise = 0f;
+            _rightLateralNoise = 0f;
         }
 
         private float GetEffectiveStepAngle()
@@ -1035,6 +1041,23 @@ namespace PhysicsDrivenMovement.Character
                     float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
                     _leftStepAngleNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * noiseMag;
+
+                    // Draw order per leg per step: [0] step angle noise, [1] lateral noise.
+                    // Do not reorder -- tests rely on this sequence.
+                    float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
+                    _leftLateralNoise = (float)(_organicRng.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                }
+
+                if (leftStepTarget.IsValid && !_disableOrganicVariation)
+                {
+                    float newWidthBias = Mathf.Clamp(leftStepTarget.WidthBias + _leftLateralNoise, -0.5f, 0.5f);
+                    leftStepTarget = new StepTarget(
+                        leftStepTarget.LandingPosition,
+                        leftStepTarget.DesiredTiming,
+                        newWidthBias,
+                        leftStepTarget.BrakingBias,
+                        leftStepTarget.Confidence,
+                        leftStepTarget.RequestedClearanceHeight);
                 }
 
                 StepTarget rightStepTarget = _stepPlanner.ComputeSwingTarget(
@@ -1052,6 +1075,23 @@ namespace PhysicsDrivenMovement.Character
                     float sprintNorm = _playerMovement != null ? _playerMovement.SprintNormalized : 0f;
                     float noiseMag = Mathf.Lerp(8f, 4f, Mathf.Clamp01(sprintNorm));
                     _rightStepAngleNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * noiseMag;
+
+                    // Draw order per leg per step: [0] step angle noise, [1] lateral noise.
+                    // Do not reorder -- tests rely on this sequence.
+                    float latNoiseMag = Mathf.Lerp(0.15f, 0.07f, Mathf.Clamp01(sprintNorm));
+                    _rightLateralNoise = (float)(_organicRngRight.NextDouble() * 2.0 - 1.0) * latNoiseMag;
+                }
+
+                if (rightStepTarget.IsValid && !_disableOrganicVariation)
+                {
+                    float newWidthBias = Mathf.Clamp(rightStepTarget.WidthBias + _rightLateralNoise, -0.5f, 0.5f);
+                    rightStepTarget = new StepTarget(
+                        rightStepTarget.LandingPosition,
+                        rightStepTarget.DesiredTiming,
+                        newWidthBias,
+                        rightStepTarget.BrakingBias,
+                        rightStepTarget.Confidence,
+                        rightStepTarget.RequestedClearanceHeight);
                 }
 
                 float leftEffectiveStepAngle = GetEffectiveStepAngle(desiredInput.SprintNormalized, isLeftLeg: true);
@@ -1243,6 +1283,8 @@ namespace PhysicsDrivenMovement.Character
             _isGaitBiasedForward = false;
             _leftStepAngleNoise = 0f;
             _rightStepAngleNoise = 0f;
+            _leftLateralNoise = 0f;
+            _rightLateralNoise = 0f;
             _confidenceEvaluator.Reset();
             ResetLegStateMachinesToIdle();
             _jointDriver.SetSpringMultiplier(1f);
