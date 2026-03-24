@@ -127,6 +127,18 @@ namespace PhysicsDrivenMovement.Character
              "to suppress surrender / boost upright torque through the landing impact.")]
         private float _jumpPostLandingGraceDuration = 0.65f;
 
+           [Header("Jump Landing Damping")]
+           [SerializeField]
+           [Tooltip("Fraction of horizontal speed to preserve each frame during the landing damping window. " +
+                  "0.75 = 25% bleed per application; spread across _jumpLandingHorizontalDampingDuration. " +
+                  "1.0 = no damping (disabled). Must be > 0.")]
+           private float _jumpLandingHorizontalDampingFactor = 0.75f;
+
+           [SerializeField]
+           [Tooltip("Seconds after touchdown during which horizontal damping applies. " +
+                  "Keeps damping brief so speed recovers quickly for locomotion.")]
+           private float _jumpLandingHorizontalDampingDuration = 0.08f;
+
         /// <summary>
         /// Tracks continuous time (in seconds) the character has been ungrounded
         /// without an active jump. Used to suppress grounded locomotion forces
@@ -221,6 +233,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>True from jump launch until the character is confirmed grounded after the jump completes.</summary>
         private bool _recentJumpAirborne;
+
+        /// <summary>Remaining time in seconds for the post-landing horizontal damping window.</summary>
+        private float _jumpLandingDampingTimer;
 
         /// <summary>World-space horizontal travel direction captured at jump launch for bounded airborne carry preservation.</summary>
         private Vector3 _jumpAirborneTravelDirection;
@@ -398,6 +413,16 @@ namespace PhysicsDrivenMovement.Character
             _overrideSprintInput = true;
         }
 
+        /// <summary>
+        /// Test seam: override the post-landing horizontal damping settings.
+        /// Do not call from production code.
+        /// </summary>
+        public void SetLandingHorizontalDampingForTest(float factor, float duration)
+        {
+            _jumpLandingHorizontalDampingFactor = Mathf.Clamp01(factor);
+            _jumpLandingHorizontalDampingDuration = Mathf.Max(0f, duration);
+        }
+
         private void Awake()
         {
             // STEP 1: Cache required components on the Hips root object.
@@ -443,6 +468,8 @@ namespace PhysicsDrivenMovement.Character
             _jumpPostLandingGraceDuration = Mathf.Max(
                 _jumpPostLandingGraceDuration,
                 MinimumSprintReachPostLandingGraceDuration);
+            _jumpLandingHorizontalDampingFactor = Mathf.Clamp01(_jumpLandingHorizontalDampingFactor);
+            _jumpLandingHorizontalDampingDuration = Mathf.Max(0f, _jumpLandingHorizontalDampingDuration);
             // STEP 4b: Do not force new air-control fields up to non-zero minimums here.
             //          Slice 4 must be able to disable airborne correction entirely on old
             //          prefab/test-rig instances by leaving the serialized fraction at 0.
@@ -499,11 +526,37 @@ namespace PhysicsDrivenMovement.Character
                 {
                     _jumpLandingDetected = true;
                     _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
+
+                    // STEP 1c: Start a short touchdown damping window so some of the
+                    //          preserved sprint carry bleeds off before it can tip the torso.
+                    if (_jumpLandingHorizontalDampingFactor < 0.9999f &&
+                        _jumpLandingHorizontalDampingDuration > 0f)
+                    {
+                        _jumpLandingDampingTimer = _jumpLandingHorizontalDampingDuration;
+                    }
                 }
                 else if (_jumpPostLandingGraceTimer > 0f)
                 {
                     _jumpPostLandingGraceTimer -= Time.fixedDeltaTime;
                 }
+            }
+
+            if (_jumpLandingDampingTimer > 0f)
+            {
+                _jumpLandingDampingTimer = Mathf.Max(0f, _jumpLandingDampingTimer - Time.fixedDeltaTime);
+
+                // STEP 1d: Convert the total desired retain factor into a fixed-step-safe
+                //          per-frame retain value so the full window always lands on the same bleed.
+                int totalFrames = Mathf.Max(
+                    1,
+                    Mathf.RoundToInt(_jumpLandingHorizontalDampingDuration / Mathf.Max(0.0001f, Time.fixedDeltaTime)));
+                float perFrameRetain = Mathf.Pow(_jumpLandingHorizontalDampingFactor, 1f / totalFrames);
+
+                Vector3 velocity = _rb.linearVelocity;
+                Vector3 horizontalVelocity = new Vector3(velocity.x, 0f, velocity.z);
+                Vector3 dampedHorizontalVelocity = horizontalVelocity * perFrameRetain;
+                Vector3 velocityDelta = dampedHorizontalVelocity - horizontalVelocity;
+                _rb.AddForce(velocityDelta, ForceMode.VelocityChange);
             }
 
             // Clear the recent-jump-airborne flag once the character is confirmed
@@ -690,6 +743,7 @@ namespace PhysicsDrivenMovement.Character
             EmitJumpTelemetry(attemptId, JumpTelemetryEventType.JumpAccepted, "accepted");
             _activeJumpAttemptId = attemptId;
             _committedJumpMoveInput = Vector2.ClampMagnitude(_currentMoveInput, 1f);
+            _jumpLandingDampingTimer = 0f;
 
             // All gates passed — enter wind-up phase (C8.5a).
             if (_jumpWindUpDuration > 0f)
@@ -867,6 +921,7 @@ namespace PhysicsDrivenMovement.Character
             _jumpWindUpTimer = 0f;
             _jumpLaunchTimer = 0f;
             _jumpAirborneStateGraceTimer = 0f;
+            _jumpLandingDampingTimer = 0f;
             _activeJumpAttemptId = 0;
             _committedJumpMoveInput = Vector2.zero;
             _balance.ClearJumpCrouchOffset();
@@ -880,6 +935,9 @@ namespace PhysicsDrivenMovement.Character
         private void BeginJumpAirborneStateGrace()
         {
             _jumpAirborneStateGraceTimer = Mathf.Max(_jumpAirborneStateGraceDuration, Time.fixedDeltaTime);
+            _jumpLandingDetected = false;
+            _jumpPostLandingGraceTimer = 0f;
+            _jumpLandingDampingTimer = 0f;
         }
 
         private void CaptureJumpAirborneCarryBaseline(
