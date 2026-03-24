@@ -1395,6 +1395,8 @@ namespace PhysicsDrivenMovement.Character
             // detect acceleration (speed rising → forward tilt) or deceleration
             // (speed dropping → backward tilt). This speed-delta approach is much
             // smoother than raw frame-by-frame velocity differentiation in a ragdoll.
+            bool suppressPelvisTiltForJumpPhase = _landingAbsorbTimer > 0f
+                || (_playerMovement != null && _playerMovement.CurrentJumpPhase == JumpPhase.WindUp);
             float pelvisTiltTarget = 0f;
             if (_pelvisTiltMaxDeg > 0f && _legAnimator != null && !IsFallen && effectivelyGrounded && !_suppressPelvisExpression)
             {
@@ -1404,7 +1406,7 @@ namespace PhysicsDrivenMovement.Character
                 if (facingXZ.sqrMagnitude > 0.001f)
                 {
                     float forwardSpeed = Vector3.Dot(hipsHorizontalVel, facingXZ.normalized);
-                    if (_landingAbsorbTimer > 0f)
+                    if (suppressPelvisTiltForJumpPhase)
                     {
                         _smoothedForwardSpeed = forwardSpeed;
                         _smoothedPelvisTiltDeg = 0f;
@@ -1451,13 +1453,17 @@ namespace PhysicsDrivenMovement.Character
             // expressive pelvis tilt so sprint/turn posture and local expression stack
             // additively instead of overriding one another.
             // C8.5d: Landing absorption counter-lean blends in during the squat.
+            // Jump wind-up suppresses move-intent lean so launch starts from a neutral torso.
+            float desiredLeanDegrees = (_playerMovement != null && _playerMovement.CurrentJumpPhase == JumpPhase.WindUp)
+                ? 0f
+                : _currentBodySupportCommand.DesiredLeanDegrees;
             float landingPelvisTilt = _landingCounterLeanDeg > 0f
                 ? -_landingCounterLeanDeg * landingAbsorbBlend
                 : _landingAbsorbLeanDeg * landingAbsorbBlend;
             float totalPelvisTilt = _smoothedPelvisTiltDeg
                                     + transientLeanDeg
                                     + landingPelvisTilt
-                                    + _currentBodySupportCommand.DesiredLeanDegrees;
+                                    + desiredLeanDegrees;
             totalPelvisTilt = Mathf.Clamp(totalPelvisTilt, -_totalPelvisTiltCapDeg, _totalPelvisTiltCapDeg);
             Vector3 uprightTarget = Vector3.up;
             if (Mathf.Abs(totalPelvisTilt) > 0.01f)
