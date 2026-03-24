@@ -212,3 +212,6 @@ Slice 7 gate: `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|MovementQ
 | Date | Slice | Agent | Result | Notes |
 |------|-------|-------|--------|-------|
 | 2026-03-23 | Plan | Opus review | — | Critical gaps identified; plan revised |
+| 2026-03-24 | 05-3 | OpenClaw main | fail | Added serialized stride asymmetry fields, prefab defaults, and new StrideAsymmetryTests. Target slice tests improved from 27/31 to 30/31 green after isolating organic-noise tests and softening the asymmetry path, but SprintJumpStabilityTests still regresses (Landing #1 peak tilt 55.9° > 50° in TwoConsecutiveJumps). |
+
+**Current next step:** Investigate why stride asymmetry is still leaking into sprint-jump landing posture and neutralise that path without losing the walk-speed left/right ratio coverage.

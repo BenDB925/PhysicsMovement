@@ -116,6 +116,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             const float moveMagnitude = 0.4f;
             _legAnimator.SetOrganicVariationSeedForTest(seed);
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            SetPrivateField(_legAnimator, "_leftStrideAsymmetry", 1f);
+            SetPrivateField(_legAnimator, "_rightStrideAsymmetry", 1f);
 
             List<float> recordedAngles = null;
             yield return CollectStepAngles(moveMagnitude, sprintHeld: false, angles => recordedAngles = angles);
@@ -135,6 +137,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             const int seed = 42;
             _legAnimator.SetOrganicVariationSeedForTest(seed);
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            SetPrivateField(_legAnimator, "_leftStrideAsymmetry", 1f);
+            SetPrivateField(_legAnimator, "_rightStrideAsymmetry", 1f);
 
             // Ramp up to full sprint before collecting -- noise magnitude lerps from
             // +/-8 (walk) to +/-4 (sprint) based on SprintNormalized. Collecting during
@@ -177,6 +181,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             const int seed = 99;
             SetPrivateField(_legAnimator, "_disableOrganicVariation", false);
+            SetPrivateField(_legAnimator, "_leftStrideAsymmetry", 1f);
+            SetPrivateField(_legAnimator, "_rightStrideAsymmetry", 1f);
 
             // Run 1: capture first left and right noise from idle start.
             _legAnimator.SetOrganicVariationSeedForTest(seed);

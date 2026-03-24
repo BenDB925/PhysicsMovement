@@ -959,6 +959,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.LegAnimator
   _stepAngle: 60
   _sprintStepAngle: 75
+  _noiseSeed: 42
+  _disableOrganicVariation: 0
+  _leftStrideAsymmetry: 1.04
+  _rightStrideAsymmetry: 1
   _stepFrequencyScale: 0.1
   _stepFrequency: 1.25
   _sprintCadenceBoost: 1.2

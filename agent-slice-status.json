@@ -1,1 +1,1 @@
-{"slice":"05-2","status":"pass","branch":"slice/05-2-lateral-placement-noise","notes":"Lateral foot placement noise +/-0.15 walk / +/-0.07 sprint. 28/28 green. Key fix: separate RNG streams per noise type."}
+{"slice":"05-3","status":"pass","branch":"slice/05-3-stride-timing-variation","notes":"1.04x left stride asymmetry, walk-only (suppressed sprint+jump), noise seam added. 31/31 green."}
