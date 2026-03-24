@@ -1,0 +1,168 @@
+You are implementing Slice 2 of Plan 06 (Landing Preparation & Post-Landing Recovery) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\landing-prep\06-landing-preparation-and-recovery.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slice 1 (gradual spring ramp) is complete and merged to master. Current HEAD: d2f19d6.
+
+Slice 1 reduced peak landing tilt from ~45° to ~35° by ramping leg springs over 0.12s instead of snapping instantly. Two contributing causes remain:
+
+1. **Pelvis tilt spike:** `BalanceController.cs` lines 1393–1410 compute `_smoothedPelvisTiltDeg` from forward speed delta. On landing, instantaneous speed drops sharply while `_smoothedForwardSpeed` lags → `speedDelta` goes negative → forward lean is ADDED to the upright target during the exact window we need it to fight backward.
+
+2. **Landing absorb lean is forward:** `_landingAbsorbLeanDeg = 1.5°` (line 308) is added to `totalPelvisTilt` at line 1443: `+ _landingAbsorbLeanDeg * landingAbsorbBlend`. This tilts the PD target FORWARD during landing absorb — actively assisting the problem.
+
+Key locations in BalanceController.cs:
+- Pelvis tilt computation: lines 1393–1412
+- Landing absorb blend computation: lines 1250–1261
+- `totalPelvisTilt` assembly: lines 1441–1454
+- `_landingAbsorbTimer` is active (> 0) during the entire landing absorb + blend-out window
+
+---
+
+## YOUR TASK: Slice 2 — Landing Pelvis Tilt Suppression + Counter-Lean
+
+Two targeted changes to BalanceController.cs only.
+
+### Part A — Suppress pelvis tilt spike during landing absorb
+
+In the pelvis tilt computation block (around line 1393), gate on the landing absorb phase:
+
+```csharp
+float pelvisTiltTarget = 0f;
+if (_landingAbsorbTimer > 0f)
+{
+    // During landing absorb, the speed-delta detector misreads the landing
+    // deceleration as intentional slowing and would add forward lean.
+    // Suppress it entirely and reset the smoothed baseline so there's no
+    // catch-up spike when the absorb window ends.
+    _smoothedForwardSpeed = forwardSpeed;  // reset baseline
+    _smoothedPelvisTiltDeg = 0f;          // reset smoothed output
+    // pelvisTiltTarget stays 0f
+}
+else
+{
+    // Existing pelvis tilt logic (unchanged):
+    float forwardSpeed = Vector3.Dot(hipsHorizontalVel, facingXZ.normalized);
+    _smoothedForwardSpeed = Mathf.Lerp(_smoothedForwardSpeed, forwardSpeed,
+        _pelvisTiltSmoothing * 0.5f * Time.fixedDeltaTime);
+    float speedDelta = forwardSpeed - _smoothedForwardSpeed;
+    float normalizedDelta = Mathf.Clamp(speedDelta / 1.5f, -1f, 1f);
+    pelvisTiltTarget = normalizedDelta * _pelvisTiltMaxDeg * _legAnimator.SmoothedInputMag;
+    _smoothedPelvisTiltDeg = Mathf.Lerp(_smoothedPelvisTiltDeg, pelvisTiltTarget,
+        _pelvisTiltSmoothing * Time.fixedDeltaTime);
+}
+```
+
+Note: `forwardSpeed` is currently computed inside the block — make sure the variable is in scope. Restructure the block as needed so the existing logic (unchanged) runs in the else branch. Do not change any existing logic in the else path.
+
+### Part B — Replace forward lean with counter-lean during landing absorb
+
+Add a new serialized field:
+```csharp
+[SerializeField, Tooltip("Degrees of backward tilt added to the upright target during landing absorption to counteract forward pitch. 0 = no counter-lean (legacy). Replaces _landingAbsorbLeanDeg during landing.")]
+private float _landingCounterLeanDeg = 2.0f;
+```
+
+In `totalPelvisTilt` assembly (line 1443), replace:
+```csharp
++ _landingAbsorbLeanDeg * landingAbsorbBlend
+```
+with:
+```csharp
+- _landingCounterLeanDeg * landingAbsorbBlend
+```
+(Note: subtracted, so it tilts backward — fighting the forward pitch rather than assisting it.)
+
+`_landingAbsorbLeanDeg` stays in the code but is no longer applied to `totalPelvisTilt`. It can be kept as a field in case it's needed elsewhere; just don't apply it in this path.
+
+Also set the prefab override for `_landingCounterLeanDeg` to `2.0` on both `PlayerRagdoll.prefab` and `PlayerRagdoll_Skinned.prefab`.
+
+---
+
+## Tests to write
+
+Add to the existing file: `Assets/Tests/PlayMode/Character/LandingRecoveryTests.cs`
+
+**Test 4: `LandingRecovery_NoPelvisTiltSpikeOnLanding`**
+- Access `BalanceController` via `GetComponentInChildren<BalanceController>()`
+- Access `_smoothedPelvisTiltDeg` via reflection (it's private)
+- Sprint for 500 frames, jump once
+- After `IsGrounded` becomes true, record `_smoothedPelvisTiltDeg` every frame for 20 frames
+- Assert: no value exceeds +2.0° (forward direction) during those 20 frames
+- Assert: no fall
+
+**Test 5: `LandingRecovery_PeakTiltFurtherReducedWithCounterLean`**
+- Sprint for 500 frames, jump once
+- After landing, record peak upright angle for 150 frames
+- Assert: peak tilt < 25° (improvement over Slice 1's 35° target — stacks with spring ramp)
+- Assert: no fall
+
+**Test 6: `LandingRecovery_RecoveryTimeImproved`**
+- Sprint for 500 frames, jump once
+- After landing, count frames until `balance.UprightAngleDeg < 5f` (or equivalent tilt measurement)
+- Assert: recovery < 30 frames (0.3s) at 100Hz
+- Assert: no fall
+
+Access `UprightAngleDeg` or similar via the existing public API on BalanceController — check what's already exposed before using reflection.
+
+---
+
+## Test filter
+
+`"LandingRecoveryTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests"`
+
+Target: all green (existing 29 + 3 new = 32 total in this filter).
+
+---
+
+## CONSTRAINTS
+
+- Only modify `BalanceController.cs` and `LandingRecoveryTests.cs` — nothing else
+- Do NOT change `_kP`, `_kD`, `_jumpLandingGainBoost`, `_landingAbsorbDuration`, `_landingAbsorbHeightOffset`
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- `_landingCounterLeanDeg = 0` must reproduce Slice 1 behaviour exactly (no regression)
+- No questions — make best call, document reasoning, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output every file you'll modify and what you'll change. Then proceed — plan is pre-approved.
+
+---
+
+## BRANCH
+
+Create branch `slice/06-2-tilt-suppress` from master HEAD (d2f19d6) before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `feat(06-2): suppress pelvis tilt spike and add counter-lean on landing` — BalanceController change
+2. `test(06-2): add tilt suppression and recovery time tests to LandingRecoveryTests` — test additions
+3. `fix(06-2): ...` — any tuning needed
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"06-2","status":"pass","branch":"slice/06-2-tilt-suppress","notes":"<one line>"}`
+- Commit: `chore: slice 06-2 complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-06-2 STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
