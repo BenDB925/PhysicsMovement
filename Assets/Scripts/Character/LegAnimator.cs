@@ -419,6 +419,8 @@ namespace PhysicsDrivenMovement.Character
         private float _rightLateralNoise;
 
         private const float IdleSwayInputThreshold = 0.05f;
+        private const float IdleSwayPlanarSpeedThreshold = 0.05f;
+        private const float IdleSwayVerticalSpeedThreshold = 0.1f;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -731,7 +733,10 @@ namespace PhysicsDrivenMovement.Character
 
             float deltaTime = Time.fixedDeltaTime;
             float phaseAdvance = Mathf.PI * 2f * _idleSwayFrequency * deltaTime;
-            bool isIdle = _smoothedInputMag < IdleSwayInputThreshold;
+            bool isStableStandingIdle = _characterState.CurrentState == CharacterStateType.Standing &&
+                                        _commandObservation.PlanarSpeed < IdleSwayPlanarSpeedThreshold &&
+                                        Mathf.Abs(_hipsRigidbody.linearVelocity.y) < IdleSwayVerticalSpeedThreshold;
+            bool isIdle = isStableStandingIdle && _smoothedInputMag < IdleSwayInputThreshold;
 
             if (isIdle)
             {
