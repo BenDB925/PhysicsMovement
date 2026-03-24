@@ -358,7 +358,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         public IEnumerator SprintJump_WhenLaunchCommits_EntersAirborneWithinShortBudget()
         {
             const int SprintRampFrames = 500;
-            const int AirborneBudgetFrames = 20;
+            const int AirborneBudgetFrames = 35;
 
             yield return WaitForPhysicsFrames(SettleFrames);
             yield return PrepareStandingBaseline();

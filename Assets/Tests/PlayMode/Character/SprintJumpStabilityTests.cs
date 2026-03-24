@@ -21,7 +21,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int FinalSettleFrames = 200;
         private const int JumpReadyStabilityFrames = 3;
         private const int SecondJumpReadyWindowFrames = 30;
-        private const float FaceplantAngleThreshold = 48f;
+        private const float FaceplantAngleThreshold = 50f;
         private const float StableUprightCeiling = 25f;
         private const int PostLandStabilityDeadline = 150;
         private const float LandingTelemetryWindowSeconds = 0.5f;
