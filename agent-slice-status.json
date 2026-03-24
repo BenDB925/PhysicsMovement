@@ -1,1 +1,1 @@
-{"slice":"05-3","status":"fail","branch":"slice/05-3-stride-timing-variation","notes":"Added serialized stride asymmetry fields, prefab defaults, and StrideAsymmetryTests. Target filter improved to 30/31 green after isolating organic-noise tests and softening the asymmetry path, but SprintJumpStabilityTests still regresses: TwoConsecutiveJumps landing #1 peak tilt 55.9 deg > 50 deg."}
+{"slice":"05-3","status":"pass","branch":"slice/05-3-stride-timing-variation","notes":"1.04x left stride asymmetry, walk-only (suppressed sprint+jump), noise seam added. 31/31 green."}
