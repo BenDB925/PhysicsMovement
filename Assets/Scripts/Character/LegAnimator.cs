@@ -39,6 +39,22 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Tooltip("When true, all organic gait variation is bypassed. Used by tests that need deterministic foot placement.")]
         private bool _disableOrganicVariation = false;
 
+        [SerializeField, Range(0f, 100f)]
+        [Tooltip("Peak lateral force in Newtons applied to the hips while idling so the balance controller can produce subtle organic weight shifts.")]
+        private float _idleSwayForce = 15f;
+
+        [SerializeField, Range(0.1f, 5f)]
+        [Tooltip("Frequency in Hz of the idle lateral sway sine wave.")]
+        private float _idleSwayFrequency = 0.8f;
+
+        [SerializeField, Range(0f, 2f)]
+        [Tooltip("Seconds spent ramping idle sway in once SmoothedInputMag stays below the idle threshold.")]
+        private float _idleSwayEnterDelay = 0.5f;
+
+        [SerializeField, Range(0.05f, 2f)]
+        [Tooltip("Seconds used to fade idle sway back to zero once movement resumes.")]
+        private float _idleSwayFadeOutDuration = 0.3f;
+
         // Test-only seam: suppress per-stride noise draws without suppressing asymmetry.
         // Allows tests to measure the pure asymmetry multiplier in isolation.
         private bool _disableStepAngleNoiseForTest = false;
@@ -276,6 +292,10 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private float _smoothedInputMag;
 
+        private float _idleTimer;
+        private float _swayPhase;
+        private float _swayAmplitudeScale;
+
         /// <summary>Counter incremented each FixedUpdate; used to gate debug logging every 10 frames.</summary>
         private int _debugFrameCounter;
 
@@ -397,6 +417,8 @@ namespace PhysicsDrivenMovement.Character
         private float _rightStepAngleNoise;
         private float _leftLateralNoise;
         private float _rightLateralNoise;
+
+        private const float IdleSwayInputThreshold = 0.05f;
 
         // ── Public Properties ────────────────────────────────────────────────
 
@@ -609,6 +631,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (_playerMovement == null || _characterState == null)
             {
+                ResetIdleSwayState();
                 return;
             }
 
@@ -618,6 +641,7 @@ namespace PhysicsDrivenMovement.Character
                 _suppressIncomingCommandFrame = true;
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetIdleSwayState();
                 _confidenceEvaluator.Reset();
                 ResetLegStateMachinesToIdle();
                 _jointDriver.SetAllTargetsToIdentity();
@@ -636,6 +660,7 @@ namespace PhysicsDrivenMovement.Character
             {
                 _phase = 0f;
                 _smoothedInputMag = 0f;
+                ResetIdleSwayState();
                 _confidenceEvaluator.Reset();
                 ResetLegStateMachinesToIdle();
                 _jointDriver.SetAllTargetsToIdentity();
@@ -643,6 +668,10 @@ namespace PhysicsDrivenMovement.Character
             }
 
             ApplyCommandFrame();
+
+            // STEP 7: Apply idle sway as a tiny hips perturbation so balance recovery
+            //         produces the visible weight shift instead of a scripted pose change.
+            ApplyIdleSway();
 
             // STEP 8: Debug logging — write one line every 10 FixedUpdate frames when enabled.
             if (_debugLog)
@@ -681,6 +710,74 @@ namespace PhysicsDrivenMovement.Character
             _rightStepAngleNoise = 0f;
             _leftLateralNoise = 0f;
             _rightLateralNoise = 0f;
+            ResetIdleSwayState();
+        }
+
+        private void ApplyIdleSway()
+        {
+            if (_hipsRigidbody == null)
+            {
+                return;
+            }
+
+            bool bypassIdleSway = _disableOrganicVariation ||
+                                  _characterState.CurrentState == CharacterStateType.Airborne ||
+                                  !_commandObservation.IsGrounded;
+            if (bypassIdleSway)
+            {
+                ResetIdleSwayState();
+                return;
+            }
+
+            float deltaTime = Time.fixedDeltaTime;
+            float phaseAdvance = Mathf.PI * 2f * _idleSwayFrequency * deltaTime;
+            bool isIdle = _smoothedInputMag < IdleSwayInputThreshold;
+
+            if (isIdle)
+            {
+                _idleTimer += deltaTime;
+                float fadeInDuration = Mathf.Max(0.0001f, _idleSwayEnterDelay);
+                _swayAmplitudeScale = Mathf.Clamp01(_idleTimer / fadeInDuration);
+            }
+            else
+            {
+                _idleTimer = 0f;
+                if (_swayAmplitudeScale <= 0f)
+                {
+                    _swayPhase = 0f;
+                    return;
+                }
+
+                float fadeOutDuration = Mathf.Max(0.0001f, _idleSwayFadeOutDuration);
+                _swayAmplitudeScale = Mathf.MoveTowards(_swayAmplitudeScale, 0f, deltaTime / fadeOutDuration);
+                if (_swayAmplitudeScale <= 0f)
+                {
+                    _swayPhase = 0f;
+                    return;
+                }
+            }
+
+            _swayPhase = Mathf.Repeat(_swayPhase + phaseAdvance, Mathf.PI * 2f);
+
+            Vector3 lateralAxis = Vector3.ProjectOnPlane(transform.right, Vector3.up);
+            if (lateralAxis.sqrMagnitude < 0.0001f)
+            {
+                lateralAxis = Vector3.right;
+            }
+            else
+            {
+                lateralAxis.Normalize();
+            }
+
+            float swayForce = Mathf.Sin(_swayPhase) * _idleSwayForce * _swayAmplitudeScale;
+            _hipsRigidbody.AddForce(lateralAxis * swayForce, ForceMode.Force);
+        }
+
+        private void ResetIdleSwayState()
+        {
+            _idleTimer = 0f;
+            _swayPhase = 0f;
+            _swayAmplitudeScale = 0f;
         }
 
         private float GetEffectiveStepAngle()
@@ -1338,6 +1435,7 @@ namespace PhysicsDrivenMovement.Character
             _rightStepAngleNoise = 0f;
             _leftLateralNoise = 0f;
             _rightLateralNoise = 0f;
+            ResetIdleSwayState();
             _confidenceEvaluator.Reset();
             ResetLegStateMachinesToIdle();
             _jointDriver.SetSpringMultiplier(1f);
