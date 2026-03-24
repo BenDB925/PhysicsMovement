@@ -693,29 +693,17 @@ namespace PhysicsDrivenMovement.Character
             float effectiveStepAngle = Mathf.Lerp(_stepAngle, _sprintStepAngle, Mathf.Clamp01(sprintNormalized));
 
             // Apply natural stride asymmetry first, then add per-stride noise around that baseline.
-            float asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
-            if (_disableOrganicVariation)
+            // Asymmetry is a pure multiplier (e.g. 1.04 = 4% longer left stride).
+            // Suppressed during any jump phase (wind-up through landing grace) and when
+            // organic variation is disabled, so sprint-jump stability tests are unaffected.
+            float asymmetry = 1.0f;
+            if (!_disableOrganicVariation &&
+                !_isJumpWindUp && !_isJumpLaunch &&
+                (_playerMovement == null || !_playerMovement.IsRecentJumpAirborne))
             {
-                asymmetry = 1.0f;
+                asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
             }
-
-            bool isGroundedGaitState = _characterState != null &&
-                (_characterState.CurrentState == CharacterStateType.Standing ||
-                 _characterState.CurrentState == CharacterStateType.Moving);
-            if (!isGroundedGaitState || _isJumpWindUp || _isJumpLaunch)
-            {
-                asymmetry = 1.0f;
-            }
-
-            // Fade asymmetry out as sprint rises so the subtle organic limp doesn't compound
-            // the already aggressive sprint/jump posture. At walk it is visible; at full sprint it disappears.
-            float sprintBlend = Mathf.Clamp01(sprintNormalized);
-            asymmetry = Mathf.Lerp(asymmetry, 1.0f, sprintBlend);
-
-            // Keep the asymmetry subtle in practice: a serialized 1.04x leg bias should read as a
-            // small organic drift, not a full 4% increase over the entire step angle envelope.
-            float asymmetryPivotAngle = 20f;
-            effectiveStepAngle += (effectiveStepAngle - asymmetryPivotAngle) * (asymmetry - 1.0f);
+            effectiveStepAngle *= asymmetry;
 
             // Option A: add a per-leg parameter here so every caller reuses the same bounded noise path.
             if (ShouldApplyOrganicStepAngleVariation())
