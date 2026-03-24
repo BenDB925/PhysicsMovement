@@ -1411,6 +1411,8 @@ MonoBehaviour:
   _fallbackGaitBlendRiseSpeed: 2
   _fallbackGaitBlendFallSpeed: 4
   _airborneSpringMultiplier: 0.15
+  _landingSpringRampDuration: 0.12
+  _landingSpringRampCurve: 0.5
   _angularVelocityGaitThreshold: 8
   _stuckFrameThreshold: 25
   _stuckSpeedThreshold: 0.15
