@@ -1,0 +1,131 @@
+# Slice 3 -- Subtle Natural Asymmetry
+# Plan 05: Organic Movement & Gait Variation
+# Branch: slice/05-3-stride-timing-variation
+
+## Handoff context
+Slices 1 and 2 are complete and merged to master. You are already on branch
+slice/05-3-stride-timing-variation, branched from master.
+
+Current state:
+  git -C "H:\Work\PhysicsDrivenMovementDemo" log --oneline -3
+  git -C "H:\Work\PhysicsDrivenMovementDemo" branch
+
+What exists in LegAnimator.cs from prior slices:
+  - _noiseSeed (SerializeField int, default 42)
+  - _disableOrganicVariation (SerializeField bool, default false)
+  - _organicRng / _organicRngRight (System.Random, step-angle streams, left/right)
+  - _organicRngLateralLeft / _organicRngLateralRight (System.Random, lateral streams)
+  - _leftStepAngleNoise / _rightStepAngleNoise (per-stride step angle noise)
+  - _leftLateralNoise / _rightLateralNoise (per-stride lateral placement noise)
+  - SetOrganicVariationSeedForTest(int seed) -- public test seam, resets all 4 RNG streams
+
+GetEffectiveStepAngle(float sprintNormalized, bool isLeftLeg) applies step angle noise
+and clamps to [30, 90]. This is the correct place to apply the asymmetry multiplier.
+
+---
+
+## What this slice does
+Adds a consistent per-leg stride asymmetry multiplier. The left leg takes a fractionally
+longer stride than the right (4% by default). This is subconscious -- not a limp, just
+a subtle personality. Serialized as prefab overrides so it can be tuned per character.
+
+---
+
+## Part A -- Implementation (FIRST commit)
+
+File: Assets/Scripts/Character/LegAnimator.cs
+
+### Step 1 -- Add serialized fields (near _noiseSeed and _disableOrganicVariation)
+  [SerializeField, Tooltip("Stride length multiplier for the left leg. 1.0 = symmetric. " +
+      "Values slightly above 1.0 give a subtle natural asymmetry (e.g. 1.04).")]
+  private float _leftStrideAsymmetry = 1.0f;
+
+  [SerializeField, Tooltip("Stride length multiplier for the right leg. 1.0 = symmetric.")]
+  private float _rightStrideAsymmetry = 1.0f;
+
+Default in code: 1.0f for both (symmetric). The prefab will override left to 1.04f.
+Do NOT change the C# default -- prefab override only.
+
+### Step 2 -- Apply in GetEffectiveStepAngle
+In GetEffectiveStepAngle(float sprintNormalized, bool isLeftLeg), apply the asymmetry
+BEFORE adding the per-stride noise. Order matters: asymmetry is a baseline shift,
+noise is variation around that baseline.
+
+  // Apply natural stride asymmetry first, then add per-stride noise around that baseline.
+  float asymmetry = isLeftLeg ? _leftStrideAsymmetry : _rightStrideAsymmetry;
+  if (_disableOrganicVariation) asymmetry = 1.0f;
+  effectiveStepAngle *= asymmetry;
+
+Then add noise and clamp as before. Final clamp [30, 90] still applies after all of this.
+
+### Step 3 -- Update prefab
+After the code change is committed, update the prefab:
+  H:\Work\PhysicsDrivenMovementDemo\Assets\Prefabs\PlayerRagdoll_Skinned.prefab
+Set _leftStrideAsymmetry: 1.04 on the LegAnimator component.
+Leave _rightStrideAsymmetry: 1.0 (default, no override needed -- but set it explicitly
+to 1.0 in the prefab to make it visible in inspector).
+
+Commit message: "feat(05-3): subtle left-stride asymmetry 1.04x serialized on prefab"
+
+---
+
+## Part B -- Tests (SECOND commit)
+
+Create: Assets/Tests/PlayMode/Character/StrideAsymmetryTests.cs
+
+### Setup/teardown (MANDATORY)
+Same pattern as OrganicGaitVariationTests.cs:
+- Load PlayerRagdoll_Skinned.prefab via AssetDatabase.LoadAssetAtPath
+- Instantiate and settle
+- Save/restore Time.fixedDeltaTime, Physics.defaultSolverIterations,
+  Physics.defaultSolverVelocityIterations in [SetUp]/[TearDown]
+- Project values: fixedDeltaTime=0.01f, solverIterations=12, velocityIterations=4
+
+### Test 1: StrideAsymmetry_LeftStride_FractionallyLongerThanRight
+- SetOrganicVariationSeedForTest(42), _disableOrganicVariation = false
+- Use reflection to set _leftStrideAsymmetry = 1.04f, _rightStrideAsymmetry = 1.0f
+- Walk forward (magnitude 0.5) for enough frames to collect 12 left and 12 right step events
+- Measure step angle at each trigger using the LeftStepAngleDegrees / RightStepAngleDegrees
+  internal properties (already exist from slice 1)
+- Assert: mean left step angle / mean right step angle is within [1.02f, 1.06f]
+  (the 1.04 multiplier plus noise averages out to ~1.04 over enough steps)
+
+### Test 2: StrideAsymmetry_WhenDisabled_SymmetricStrides
+- _disableOrganicVariation = true
+- Walk 12 steps each leg
+- Assert: |mean left - mean right| < 0.5f (effectively symmetric when disabled)
+
+### Test 3: StrideAsymmetry_DoesNotDestabilise_WalkStraight
+- _disableOrganicVariation = false, _leftStrideAsymmetry = 1.04f
+- Walk straight for 500 frames
+- Assert: character does not fall (IsFallen == false throughout)
+
+Commit message: "test(05-3): stride asymmetry ratio, symmetry-when-disabled, and stability coverage"
+
+---
+
+## Constraints
+- Default C# field values must stay 1.0f for both -- prefab override sets left to 1.04f
+- Asymmetry applies BEFORE per-stride noise in GetEffectiveStepAngle
+- When _disableOrganicVariation = true, asymmetry = 1.0f (both legs symmetric)
+- Final effectiveStepAngle is still clamped [30, 90] after asymmetry + noise
+- Do NOT run full test suite
+  Run only: "StrideAsymmetryTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests"
+- Do NOT modify Run-UnityTests.ps1
+- Do NOT ask questions -- make best call, comment reasoning, move on
+- Minimum 2 commits: A (implementation + prefab) then B (tests)
+- Write agent-slice-status.json on finish (pass or fail)
+- Append entry to H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md Agent Log table
+
+## Test runner command
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "StrideAsymmetryTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests"
+
+Results: H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml
+
+## Mandatory final step -- Telegram ping
+After writing agent-slice-status.json, send this regardless of pass or fail:
+
+$body = @{ chat_id = "8630971080"; text = "slice/05-3 STATUS: pass/fail. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+
+Replace pass/fail and notes with actual outcome.
