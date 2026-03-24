@@ -1,9 +1,9 @@
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
-**Current next step:** Start Slice 4B (idle vertical bob + micro-adjustment step) now that Slice 4A is green on the focused regression slice.
+**Current next step:** Continue Slice 4B on `slice/05-4b-idle-bob` by wiring `LegAnimator` to the new `BalanceController.SetIdleBobOffset` hook and the idle micro-step path.
 
-Active slice checkpoint: `slice/05-4a-idle-sway` now contains the gated idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Focused PlayMode verification via `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests` finished `31/31` green on 2026-03-24.
+Active slice checkpoint: `slice/05-4a-idle-sway` now contains the gated idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Focused PlayMode verification via `IdleSwayTests|OrganicGaitVariationTests|LateralPlacementNoiseTests|JumpTests|SprintJumpStabilityTests` finished `31/31` green on 2026-03-24. Slice 4B is now in progress on `slice/05-4b-idle-bob`; `BalanceController.SetIdleBobOffset` has landed and the next step is the `LegAnimator` bob plus micro-step integration.
 | 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 # Plan 05 — Organic Movement & Gait Variation
 
