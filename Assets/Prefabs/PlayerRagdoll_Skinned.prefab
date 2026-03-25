@@ -929,6 +929,9 @@ MonoBehaviour:
   _pelvisTiltSmoothing: 8
   _pelvisSwayMaxOffset: 0.015
   _pelvisSwaySmoothing: 8
+  _momentumLeanMaxDeg: 2.5
+  _momentumLeanFullTurnRate: 200
+  _momentumLeanSmoothing: 6
   _accelStartLeanDeg: 5
   _accelStartLeanDecay: 0.3
   _decelStopLeanDeg: 3

@@ -273,6 +273,22 @@ namespace PhysicsDrivenMovement.Character
                  "lower = more gradual transitions between stance legs.")]
         private float _pelvisSwaySmoothing = 8f;
 
+        [Header("Momentum Lean")]
+        [SerializeField, Tooltip("Maximum lateral lean angle (degrees) at full turn rate. " +
+             "2-3 degrees looks natural without looking exaggerated. Default 2.5.")]
+        [Range(0f, 8f)]
+        private float _momentumLeanMaxDeg = 2.5f;
+
+        [SerializeField, Tooltip("Yaw rate (deg/s) that produces full lean. " +
+             "At MaxFacingTurnRate=540 deg/s this should be around 180-270 for a gentle lean.")]
+        [Range(30f, 540f)]
+        private float _momentumLeanFullTurnRate = 200f;
+
+        [SerializeField, Tooltip("Smoothing speed for the momentum lean signal (units/s). " +
+             "Higher = more responsive. Default 6.")]
+        [Range(1f, 20f)]
+        private float _momentumLeanSmoothing = 6f;
+
         // ─── Accel/Decel Expression ──────────────────────────────────────────
 
         [Header("Accel/Decel Expression")]
@@ -421,6 +437,15 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Smoothed pelvis tilt in degrees (positive = forward lean).</summary>
         private float _smoothedPelvisTiltDeg;
 
+        /// <summary>Previous normalized facing direction used to derive yaw rate.</summary>
+        private Vector3 _prevFacingDirection;
+
+        /// <summary>Smoothed yaw rate in degrees per second used to drive momentum lean.</summary>
+        private float _smoothedYawRateDeg;
+
+        /// <summary>Current smoothed lateral lean contribution in degrees.</summary>
+        private float _momentumLeanDeg;
+
         /// <summary>Smoothed lateral pelvis sway offset vector (world-space horizontal).</summary>
         private Vector3 _smoothedPelvisSwayOffset;
 
@@ -543,6 +568,10 @@ namespace PhysicsDrivenMovement.Character
 
         internal LandingWindowTelemetrySample CurrentLandingWindowTelemetrySample => _currentLandingWindowTelemetrySample;
 
+        internal float DebugSmoothedYawRate => _smoothedYawRateDeg;
+
+        internal float DebugMomentumLeanDeg { get; private set; }
+
         // ─── Additive Height Offsets ──────────────────────────────────────
 
         /// <summary>Additive offset applied to the height-maintenance target during jump wind-up.</summary>
@@ -639,6 +668,9 @@ namespace PhysicsDrivenMovement.Character
             _surrenderExtremeAngleFrameCount = 0;
 
             _smoothedPelvisTiltDeg = 0f;
+            _smoothedYawRateDeg = 0f;
+            _momentumLeanDeg = 0f;
+            DebugMomentumLeanDeg = 0f;
             _smoothedPelvisSwayOffset = Vector3.zero;
             _transientLeanDeg = 0f;
             _transientLeanTimer = 0f;
@@ -755,7 +787,10 @@ namespace PhysicsDrivenMovement.Character
             {
                 currentForward = Vector3.forward;
             }
-            _targetFacingRotation = Quaternion.LookRotation(currentForward.normalized, Vector3.up);
+
+            currentForward.Normalize();
+            _targetFacingRotation = Quaternion.LookRotation(currentForward, Vector3.up);
+            _prevFacingDirection = currentForward;
 
             // STEP 2: Find the two GroundSensor components anywhere in the child hierarchy.
             //         RagdollBuilder attaches them to Foot_L and Foot_R.
@@ -851,6 +886,9 @@ namespace PhysicsDrivenMovement.Character
                 _reversalWeightShiftTimer = 0f;
                 _reversalWeightShiftDirection = Vector3.zero;
                 _landingAbsorbTimer = 0f;
+                _smoothedYawRateDeg = 0f;
+                _momentumLeanDeg = 0f;
+                DebugMomentumLeanDeg = 0f;
             }
             else if (next == CharacterStateType.Standing || next == CharacterStateType.Moving)
             {
@@ -910,6 +948,7 @@ namespace PhysicsDrivenMovement.Character
             // Phase 3D2: dead zone must be non-negative; 0 disables the guard (all errors fire).
             _yawDeadZoneDeg = Mathf.Max(0f, _yawDeadZoneDeg);
             _landingCounterLeanDeg = Mathf.Max(0f, _landingCounterLeanDeg);
+            _momentumLeanFullTurnRate = Mathf.Max(0.01f, _momentumLeanFullTurnRate);
         }
 
         private void FixedUpdate()
@@ -1390,6 +1429,27 @@ namespace PhysicsDrivenMovement.Character
                     ForceMode.Force);
             }
 
+            // ─── STEP 3.8a: Momentum lean signal — derive yaw rate from facing change ──
+            Vector3 currentFacing = Vector3.ProjectOnPlane(
+                _currentBodySupportCommand.FacingDirection, Vector3.up);
+            float instantYawRate = 0f;
+            if (currentFacing.sqrMagnitude > 0.001f)
+            {
+                currentFacing.Normalize();
+                if (_prevFacingDirection.sqrMagnitude > 0.001f && Time.fixedDeltaTime > 0f)
+                {
+                    float angleDelta = Vector3.SignedAngle(_prevFacingDirection, currentFacing, Vector3.up);
+                    instantYawRate = angleDelta / Time.fixedDeltaTime;
+                }
+
+                _prevFacingDirection = currentFacing;
+            }
+
+            _smoothedYawRateDeg = Mathf.Lerp(
+                _smoothedYawRateDeg,
+                instantYawRate,
+                Time.fixedDeltaTime * _momentumLeanSmoothing);
+
             // ─── STEP 3.9: Pelvis expression — acceleration-driven tilt ────────────
             // Compare instantaneous forward speed against a smoothed baseline to
             // detect acceleration (speed rising → forward tilt) or deceleration
@@ -1424,6 +1484,39 @@ namespace PhysicsDrivenMovement.Character
             }
             _smoothedPelvisTiltDeg = Mathf.Lerp(_smoothedPelvisTiltDeg, pelvisTiltTarget,
                 Time.fixedDeltaTime * _pelvisTiltSmoothing);
+
+            // ─── STEP 3.9a: Momentum lean — yaw-rate-driven lateral roll ───────────
+            bool suppressMomentumLeanForJumpPhase = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
+            bool forceZeroMomentumLean = IsFallen ||
+                                         !effectivelyGrounded ||
+                                         _suppressPelvisExpression ||
+                                         suppressMomentumLeanForJumpPhase ||
+                                         _landingAbsorbTimer > 0f;
+            float momentumLeanTarget = 0f;
+            if (!forceZeroMomentumLean &&
+                _momentumLeanMaxDeg > 0f &&
+                _momentumLeanFullTurnRate > 0.001f &&
+                _legAnimator != null)
+            {
+                float normalizedYaw = Mathf.Clamp(_smoothedYawRateDeg / _momentumLeanFullTurnRate, -1f, 1f);
+                momentumLeanTarget = normalizedYaw * _momentumLeanMaxDeg * _legAnimator.SmoothedInputMag;
+            }
+
+            if (forceZeroMomentumLean)
+            {
+                _smoothedYawRateDeg = 0f;
+                _momentumLeanDeg = 0f;
+            }
+            else
+            {
+                _momentumLeanDeg = Mathf.Lerp(
+                    _momentumLeanDeg,
+                    momentumLeanTarget,
+                    Time.fixedDeltaTime * _momentumLeanSmoothing);
+            }
+
+            _momentumLeanDeg = Mathf.Clamp(_momentumLeanDeg, -_momentumLeanMaxDeg, _momentumLeanMaxDeg);
+            DebugMomentumLeanDeg = _momentumLeanDeg;
 
             // ─── STEP 3.10: Transient accel/decel expression lean ───────────────
             // Decays a one-shot forward (or backward) lean impulse set by
@@ -1476,6 +1569,17 @@ namespace PhysicsDrivenMovement.Character
                     uprightTarget = Quaternion.AngleAxis(totalPelvisTilt, tiltAxis) * Vector3.up;
                 }
             }
+
+            if (Mathf.Abs(_momentumLeanDeg) > 0.01f)
+            {
+                Vector3 facingXZ = Vector3.ProjectOnPlane(
+                    _currentBodySupportCommand.FacingDirection, Vector3.up);
+                if (facingXZ.sqrMagnitude > 0.001f)
+                {
+                    uprightTarget = Quaternion.AngleAxis(-_momentumLeanDeg, facingXZ.normalized) * uprightTarget;
+                }
+            }
+
             Quaternion uprightError = Quaternion.FromToRotation(currentUp, uprightTarget);
 
             uprightError.ToAngleAxis(out float uprightAngleDeg, out Vector3 uprightAxis);

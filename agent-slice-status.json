@@ -1,1 +1,1 @@
-{"slice":"05-5","status":"pass","branch":"slice/05-5-arm-swing-variation","notes":"Arm swing variation, phase offset, prefabs, and focused PlayMode regression finished 27/27 green."}
+{"slice":"05-6","status":"pass","branch":"slice/05-6-momentum-lean","notes":"Momentum lean turn expression plus jump-recovery suppression landed; focused PlayMode slice finished 30/30 green."}
