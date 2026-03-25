@@ -19,8 +19,8 @@ namespace PhysicsDrivenMovement.Character
     /// Converts player input into locomotion forces for the active ragdoll hips body.
     /// This component belongs to the Character locomotion system and is responsible for
     /// camera-relative movement, speed limiting, jump impulse, and forwarding facing
-    /// direction intent to <see cref="BalanceController"/> while latching transient button
-    /// input in Update for the next physics step.
+    /// direction intent to <see cref="BalanceController"/> while latching transient jump
+    /// input in Update and deriving sprint state in FixedUpdate for the next physics step.
     /// Jump is only permitted when the character is grounded and in the
     /// <see cref="CharacterStateType.Standing"/> or <see cref="CharacterStateType.Moving"/>
     /// state; a one-frame consume prevents repeated impulses while the button is held.
@@ -50,6 +50,13 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0.01f, 1f)]
         [Tooltip("Seconds for SprintNormalized to blend between walk and sprint while sprint becomes active or inactive.")]
         private float _sprintBlendDuration = 0.25f;
+
+        [Header("Auto-Sprint")]
+        [Tooltip("Seconds of sustained movement before sprint activates automatically.")]
+        [SerializeField] private float _autoSprintDelay = 1.2f;
+
+        [Tooltip("Seconds of zero move input before the auto-sprint timer resets.")]
+        [SerializeField] private float _autoSprintStopGraceWindow = 0.1f;
 
         [SerializeField, Range(0f, 500f)]
         [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
@@ -261,9 +268,18 @@ namespace PhysicsDrivenMovement.Character
         private bool _jumpRequestedThisPhysicsStep;
 
         /// <summary>
-        /// Latest sampled held state of the Sprint button from Update.
-        /// FixedUpdate snapshots this into <see cref="_sprintHeldThisPhysicsStep"/> so
-        /// future physics-owned sprint logic uses a stable value for the current tick.
+        /// Fixed-step timer used to activate sprint after sustained movement.
+        /// </summary>
+        private float _autoSprintTimer;
+
+        /// <summary>
+        /// Remaining zero-input grace time before <see cref="_autoSprintTimer"/> resets.
+        /// </summary>
+        private float _autoSprintStopGraceTimer;
+
+        /// <summary>
+        /// Latest derived sprint-held state before FixedUpdate snapshots it into
+        /// <see cref="_sprintHeldThisPhysicsStep"/> for physics-owned sprint logic.
         /// </summary>
         private bool _sprintHeld;
 
@@ -289,8 +305,8 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>
         /// Override flag set by <see cref="SetSprintInputForTest"/>. When true,
-        /// Update keeps <see cref="_sprintHeld"/> at the test-provided held state and does
-        /// not poll the Input System for sprint.
+        /// FixedUpdate keeps <see cref="_sprintHeld"/> at the test-provided held state and
+        /// skips the auto-sprint timer path.
         /// </summary>
         private bool _overrideSprintInput;
 
@@ -395,11 +411,11 @@ namespace PhysicsDrivenMovement.Character
         }
 
         /// <summary>
-        /// Test seam: directly inject a sprint-button held state, bypassing the Input System.
+        /// Test seam: directly inject a sprint held state, bypassing the auto-sprint timer.
         /// The override persists until the test calls this method again, matching the held-state
         /// behaviour of <see cref="SetMoveInputForTest"/> rather than the one-frame consume used
         /// by <see cref="SetJumpInputForTest"/>.
-        /// Update will not poll the Input System for sprint while this override is active.
+        /// FixedUpdate will not run auto-sprint timing while this override is active.
         /// Do not call from production code.
         /// </summary>
         /// <param name="held">
@@ -500,6 +516,40 @@ namespace PhysicsDrivenMovement.Character
                 {
                     _currentMoveInput = _inputActions.Player.Move.ReadValue<Vector2>();
                 }
+            }
+
+            if (!_overrideSprintInput)
+            {
+                if (_characterState == null)
+                {
+                    TryGetComponent(out _characterState);
+                }
+
+                CharacterStateType currentState = _characterState != null
+                    ? _characterState.CurrentState
+                    : CharacterStateType.Standing;
+                bool hasMoveInput = _currentMoveInput.magnitude > 0.1f;
+                bool canAdvanceAutoSprint = hasMoveInput &&
+                    currentState != CharacterStateType.Fallen &&
+                    currentState != CharacterStateType.GettingUp;
+
+                // STEP 0b: Advance sprint in fixed time so the activation delay stays deterministic
+                //          and SetSprintInputForTest can still short-circuit this entire path.
+                if (canAdvanceAutoSprint)
+                {
+                    _autoSprintStopGraceTimer = _autoSprintStopGraceWindow;
+                    _autoSprintTimer += Time.fixedDeltaTime;
+                }
+                else if (_autoSprintStopGraceTimer > 0f)
+                {
+                    _autoSprintStopGraceTimer = Mathf.Max(0f, _autoSprintStopGraceTimer - Time.fixedDeltaTime);
+                }
+                else
+                {
+                    _autoSprintTimer = 0f;
+                }
+
+                _sprintHeld = _autoSprintTimer >= _autoSprintDelay;
             }
 
             // STEP 1: Snapshot button states sampled in Update for this physics tick.
@@ -648,12 +698,7 @@ namespace PhysicsDrivenMovement.Character
                 _jumpPressedThisFrame |= _inputActions.Player.Jump.WasPressedThisFrame();
             }
 
-            // STEP 3: Keep Sprint as a held-state sample so FixedUpdate can snapshot the
-            //         latest button state without polling the Input System from physics code.
-            if (!_overrideSprintInput)
-            {
-                _sprintHeld = _inputActions.Player.Sprint.IsPressed();
-            }
+            // STEP 3: AUTO-SPRINT: button polling removed.
         }
 
         private void OnDestroy()

@@ -230,8 +230,8 @@ Below is the revised plan incorporating the above findings.
 
 # Plan 08 — Auto-Sprint (Revised)
 
-**Status:** In Design — Opus review complete
-**Current next step:** Slice 1 implementation
+**Status:** Active — Slice 1 implemented, regression pending
+**Current next step:** Run the slice 1 PlayMode regression filter on `slice/08-1-auto-sprint-timer`
 **Branch prefix:** `slice/08-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\auto-sprint\prompts\`
 
@@ -285,7 +285,7 @@ Auto-sprint replaces the input source: instead of a button, sprint activates bas
   - New private state: `float _autoSprintTimer`, `float _autoSprintStopGraceTimer`
   - In `FixedUpdate`, after snapshotting move input: <!-- OPUS: Moved from Update to FixedUpdate for deterministic timing -->
     - If `_overrideSprintInput` is true, skip (test seam preserved)
-    - If move input magnitude > 0.1 AND `CharacterState` is not Fallen: <!-- OPUS: Added CharacterState gate to prevent timer ticking during ragdoll tumble -->
+    - If move input magnitude > 0.1 AND `CharacterState` is not Fallen or GettingUp: <!-- OPUS: Added CharacterState gate to prevent timer ticking during ragdoll tumble/recovery -->
       - Reset `_autoSprintStopGraceTimer = _autoSprintStopGraceWindow`
       - Increment `_autoSprintTimer += Time.fixedDeltaTime`
     - Else if `_autoSprintStopGraceTimer > 0`: decrement grace timer
@@ -298,7 +298,7 @@ Auto-sprint replaces the input source: instead of a button, sprint activates bas
 - Walking forward: character starts at walk speed, ramps to sprint after ~1.2s
 - Stopping and restarting resets the timer — character walks again briefly
 - Existing tests using `SetSprintInputForTest(true/false)` still work (override bypasses timer)
-- Auto-sprint does not activate during stumble recovery (CharacterState != Moving)
+- Auto-sprint does not activate while `CharacterState` is `Fallen` or `GettingUp`
 - Full regression filter green
 
 **Tests:** None — regression run is the gate.
@@ -403,7 +403,7 @@ All tests use horizontal velocity measurements, not `SprintNormalized` checks: <
 
 ## Agent Log
 
-*To be filled as slices complete.*
+- 2026-03-25: Slice 1 implemented on `slice/08-1-auto-sprint-timer`. `PlayerMovement.cs` now derives `_sprintHeld` from fixed-step sustained movement with a stop grace window, preserves `SetSprintInputForTest`, and removes the runtime sprint-button poll. Pending: run the requested PlayMode regression filter.
 
 ---
 
