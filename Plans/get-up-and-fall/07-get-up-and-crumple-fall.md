@@ -1,7 +1,7 @@
 # Plan 07 — Get-Up & Crumple Fall
 
-**Status:** In Design — Opus-reviewed 2026-03-25
-**Current next step:** Slice 1
+**Status:** In Progress — Slices 1, 2a, and hotfix complete ✅
+**Current next step:** Slice 2b (face-up detection)
 **Branch prefix:** `slice/07-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\prompts\`
 
