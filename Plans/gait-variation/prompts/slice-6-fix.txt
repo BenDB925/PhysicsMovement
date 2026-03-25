@@ -1,0 +1,111 @@
+You are fixing three test regressions introduced by Plan 05 Slice 6 (momentum lean) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read the full BalanceController.cs — especially the momentum lean addition (grep for `_momentumLeanMaxDeg`)
+4. Read Assets/Tests/PlayMode/Character/MovementQualityTests.cs in full
+
+---
+
+## CONTEXT
+
+Slice 6 added a lateral momentum lean to BalanceController: when the character turns, `uprightTarget` is rotated sideways into the turn based on smoothed yaw rate. It works well at runtime. But it introduced three test failures.
+
+---
+
+## FAILING TESTS
+
+### 1. `SustainedLocomotionCollapse_TransitionsIntoFallen` — REAL REGRESSION
+**Failure:** "Sustained locomotion collapse should transition into Fallen within 90 frames. Final state: Moving."
+
+**Root cause:** The test uses `ApplySyntheticCollapseEvidence` which calls `hipsBody.MoveRotation(Quaternion.AngleAxis(22f, Vector3.right))` every frame — tilting the hips 22° forward. The momentum lean now modifies `uprightTarget` every FixedUpdate based on yaw rate. Even with zero yaw, the `_prevFacingDirection` tracking may produce a small non-zero `_smoothedYawRateDeg` due to `_currentBodySupportCommand.FacingDirection` changing frame-to-frame as the test drives input. This extra stability contribution delays the character reaching the Fallen threshold within the 90-frame budget.
+
+**Fix options (pick the right one after reading the code):**
+- Option A: Gate the momentum lean on `!IsFallen && effectivelyGrounded && _legAnimator.SmoothedInputMag > 0.05f` — if SmoothedInputMag is also zero during the synthetic collapse (feet pinned, velocity zeroed), the lean contribution will be zero
+- Option B: If SmoothedInputMag IS non-zero during the test: add a check that `_smoothedYawRateDeg` must exceed a minimum threshold (e.g. 5 deg/s) before applying lean — eliminates noise-level contributions
+- Option C: The collapse evidence `supportBehindDistance = 0.42f` is the diagnostic signal. The test may just need 5–10 more frames budget (90 → 100). Only choose this if the momentum lean genuinely contributes at most 1-2 frames of delay.
+
+**Do not change** the `uprightAngleDeg: 22f` value or the fundamental collapse detection logic.
+
+### 2. `TurnAndWalk_CornerRecovery` — BORDERLINE REGRESSION
+**Failure:** "Character stayed in Fallen for 187 consecutive frames (limit 160)."
+
+**Root cause:** The character falls during the 90° corner, then takes 187 frames to get back up (limit 160). The momentum lean during recovery could be fighting the get-up. The lean is already suppressed during `_landingAbsorbTimer > 0` but there is no explicit suppression during `IsFallen` or `GettingUp` states.
+
+**Fix:** Verify the momentum lean is gated off when `IsFallen` is true. If the existing code already gates on `!IsFallen`, then this is a pure timing regression — the 187 vs 160 overshoot (27 frames = 0.27s) is within reasonable threshold bump territory.
+
+Check: is `MaxConsecutiveFallenCorner = 160` a hard physical limit or just a test constant? If the character genuinely recovers in 187 frames consistently (not 300+), bumping to 200 is reasonable. The test constant is for breathing room, not game-logic correctness.
+
+### 3. `CompleteLap_WithinTimeLimit_NoFalls` — LIKELY NOISE / PRE-EXISTING FRAGILITY
+**Failure:** "15/24 gates, LapTime=60.00s — timed out"
+
+This test has always been borderline (GhostDriver + real prefab physics over 60s). The momentum lean on turns could theoretically slow the character through gates. However:
+- The test was passing before slice 6 on this same code
+- 15/24 gates suggests the character is navigating but simply running out of time — not falling or going wrong
+
+**Fix option:** Check if this test was passing reliably in slices 1-5. If it was, the momentum lean may be adding enough lateral correction delay on turns to cost 1-2 seconds. Consider whether `_momentumLeanSmoothing` (currently 6) is too slow to blend out quickly enough after a tight corner.
+
+If this test is genuinely flaky (not deterministically broken): bump `LapTimeFrameLimit` by 5-10% only if you can confirm it was passing consistently before. Do NOT redesign the test or change the course.
+
+---
+
+## WHAT TO DO
+
+1. Read both files fully first
+2. Diagnose which fix option is correct for each failure — don't guess
+3. Implement the minimal fix:
+   - For real regressions: fix the gate condition in BalanceController
+   - For borderline threshold tests: bump the constant by the minimum needed amount, add a comment explaining why
+4. Run the targeted filter and confirm green:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "SustainedLocomotionCollapse_TransitionsIntoFallen|TurnAndWalk_CornerRecovery|CompleteLap_WithinTimeLimit_NoFalls|MomentumLeanTests|MovementQualityTests"
+```
+
+5. If all green, run the full Plan 05 regression filter to confirm nothing new broke:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "OrganicGaitVariationTests|LateralPlacementNoiseTests|StrideAsymmetryTests|IdleSwayTests|IdleVerticalBobTests|ArmSwingVariationTests|MomentumLeanTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|LandingRecoveryTests|MovementQualityTests|LapCourseTests"
+```
+
+---
+
+## CONSTRAINTS
+
+- Minimal changes only — do not redesign the momentum lean feature
+- Do NOT change `uprightAngleDeg: 22f` in the test
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- Prefer fixing gates in BalanceController over bumping test constants
+- If bumping constants: add a one-line comment with the reason and the value before bump
+
+---
+
+## BRANCH
+
+Create branch `fix/05-6-momentum-lean-regressions` from current master HEAD before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `fix(05-6): gate momentum lean and fix collapse/recovery test regressions`
+2. Any additional fixes as needed
+
+After all green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"05-6-fix","status":"pass","branch":"fix/05-6-momentum-lean-regressions","notes":"<one line>"}`
+- Commit: `chore: slice 05-6 regressions fixed - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-6-fix STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
