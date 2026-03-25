@@ -361,9 +361,15 @@ namespace PhysicsDrivenMovement.Character
             CurrentState = newState;
 
             // Clear Fallen-specific state when leaving Fallen for anything other than
-            // GettingUp. GettingUp inherits WasSurrendered and KnockdownSeverityValue so
-            // it can choose the ProceduralStandUp path and gate its Airborne transition.
-            if (newState != CharacterStateType.Fallen && newState != CharacterStateType.GettingUp)
+            // GettingUp or a transient Airborne bounce. GettingUp inherits WasSurrendered
+            // so it can choose the ProceduralStandUp path and gate its Airborne transition.
+            // Airborne is also preserved because the ragdoll can briefly leave the ground
+            // while still in a surrendered fall (grounding raycast flicker) — clearing
+            // WasSurrendered on those bounces causes GettingUp to skip ProceduralStandUp.
+            bool leavingFallen = previousState == CharacterStateType.Fallen;
+            bool preserveSurrender = newState == CharacterStateType.GettingUp
+                || (leavingFallen && newState == CharacterStateType.Airborne);
+            if (!preserveSurrender)
             {
                 _enteredFallenFromCollapse = false;
                 WasSurrendered = false;
