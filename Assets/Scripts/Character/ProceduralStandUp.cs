@@ -325,8 +325,62 @@ namespace PhysicsDrivenMovement.Character
             CurrentPhase = StandUpPhase.Inactive;
             _phaseTimer = 0f;
             _standUpAttempts = 0;
+            NudgeOutOfGeometry();
             _ragdollSetup.ResetSpringProfile(_completionSpringResetDuration);
             OnCompleted?.Invoke();
+        }
+
+        /// <summary>
+        /// On stand-up completion, resolve any collider penetrations so the ragdoll
+        /// isn't wedged into geometry when balance control resumes.
+        /// </summary>
+        private void NudgeOutOfGeometry()
+        {
+            if (_ragdollSetup == null) return;
+
+            const int maxIterations = 3;
+            const float nudgeMargin = 0.01f;
+            int layerMask = ~0; // all layers
+
+            for (int iter = 0; iter < maxIterations; iter++)
+            {
+                bool anyPenetration = false;
+
+                foreach (Rigidbody rb in _ragdollSetup.AllBodies)
+                {
+                    if (rb == null) continue;
+
+                    Collider[] cols = rb.GetComponentsInChildren<Collider>();
+                    foreach (Collider col in cols)
+                    {
+                        if (col == null || !col.enabled) continue;
+
+                        Collider[] overlaps = Physics.OverlapBox(
+                            col.bounds.center,
+                            col.bounds.extents,
+                            col.transform.rotation,
+                            layerMask,
+                            QueryTriggerInteraction.Ignore);
+
+                        foreach (Collider other in overlaps)
+                        {
+                            if (other == col || other.transform.IsChildOf(transform)) continue;
+
+                            if (Physics.ComputePenetration(
+                                col, col.transform.position, col.transform.rotation,
+                                other, other.transform.position, other.transform.rotation,
+                                out Vector3 direction, out float distance))
+                            {
+                                rb.position += direction * (distance + nudgeMargin);
+                                anyPenetration = true;
+                                DebugLog($"NudgeOutOfGeometry: nudged {rb.name} by {direction * (distance + nudgeMargin)} (overlap with {other.name})");
+                            }
+                        }
+                    }
+                }
+
+                if (!anyPenetration) break;
+            }
         }
 
         // ─── Phase Ticks ────────────────────────────────────────────────────
