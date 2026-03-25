@@ -1,0 +1,139 @@
+# Plan 08 Slice 2 — Land Into a Run
+
+## Context
+
+Slice 1 is complete on branch `slice/08-1-auto-sprint-timer`. The character now auto-sprints after 1.2s
+of sustained movement. This slice adds the second feature: landing from a sprint-speed jump flows
+directly into a run without a speed dip.
+
+Before making any changes, read these files in full:
+- `H:\Work\PhysicsDrivenMovementDemo\Plans\auto-sprint\08-auto-sprint.md` (Slice 2 section)
+- `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\PlayerMovement.cs`
+
+Then output a plan listing every file you intend to modify and what you will change in each.
+The plan is pre-approved — proceed immediately after writing it.
+
+---
+
+## Branch
+
+Create branch `slice/08-2-land-into-run` from `slice/08-1-auto-sprint-timer` (NOT from master).
+
+---
+
+## Problem
+
+Currently when landing from a sprint jump:
+1. Horizontal damping fires: retains 75% per-frame over ~8 frames = ~10% of speed survives
+2. Movement force is suppressed for 0.65s via `_jumpPostLandingGraceTimer`
+3. `SprintNormalized` decays to 0 during airborne (CharacterState == Airborne gates sprint off)
+   → This causes walk-animation snap mid-air AND walk-speed on landing
+
+Result: sprint jump → land → visible speed loss + animation snap back to walk.
+
+---
+
+## Changes Required — `PlayerMovement.cs` only
+
+### 1. New serialized fields (add near other jump/sprint fields)
+
+```csharp
+[SerializeField] private float _landIntoRunSprintThreshold = 0.9f;
+[SerializeField] private float _sprintLandingGraceDuration = 0.15f;
+```
+
+### 2. New private state fields
+
+```csharp
+private bool _wasSprintingAtLaunch;
+private float _sprintNormalizedAtLaunch;
+```
+
+### 3. Capture sprint state at wind-up entry
+
+In `TickJumpWindUp()`, where `_jumpPhase` is set to `JumpPhase.WindUp` (around line 796):
+
+```csharp
+_wasSprintingAtLaunch = _sprintNormalized >= _landIntoRunSprintThreshold;
+_sprintNormalizedAtLaunch = _sprintNormalized;
+```
+
+### 4. Freeze SprintNormalized during airborne sprint jumps
+
+In `UpdateSprintNormalized()`, add at the top of the method (before computing targetSprintNormalized):
+
+```csharp
+// Freeze sprint blend during airborne if we launched at sprint speed.
+// Prevents walk-animation snap mid-jump.
+if (_recentJumpAirborne && _wasSprintingAtLaunch)
+{
+    _sprintNormalized = _sprintNormalizedAtLaunch;
+    return;
+}
+```
+
+### 5. Land-into-run on touchdown
+
+In the `_jumpLandingDetected` block (around line 577, where `_jumpLandingDetected = true`):
+
+```csharp
+if (_wasSprintingAtLaunch)
+{
+    // Skip horizontal damping — momentum is preserved passively through inertia.
+    _jumpLandingDampingTimer = 0f;
+
+    // Shorten the movement force suppression window so the character can re-accelerate quickly.
+    _jumpPostLandingGraceTimer = _sprintLandingGraceDuration;
+
+    // Force sprint state directly — same pattern as SetSprintInputForTest.
+    _sprintHeld = true;
+    _autoSprintTimer = _autoSprintDelay; // Keep timer in sync so sprint persists naturally.
+}
+else
+{
+    _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
+}
+```
+
+**Important:** Remove or guard the existing `_jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration`
+assignment that fires unconditionally — the if/else above replaces it.
+
+---
+
+## What NOT to change
+
+- Do NOT touch `SetSprintInputForTest`, `_overrideSprintInput`, or the auto-sprint timer logic from slice 1
+- Do NOT change any test files
+- Do NOT change `_jumpLandingHorizontalDampingFactor` or `_jumpLandingHorizontalDampingDuration` fields
+- Do NOT modify `Run-UnityTests.ps1`
+
+---
+
+## Commit
+
+Single commit on `slice/08-2-land-into-run`:
+```
+feat(08-2): land-into-run - freeze SprintNormalized airborne, skip damping, direct sprint on landing
+```
+
+---
+
+## Verification
+
+After committing, run the test filter:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 1 -Unattended -TestFilter "!LapOptimizer_ComprehensiveFullPrefab"
+```
+
+Expected: same or better than baseline (317/358 passing). Any new failures beyond the 19 known
+pre-existing ones are a regression and must be fixed before this slice is complete.
+
+Write `agent-slice-status.json` at the project root:
+- `{"slice":"08-2-land-into-run","status":"pass","branch":"slice/08-2-land-into-run","notes":"<one line summary>"}` on success
+- `{"slice":"08-2-land-into-run","status":"fail","branch":"slice/08-2-land-into-run","notes":"<what failed>"}` on failure
+
+Then send a Telegram notification:
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[slice-08-2] STATUS: pass/fail. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
