@@ -1,7 +1,7 @@
 # Plan 07 — Get-Up & Crumple Fall
 
-**Status:** In Progress — Slices 1, 2a, and hotfix complete ✅
-**Current next step:** Slice 2b (face-up detection)
+**Status:** Complete — Plan 07 verified with Slice 3 tests ✅
+**Current next step:** Plan 07 COMPLETE
 **Branch prefix:** `slice/07-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\prompts\`
 
@@ -167,13 +167,61 @@ Key traps identified before coding:
 
 ## Parameter Reference
 
-To be filled in after slice 2c tuning. Will include all ProceduralStandUp and crumple fields with tuned prefab values, ranges, and descriptions.
+### ProceduralStandUp
+
+| Field | Current value | Notes |
+| --- | --- | --- |
+| `_orientTorque` | `120` | Prefab override |
+| `_orientTimeout` | `0.6` | Prefab override |
+| `_proneDotThreshold` | `0.5` | Prefab override |
+| `_armPushForce` | `180` | Prefab override |
+| `_armPushSpringMultiplier` | `1.5` | Prefab override |
+| `_armPushTargetHeight` | `0.25` | Prefab override |
+| `_armPushFailHeight` | `0.1` | Prefab override |
+| `_armPushTimeout` | `0.8` | Prefab override |
+| `_armPushHeightSupportScale` | `0.35` | Prefab override |
+| `_armPushUprightSupportScale` | `0.25` | Prefab override |
+| `_armPushStabilizationSupportScale` | `0.15` | Prefab override |
+| `_legTuckSpringMultiplier` | `1.2` | Prefab override |
+| `_legTuckAssistForce` | `80` | Prefab override |
+| `_legTuckTargetHeight` | `0.2` | Prefab override |
+| `_legTuckFailHeight` | `0.12` | Prefab override |
+| `_legTuckTimeout` | `0.7` | Prefab override |
+| `_legTuckHeightSupportScale` | `0.55` | Prefab override |
+| `_legTuckUprightSupportScale` | `0.5` | Prefab override |
+| `_legTuckStabilizationSupportScale` | `0.35` | Prefab override |
+| `_standSpringMultiplier` | `2.0` | Prefab override |
+| `_standUprightRampDuration` | `0.4` | Prefab override |
+| `_standHeightRampDuration` | `0.3` | Prefab override |
+| `_standStabilizationRampDuration` | `0.3` | Prefab override |
+| `_standStabilizationTarget` | `0.8` | Prefab override |
+| `_standTimeout` | `0.5` | Prefab override |
+| `_standHeightFraction` | `0.9` | Prefab override |
+| `_maxStandUpAttempts` | `3` | Prefab override |
+| `_forcedStandImpulse` | `350` | Prefab override |
+| `_forcedStandFrames` | `8` | Script default, not serialized on prefab |
+| `_completionSpringResetDuration` | `0.2` | Prefab override |
+| `_phaseSupportRampDuration` | `0.15` | Prefab override |
+
+### Crumple / Surrender
+
+| Field | Current value | Notes |
+| --- | --- | --- |
+| `_fallenEnterAngleThreshold` | `65` | Prefab override |
+| `_fallenExitAngleThreshold` | `55` | Prefab override |
+| `_surrenderAngleThreshold` | `80` | Prefab override |
+| `_surrenderAnglePlusMomentumThreshold` | `65` | Prefab override |
+| `_surrenderAngularVelocityThreshold` | `3` | Prefab override |
+| `_clearSurrenderRampDuration` | `0.35` | Prefab override |
+| `_surrenderCrumpleDuration` | `0.25` | Script default, not serialized on prefab |
+
+Current crumple spring profile target applied by `TriggerSurrender`: `SetSpringProfile(0.05f, 0.08f, 0.05f, _surrenderCrumpleDuration)`.
 
 ---
 
 ## Agent Log
 
-_To be filled in as slices complete._
+- 2026-03-25 — Slice 3 complete on `slice/07-3-tests`. Added `GetUpTests` and `FallCrumpleTests`, verified the new slice 5/5 green, and reran the prompt regression filter. Broad filter still shows baseline/order-sensitive failures in locomotion/landing suites; isolated `JumpTests` and `LandingRecoveryTests` pass standalone.
 
 ---
 
