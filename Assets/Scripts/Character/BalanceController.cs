@@ -1486,9 +1486,11 @@ namespace PhysicsDrivenMovement.Character
                 Time.fixedDeltaTime * _pelvisTiltSmoothing);
 
             // ─── STEP 3.9a: Momentum lean — yaw-rate-driven lateral roll ───────────
+            bool suppressMomentumLeanForJumpPhase = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
             bool forceZeroMomentumLean = IsFallen ||
                                          !effectivelyGrounded ||
                                          _suppressPelvisExpression ||
+                                         suppressMomentumLeanForJumpPhase ||
                                          _landingAbsorbTimer > 0f;
             float momentumLeanTarget = 0f;
             if (!forceZeroMomentumLean &&
@@ -1502,6 +1504,7 @@ namespace PhysicsDrivenMovement.Character
 
             if (forceZeroMomentumLean)
             {
+                _smoothedYawRateDeg = 0f;
                 _momentumLeanDeg = 0f;
             }
             else
