@@ -62,6 +62,7 @@ namespace PhysicsDrivenMovement.Character
         private float _fallenTimer;
         private float _gettingUpTimer;
         private float _collapseDeferralTimer;
+        private float _airborneLimboTimer;
         private float _activeFloorDwellTargetTime;
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
@@ -247,7 +248,25 @@ namespace PhysicsDrivenMovement.Character
                     }
                     else if (!shouldBeAirborne && isGrounded)
                     {
+                        _airborneLimboTimer = 0f;
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
+                    }
+                    else
+                    {
+                        // Limbo escape: stuck on geometry (e.g. knees on ledge, feet dangling).
+                        // Upright but not grounded, velocity near zero for an extended period.
+                        float hipSpeed = _rb != null ? _rb.linearVelocity.magnitude : 0f;
+                        bool likelyStuck = hipSpeed < 0.15f && _balanceController.UprightAngle * Mathf.Rad2Deg < 45f;
+                        if (likelyStuck)
+                            _airborneLimboTimer += Time.fixedDeltaTime;
+                        else
+                            _airborneLimboTimer = 0f;
+
+                        if (_airborneLimboTimer >= 1.5f)
+                        {
+                            _airborneLimboTimer = 0f;
+                            nextState = CharacterStateType.Standing;
+                        }
                     }
                     break;
 
