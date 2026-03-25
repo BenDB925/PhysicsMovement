@@ -349,6 +349,18 @@ namespace PhysicsDrivenMovement.Character
         public float SprintNormalized => _sprintNormalized;
 
         /// <summary>
+        /// Grounded walk-speed cap used by the movement force limiter.
+        /// Exposed so outcome-based tests can derive thresholds from the prefab config.
+        /// </summary>
+        public float MaxSpeed => _maxSpeed;
+
+        /// <summary>
+        /// Multiplier applied on top of <see cref="MaxSpeed"/> while sprint is active.
+        /// Exposed so outcome-based tests can derive sprint thresholds from the prefab config.
+        /// </summary>
+        public float SprintSpeedMultiplier => _sprintSpeedMultiplier;
+
+        /// <summary>
         /// Current phase of the multi-frame jump sequence.
         /// <see cref="JumpPhase.None"/> outside of a jump.
         /// </summary>
@@ -434,6 +446,20 @@ namespace PhysicsDrivenMovement.Character
             _sprintHeld = held;
             _sprintHeldThisPhysicsStep = held;
             _overrideSprintInput = true;
+        }
+
+        /// <summary>
+        /// Test seam: clear the sprint-input override so FixedUpdate resumes the real auto-sprint timer path.
+        /// Also resets the derived sprint state so the next movement window starts from walk.
+        /// Do not call from production code.
+        /// </summary>
+        public void ClearSprintInputOverrideForTest()
+        {
+            _overrideSprintInput = false;
+            _sprintHeld = false;
+            _sprintHeldThisPhysicsStep = false;
+            _autoSprintTimer = 0f;
+            _autoSprintStopGraceTimer = 0f;
         }
 
         /// <summary>
