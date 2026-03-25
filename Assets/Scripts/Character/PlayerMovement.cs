@@ -58,6 +58,10 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Seconds of zero move input before the auto-sprint timer resets.")]
         [SerializeField] private float _autoSprintStopGraceWindow = 0.1f;
 
+        [SerializeField] private float _landIntoRunSprintThreshold = 0.9f;
+
+        [SerializeField] private float _sprintLandingGraceDuration = 0.15f;
+
         [SerializeField, Range(0f, 500f)]
         [Tooltip("Impulse magnitude applied to the Hips Rigidbody on a valid jump. " +
                  "Jump is only allowed from Standing or Moving state while grounded.")]
@@ -255,6 +259,9 @@ namespace PhysicsDrivenMovement.Character
 
         /// <summary>Raw move-input direction captured at jump launch so recent-jump consumers can strip pure reverse intent even when world-space travel direction is ambiguous.</summary>
         private Vector2 _jumpAirborneLaunchMoveInput;
+
+        private bool _wasSprintingAtLaunch;
+        private float _sprintNormalizedAtLaunch;
 
         private readonly List<JumpTelemetryEvent> _jumpTelemetryLog = new List<JumpTelemetryEvent>(JumpTelemetryCapacity);
         private int _jumpAttemptCounter;
@@ -575,14 +582,23 @@ namespace PhysicsDrivenMovement.Character
                 if (!_jumpLandingDetected)
                 {
                     _jumpLandingDetected = true;
-                    _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
 
-                    // STEP 1c: Start a short touchdown damping window so some of the
-                    //          preserved sprint carry bleeds off before it can tip the torso.
-                    if (_jumpLandingHorizontalDampingFactor < 0.9999f &&
-                        _jumpLandingHorizontalDampingDuration > 0f)
+                    if (_wasSprintingAtLaunch)
                     {
+                        _jumpLandingDampingTimer = 0f;
+                        _jumpPostLandingGraceTimer = _sprintLandingGraceDuration;
+                        _sprintHeld = true;
+                        _autoSprintTimer = _autoSprintDelay;
+                    }
+                    else if (_jumpLandingHorizontalDampingFactor < 0.9999f &&
+                             _jumpLandingHorizontalDampingDuration > 0f)
+                    {
+                        _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
                         _jumpLandingDampingTimer = _jumpLandingHorizontalDampingDuration;
+                    }
+                    else
+                    {
+                        _jumpPostLandingGraceTimer = _jumpPostLandingGraceDuration;
                     }
                 }
                 else if (_jumpPostLandingGraceTimer > 0f)
@@ -789,6 +805,8 @@ namespace PhysicsDrivenMovement.Character
             _activeJumpAttemptId = attemptId;
             _committedJumpMoveInput = Vector2.ClampMagnitude(_currentMoveInput, 1f);
             _jumpLandingDampingTimer = 0f;
+            _wasSprintingAtLaunch = _sprintNormalized >= _landIntoRunSprintThreshold;
+            _sprintNormalizedAtLaunch = _sprintNormalized;
 
             // All gates passed — enter wind-up phase (C8.5a).
             if (_jumpWindUpDuration > 0f)
@@ -1405,6 +1423,14 @@ namespace PhysicsDrivenMovement.Character
 
         private void UpdateSprintNormalized()
         {
+            // STEP 0: Freeze sprint blend during recent jump airborne if the launch already
+            //         qualified as sprint-speed so airborne animation stays on the run path.
+            if (_recentJumpAirborne && _wasSprintingAtLaunch)
+            {
+                _sprintNormalized = _sprintNormalizedAtLaunch;
+                return;
+            }
+
             // STEP 1: Convert the current sprint activation state into a stable walk/sprint target.
             float targetSprintNormalized = GetSprintNormalizedTarget();
 
