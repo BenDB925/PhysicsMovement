@@ -19,7 +19,7 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Tooltip("Maximum time (s) before advancing regardless of orientation.")]
         private float _orientTimeout = 0.6f;
 
-        [SerializeField, Tooltip("Dot(hips.forward, down) above which the character counts as prone.")]
+        [SerializeField, Tooltip("Dot(hips.up, down) above which the character counts as prone.")]
         private float _proneDotThreshold = 0.5f;
 
         // ─── Phase 1: Arm Push ──────────────────────────────────────────────
@@ -139,6 +139,12 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>True while the stand-up sequence is running.</summary>
         public bool IsActive => CurrentPhase != StandUpPhase.Inactive;
 
+        /// <summary>True when the hips up-vector points toward world-up (character is lying on their back).</summary>
+        public bool IsFaceUp => _hipsRb != null && Vector3.Dot(_hipsRb.transform.up, Vector3.up) > 0.3f;
+
+        /// <summary>True when the hips up-vector points toward world-down (character is lying face-down/prone).</summary>
+        public bool IsFaceDown => _hipsRb != null && Vector3.Dot(_hipsRb.transform.up, Vector3.up) < -0.3f;
+
         /// <summary>Raised when a phase completes successfully and the next phase begins.</summary>
         public event Action OnPhaseCompleted;
 
@@ -160,7 +166,7 @@ namespace PhysicsDrivenMovement.Character
 
             CacheRigidbodies();
             CaptureGroundY();
-            DebugLog($"Begin called. Attempts={_standUpAttempts}/{_maxStandUpAttempts}. FaceUp={Vector3.Dot(_hipsRb != null ? _hipsRb.transform.up : Vector3.up, Vector3.up):F2}. GroundY={_groundY:F3}");
+            DebugLog($"Begin called. Attempts={_standUpAttempts}/{_maxStandUpAttempts}. IsFaceUp={IsFaceUp}. IsFaceDown={IsFaceDown}. GroundY={_groundY:F3}");
 
             if (_standUpAttempts > _maxStandUpAttempts)
             {
@@ -329,19 +335,22 @@ namespace PhysicsDrivenMovement.Character
         {
             if (_hipsRb == null) { AdvancePhase(); return; }
 
-            float proneDot = Vector3.Dot(_hipsRb.transform.forward, Vector3.down);
+            float proneProgress = Vector3.Dot(_hipsRb.transform.up, Vector3.down);
 
             // Already face-down — skip immediately.
-            if (proneDot >= _proneDotThreshold)
+            if (proneProgress >= _proneDotThreshold)
             {
+                DebugLog($"OrientProne: proneProgress={proneProgress:F2} threshold={_proneDotThreshold:F2} faceUp={IsFaceUp}");
                 AdvancePhase();
                 return;
             }
 
-            // Apply rolling torque toward belly-down.
-            Vector3 currentForward = _hipsRb.transform.forward;
-            Vector3 desiredForward = Vector3.down;
-            Vector3 rollAxis = Vector3.Cross(currentForward, desiredForward).normalized;
+            // Roll hips so the up-vector points toward world-down (prone/face-down).
+            // Cross(hipsUp, targetUp) gives the shortest-arc rotation axis regardless of
+            // whether the character is currently face-up or face-down.
+            Vector3 hipsUp = _hipsRb.transform.up;
+            Vector3 desiredUp = Vector3.down;
+            Vector3 rollAxis = Vector3.Cross(hipsUp, desiredUp).normalized;
             if (rollAxis.sqrMagnitude > 0.001f)
             {
                 _hipsRb.AddTorque(rollAxis * _orientTorque, ForceMode.Force);
