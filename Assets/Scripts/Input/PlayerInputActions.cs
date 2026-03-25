@@ -100,9 +100,6 @@ namespace PhysicsDrivenMovement.Input
             _playerJump.AddBinding("<Keyboard>/space");
             _playerJump.AddBinding("<Gamepad>/buttonSouth");
 
-            _playerSprint.AddBinding("<Keyboard>/leftShift");
-            _playerSprint.AddBinding("<Gamepad>/leftStickPress");
-
             _playerGrab.AddBinding("<Keyboard>/leftShift");
             _playerGrab.AddBinding("<Gamepad>/leftTrigger");
 

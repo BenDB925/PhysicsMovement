@@ -151,28 +151,6 @@
                 },
                 {
                     "name": "",
-                    "id": "9c5c6dc1-7f2c-48fe-aa9e-0cd25c8a1c84",
-                    "path": "<Keyboard>/leftShift",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Sprint",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "c2c92d2d-7b76-4c8d-96db-79b7ae1a2db0",
-                    "path": "<Gamepad>/leftStickPress",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Sprint",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
                     "id": "b52f9557-54e9-4c6c-a7e2-5a0ca4439ec6",
                     "path": "<Keyboard>/leftShift",
                     "interactions": "",
