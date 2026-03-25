@@ -1,0 +1,139 @@
+You are implementing Slice 7 of Plan 05 (Organic Movement & Gait Variation) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1–6 are complete and merged to master. The organic movement system is fully implemented:
+- Slice 1: Per-stride step angle noise (±8° walk, ±4° sprint)
+- Slice 2: Lateral foot placement variation
+- Slice 3: Stride length asymmetry (_leftStrideAsymmetry=1.04, _rightStrideAsymmetry=1.0)
+- Slice 4A: Idle lateral sway (physics perturbation, ~0.8Hz)
+- Slice 4B: Idle vertical bob (~0.3Hz) + micro-adjustment step
+- Slice 5: Arm swing amplitude variation (±12%) + left arm phase offset (0.05 rad)
+- Slice 6: Momentum lean on direction change (lateral tilt into turns)
+
+All gated by `_disableOrganicVariation` on LegAnimator.
+
+---
+
+## YOUR TASK: Slice 7 — Regression Gate + Parameter Summary
+
+This slice has NO new gameplay code. It is purely:
+1. Run the regression test suite to confirm everything is still green
+2. Update the plan doc with a complete parameter reference table
+3. Mark Plan 05 as complete
+
+---
+
+### Step 1: Run the regression suite
+
+Run the following test filter and report results:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "OrganicGaitVariationTests|LateralPlacementNoiseTests|StrideAsymmetryTests|IdleSwayTests|IdleVerticalBobTests|ArmSwingVariationTests|MomentumLeanTests|JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|LandingRecoveryTests|BalanceControllerTests|MovementQualityTests|LapCourseTests"
+```
+
+Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
+
+If any tests fail:
+- Report exactly which tests failed and what the failure message says
+- Do NOT attempt to fix them — write `agent-slice-status.json` with status "fail" and the failing test names in notes
+- Send the Telegram ping with fail status
+- Stop
+
+If all tests pass: continue to Step 2.
+
+---
+
+### Step 2: Write the parameter reference table
+
+Append a new section to the plan doc at:
+`H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md`
+
+The section should be titled `## Parameter Reference (Prefab Tuning Guide)` and contain a markdown table with every organic variation parameter, its component, current prefab value, range, and one-line description of what turning it up/down does.
+
+Include ALL of the following parameters:
+
+**LegAnimator.cs:**
+| Parameter | Prefab Value | Range | Effect |
+|-----------|-------------|-------|--------|
+| `_noiseSeed` | 42 | int | Changes character's movement "personality" — different seed = different organic pattern |
+| `_disableOrganicVariation` | false | bool | Master kill-switch — true = fully deterministic, used by tests |
+| `_idleSwayForce` | 15 | 0–100 N | Higher = more pronounced weight shifts at idle |
+| `_idleSwayFrequency` | 0.8 | 0.1–5 Hz | Higher = faster side-to-side rhythm |
+| `_idleSwayEnterDelay` | 0.5 | 0–2 s | Seconds idle before sway starts |
+| `_idleSwayFadeOutDuration` | 0.3 | 0.05–2 s | How quickly sway fades when movement resumes |
+| `_idleBobAmplitude` | 0.004 | 0–0.02 m | Height of breathing bob — 4mm default is subtle |
+| `_idleBobFrequency` | 0.3 | 0.05–2 Hz | Bob rate — 0.3Hz ≈ once per 3s |
+| `_microStepIdleDelay` | 2.5 | 0.5–10 s | How long before corrective micro-step fires |
+| `_microStepDriftThreshold` | 0.01 | 0.001–0.05 m | Drift required to trigger micro-step |
+| `_microStepCooldown` | 1.5 | 0.1–5 s | Minimum time between micro-steps |
+| `_leftStrideAsymmetry` | 1.04 | 1.0–2.0 | Left leg stride multiplier — 1.04 = 4% longer |
+| `_rightStrideAsymmetry` | 1.0 | 1.0–2.0 | Right leg stride multiplier |
+
+**ArmAnimator.cs:**
+| Parameter | Prefab Value | Range | Effect |
+|-----------|-------------|-------|--------|
+| `_armAmplitudeVariation` | 0.12 | 0–0.3 | Per-stride arm amplitude randomness — 0.12 = ±12% |
+| `_leftArmPhaseOffset` | 0.05 | -0.2–0.2 rad | Phase lead/lag of left arm vs right — subtle timing asymmetry |
+
+**BalanceController.cs:**
+| Parameter | Prefab Value | Range | Effect |
+|-----------|-------------|-------|--------|
+| `_momentumLeanMaxDeg` | 2.5 | 0–8° | Max lateral lean into turns |
+| `_momentumLeanFullTurnRate` | 200 | 30–540 deg/s | Yaw rate that produces full lean — lower = leans on gentler turns |
+| `_momentumLeanSmoothing` | 6 | 1–20 | Higher = lean responds faster to direction changes |
+
+Add a short paragraph before the table:
+> All organic variation parameters are prefab overrides. The `_noiseSeed` alone defines the character's personality — changing it produces an entirely different movement pattern while preserving all the same ranges and behaviours. Set `_disableOrganicVariation = true` on LegAnimator to restore fully deterministic movement for debugging or testing.
+
+---
+
+### Step 3: Mark plan as complete
+
+Update the plan doc header status line from its current value to:
+`**Status:** Complete ✅ — all 7 slices shipped (2026-03-25)`
+
+Also update `.copilot-instructions.md` at `H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md`:
+- Find the line referencing Plan 05 and mark it complete with today's date (2026-03-25)
+
+---
+
+### Step 4: Commit
+
+Single commit:
+`docs: Plan 05 complete - regression green, add parameter reference table`
+
+---
+
+## CONSTRAINTS
+
+- Do NOT modify any .cs scripts (no code changes in this slice)
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- If tests fail, stop immediately — do not attempt fixes
+
+---
+
+## After all steps done
+
+Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+`{"slice":"05-7","status":"pass","branch":"master","notes":"N tests green; parameter reference table written; Plan 05 marked complete."}`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-7 STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
