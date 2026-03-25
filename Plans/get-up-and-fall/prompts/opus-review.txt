@@ -1,0 +1,42 @@
+You are reviewing a plan document for a Unity physics game before implementation begins. Your job is to sense-check it, identify any slices that are too large for a single agent run, and suggest where results-based tests would be most valuable.
+
+---
+
+## CONTEXT
+
+This is an active-ragdoll physics game (Unity 6000.1.9f1, 100Hz FixedUpdate, 12 solver iterations). The character is always a ragdoll — locomotion, balance, and recovery all come from forces and joint targets, never animation controllers.
+
+**Relevant existing files to read before reviewing:**
+
+1. `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\ProceduralStandUp.cs` — the existing 4-phase get-up system
+2. `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\CharacterState.cs` — how ProceduralStandUp is invoked (search for `_proceduralStandUp`)
+3. `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\BalanceController.cs` — surrender trigger and spring profile system (search for `TriggerSurrender`, `SetSpringProfile`, `RampSpringProfile`)
+
+**The plan to review:**
+`H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md`
+
+---
+
+## YOUR TASK
+
+Read all four files above. Then answer the following:
+
+### 1. Slice sizing
+For each slice, give your honest assessment: is it the right size for a single 2-hour agent run? Too big? Could it be split? Flag anything that looks like it could silently balloon.
+
+### 2. Test design
+The plan proposes tests in slice 3. Are these the right tests? Are there any missing assertions that would catch regressions we're likely to hit? Is there anything in slices 1 or 2 that should have a test gate before proceeding to the next slice?
+
+### 3. Risk flags
+Anything in the existing code that could cause surprising behaviour during implementation — e.g. interactions between ProceduralStandUp and BalanceController that the plan doesn't account for, edge cases in the phase transitions, or anything that looks fragile.
+
+### 4. Recommended changes
+Concrete suggestions only. If a slice is fine as-is, say so. If you'd split or reorder something, say exactly how.
+
+---
+
+## OUTPUT FORMAT
+
+Keep it tight. Use headers matching the 4 sections above. Bullet points. No filler. This is going straight to the developer.
+
+Do NOT make any code changes. Do NOT create any files. Read and review only.
