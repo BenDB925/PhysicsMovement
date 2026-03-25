@@ -1,1 +1,1 @@
-{"slice":"05-6-fix","status":"pass","branch":"fix/05-6-momentum-lean-regressions","notes":"3 target tests are pre-existing reds (confirmed failing on pre-slice-6 commit 46b1f59); added min yaw rate + upright angle cutoff gates to prevent lean from worsening them; 60/64 green, 4 failures all pre-existing or order-sensitive"}
+{"slice":"07-2a-hotfix","status":"pass","branch":"master","notes":"Slice 1 + 2a + GettingUp dwell hotfix all merged. Jump-on-standup confirmed fixed by Benny."}
