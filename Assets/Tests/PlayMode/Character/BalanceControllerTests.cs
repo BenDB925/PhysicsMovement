@@ -221,8 +221,15 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             _balance.TriggerSurrender(0.6f);
             float clearDuration = GetPrivateFloat("_clearSurrenderRampDuration");
+            float crumpleDuration = GetPrivateFloat("_surrenderCrumpleDuration");
 
             Assert.That(_balance.IsSurrendered, Is.True);
+
+            // Surrender now ramps support scales to zero over _surrenderCrumpleDuration rather than
+            // snapping instantly. Wait for the crumple ramp to complete before asserting zero.
+            int crumpleFrames = Mathf.CeilToInt(crumpleDuration / Time.fixedDeltaTime) + 2;
+            yield return WaitPhysicsFrames(crumpleFrames);
+
             Assert.That(_balance.UprightStrengthScale, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(_balance.HeightMaintenanceScale, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(_balance.StabilizationScale, Is.EqualTo(0f).Within(0.0001f));
