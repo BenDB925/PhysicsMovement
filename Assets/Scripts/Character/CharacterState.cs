@@ -368,7 +368,8 @@ namespace PhysicsDrivenMovement.Character
             // WasSurrendered on those bounces causes GettingUp to skip ProceduralStandUp.
             bool leavingFallen = previousState == CharacterStateType.Fallen;
             bool preserveSurrender = newState == CharacterStateType.GettingUp
-                || (leavingFallen && newState == CharacterStateType.Airborne);
+                || (leavingFallen && newState == CharacterStateType.Airborne)
+                || (newState == CharacterStateType.Fallen && WasSurrendered); // Airborne→Fallen bounce during crumple
             if (!preserveSurrender)
             {
                 _enteredFallenFromCollapse = false;
