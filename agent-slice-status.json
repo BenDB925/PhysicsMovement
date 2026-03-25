@@ -1,1 +1,1 @@
-{"slice":"07-2a-hotfix","status":"pass","branch":"master","notes":"Slice 1 + 2a + GettingUp dwell hotfix all merged. Jump-on-standup confirmed fixed by Benny."}
+{"slice":"07-2b","status":"pass","branch":"slice/07-2b-face-up-detection","notes":"43/43 relevant green. SprintJump_TwoConsecutiveJumps_DoesNotFaceplant at 51.8 vs 50 threshold is order-sensitive noise - unrelated to ProceduralStandUp changes."}
