@@ -1,0 +1,180 @@
+# Plan 08 Slice 3 — Tests & Cleanup
+
+## Context
+
+Slices 1 and 2 are complete on branch `slice/08-2-land-into-run`.
+- Slice 1: auto-sprint timer replaces sprint button input
+- Slice 2: land-into-run preserves momentum through sprint landings
+
+This slice locks in both features with results-based tests, removes the sprint button binding,
+and updates the affected EditMode tests.
+
+Before making any changes, read these files in full:
+- `H:\Work\PhysicsDrivenMovementDemo\Plans\auto-sprint\08-auto-sprint.md` (Slice 3 section)
+- `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\PlayerMovement.cs`
+- `H:\Work\PhysicsDrivenMovementDemo\Assets\Tests\EditMode\Input\PlayerInputActionsTests.cs`
+
+Then output a plan listing every file you intend to modify and what you will change in each.
+The plan is pre-approved — proceed immediately after writing it.
+
+---
+
+## Branch
+
+Create branch `slice/08-3-tests-cleanup` from `slice/08-2-land-into-run` (NOT from master).
+
+---
+
+## Changes Required
+
+### 1. New test file: `Assets/Tests/PlayMode/Character/AutoSprintTests.cs`
+
+Use the `PlayerPrefabTestRig` harness (same pattern as `LandingRecoveryTests.cs`).
+All tests measure **horizontal velocity / displacement**, NOT `SprintNormalized`.
+
+Derive thresholds from actual prefab config rather than magic numbers:
+- Walk speed cap: `_rig.PlayerMovement.MaxSpeed` (prefab value ~5 m/s)
+- Sprint speed cap: `_rig.PlayerMovement.MaxSpeed * _rig.PlayerMovement.SprintSpeedMultiplier` (~9 m/s)
+
+You'll need to expose these as public read-only properties if they don't already exist.
+Add to `PlayerMovement.cs` if missing:
+```csharp
+public float MaxSpeed => _maxSpeed;
+public float SprintSpeedMultiplier => _sprintSpeedMultiplier;
+```
+
+**Helper:** measure horizontal speed as `new Vector2(vel.x, vel.z).magnitude`.
+
+**Test class boilerplate** (copy SetUp/TearDown pattern from LandingRecoveryTests.cs including
+physics isolation - save/restore fixedDeltaTime and solver iterations).
+
+---
+
+#### Test 1: `AutoSprint_WalkRampsToSprintAfterDelay`
+
+```
+SetMoveInputForTest(Vector2.up)
+SetSprintInputForTest — do NOT call this (let auto-sprint drive it)
+```
+
+- Warm up 30 frames (settled, not yet moving for long)
+- Apply move input. Run 80 frames (~0.8s — before 1.2s threshold)
+- Assert horizontal speed < walkSpeedCap * 1.2 (still at walk pace)
+- Continue running to 220 frames total (~2.2s — well past threshold + blend)
+- Assert horizontal speed > walkSpeedCap * 1.5 (clearly in sprint territory)
+
+---
+
+#### Test 2: `AutoSprint_StoppingResetsTimer`
+
+- Warm up 30 frames
+- Apply move input. Run 220 frames (reach sprint)
+- Assert at sprint: speed > walkSpeedCap * 1.5
+- Remove move input. Run 20 frames (0.2s — past 0.1s grace window)
+- Reapply move input. Run 80 frames
+- Assert back to walk pace: speed < walkSpeedCap * 1.2 (timer reset, walking again)
+
+---
+
+#### Test 3: `AutoSprint_LandIntoRun_MaintainsSpeed`
+
+- Warm up 30 frames
+- Ramp to sprint: SetMoveInputForTest(Vector2.up), run 220 frames
+- Record pre-jump horizontal speed as `preJumpSpeed`
+- SetJumpInputForTest(true), yield WaitForFixedUpdate, SetJumpInputForTest(false)
+- Run up to 300 frames waiting for: first go airborne (IsGrounded == false), then land (IsGrounded == true)
+- Once landed, run 15 more frames
+- Assert horizontal speed > preJumpSpeed * 0.75
+  (75% threshold — some physics deceleration is fine, a full stop is not)
+
+---
+
+#### Test 4: `AutoSprint_WalkJump_DoesNotLandAtSprintSpeed`
+
+- Warm up 30 frames
+- SetSprintInputForTest(false) — force walk (override)
+- SetMoveInputForTest(Vector2.up), run 30 frames (walking, not sprinting)
+- SetJumpInputForTest(true), yield WaitForFixedUpdate, SetJumpInputForTest(false)
+- Wait up to 200 frames for land (same airborne→grounded pattern)
+- Once landed, run 30 more frames
+- Assert horizontal speed < walkSpeedCap * 1.3 (not at sprint speed)
+
+---
+
+### 2. Remove sprint button binding from `PlayerInputActions.inputactions`
+
+File: `Assets/Scripts/Input/PlayerInputActions.inputactions`
+
+The file is JSON. Remove the two binding entries that reference the Sprint action
+(lines ~159-171 roughly — the `<Keyboard>/leftShift` and `<Gamepad>/leftStickPress` bindings).
+Do NOT remove the Sprint action definition itself (line ~27) — it may be referenced in generated C#.
+
+**How to find them:** search for `"action": "Sprint"` — remove those binding objects from the
+`"bindings"` array. Be careful with JSON formatting — ensure the array remains valid after removal
+(no trailing commas).
+
+---
+
+### 3. Update `Assets/Tests/EditMode/Input/PlayerInputActionsTests.cs`
+
+Replace both existing tests with a single test that confirms the Sprint action still EXISTS
+(as an action) but has NO bindings:
+
+```csharp
+[Test]
+public void SprintAction_ExistsButHasNoBindings()
+{
+    using PlayerInputActions actions = new PlayerInputActions();
+    InputAction sprint = actions.Player.Get().FindAction("Sprint");
+    Assert.That(sprint, Is.Not.Null, "Sprint action should still exist in the action map.");
+    Assert.That(sprint.bindings.Count, Is.EqualTo(0),
+        "Sprint action should have no bindings — auto-sprint replaces button input.");
+}
+```
+
+---
+
+## What NOT to change
+
+- Do NOT touch `PlayerMovement.cs` auto-sprint or land-into-run logic
+- Do NOT touch `SprintJumpStabilityTests.cs` (already updated in slice 2)
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT remove the Sprint action entirely from the input asset (only remove bindings)
+
+---
+
+## Commits
+
+Two commits on `slice/08-3-tests-cleanup`:
+
+1. `test(08-3): add AutoSprintTests - walk ramp, reset, land-into-run, walk-jump`
+2. `chore(08-3): remove sprint button bindings, update PlayerInputActionsTests`
+
+---
+
+## Verification
+
+After committing, run the test filter:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 1 -Unattended -TestFilter "AutoSprintTests"
+```
+
+All 4 new tests must pass.
+
+Then run the full filter:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 1 -Unattended -TestFilter "!LapOptimizer_ComprehensiveFullPrefab"
+```
+
+Expected: same or better than baseline (317/358). Any new failures beyond the 19 known
+pre-existing ones are a regression and must be fixed.
+
+Write `agent-slice-status.json` at the project root:
+- `{"slice":"08-3-tests-cleanup","status":"pass","branch":"slice/08-3-tests-cleanup","notes":"<one line summary>"}` on success
+- `{"slice":"08-3-tests-cleanup","status":"fail","branch":"slice/08-3-tests-cleanup","notes":"<what failed>"}` on failure
+
+Then send a Telegram notification:
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[slice-08-3] STATUS: pass/fail. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
