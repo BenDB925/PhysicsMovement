@@ -1046,6 +1046,8 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   _restAbductionAngle: 12
+  _armAmplitudeVariation: 0.12
+  _leftArmPhaseOffset: 0.05
   _braceSwingDampen: 0.2
   _braceElbowBendBoost: 20
   _braceBlendSpeed: 10

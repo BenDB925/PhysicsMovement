@@ -1395,9 +1395,10 @@ MonoBehaviour:
   _stepFrequencyScale: 0.1
   _stepFrequency: 1.25
   _kneeAngle: 65
+  _armAmplitudeVariation: 0.12
+  _leftArmPhaseOffset: 0.05
   _upperLegLiftBoost: 45
   _stepUpClearanceReferenceHeight: 0.1
-  _stepUpClearanceSwingBoost: 16
   _stepUpClearanceKneeBoost: 42
   _idleBlendSpeed: 5
   _swingAxis: {x: 1, y: 0, z: 0}
