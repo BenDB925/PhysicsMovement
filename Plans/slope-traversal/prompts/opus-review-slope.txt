@@ -1,0 +1,81 @@
+You are reviewing a plan for a new Unity physics feature in the PhysicsDrivenMovementDemo project.
+
+## Project context
+- Unity 6000.3.9f1, 100Hz FixedUpdate, 12 solver iterations, physics-driven active ragdoll
+- All character scripts live on the Hips child of PlayerRagdoll prefab
+- Existing slope-related infrastructure: `surfaceNormalQuality` in `StepPlanner` / `FootContactObservation`; `ApplyStepUpFootLiftAssist` in BalanceController
+- Test pattern: results-based PlayMode tests measuring observable physical outcomes
+- Each "slice" = one agent session pasted into VS Code Copilot Chat (~2h max, ~2-3 files)
+- Game: handcrafted Wipeout/Only Up-style obstacle course — inclines are core to the experience
+
+## The plan
+
+---
+
+# Plan 09 — Slope Traversal
+
+The character currently struggles on inclines — feet don't plant correctly on slopes, height maintenance fights the terrain, and uphill movement is slow and jank.
+
+Three stacked problems:
+1. Foot rotation ignores surface normal — feet stay world-aligned (flat) on slopes
+2. Height maintenance targets world Y — hips fight the slope as it rises, draining speed
+3. Move force is horizontal — ~82% effective uphill component on 35° slope
+
+Existing infrastructure: surfaceNormalQuality concept in StepPlanner/FootContactObservation; ApplyStepUpFootLiftAssist in BalanceController.
+
+Proposed slices:
+1. Slope detection seam — BalanceController raycast, expose SurfaceNormal / SlopeAngleDeg / SurfaceNormalQuality, debug log
+2. Surface-relative height maintenance — targetHipsY = hitPoint.y + _standingHipsHeight, gated on slope < 50° and quality > 0.5
+3. Foot rotation on slope — LegAnimator foot IK target blends toward surface normal at landing position
+4. Forward lean on slope — BalanceController uprightTarget tilt, visual only, gated on uphill movement
+5. Tests — SlopeTraversalTests.cs: time to top of 35° 8m incline, foot alignment angle, hips height variance, flat ground regression
+
+---
+
+## Your review
+
+Please give concrete feedback on each of the following:
+
+### 1. Gaps
+What is missing from this plan that will definitely be needed?
+- Are there other systems that will need changes (e.g. LegStateMachine, LocomotionDirector, StepPlanner)?
+- Is the existing surfaceNormalQuality / FootContactObservation infrastructure worth reusing instead of a new raycast in BalanceController? What are the tradeoffs?
+- Does the move force horizontal issue (Slice missing) warrant its own slice or is it not worth fixing?
+- Edge cases: what happens on very steep slopes (>50°)? During jump? During get-up? On stairs vs smooth ramps?
+
+### 2. Slice sizing
+Is each slice the right size for one agent in one session?
+- Slice 3 (foot rotation) touches LegAnimator which is already large and complex — is this right-sized or too risky?
+- Are any slices too trivial to stand alone?
+- Should any slices be merged or split?
+
+### 3. Test coverage
+Are the proposed tests actually results-based? Will they catch real regressions?
+- The time-to-top test is good — what's a realistic timeout for a 35° 8m incline at current movement speeds?
+- The foot alignment test — is 10° the right tolerance? How do we build the test scene (does the Arena builder support inclined surfaces)?
+- Is the flat ground regression test sufficient to catch height maintenance regressions?
+- What test would catch "character gets faster uphill but now slides down slopes uncontrollably"?
+
+### 4. Ordering
+Is the slice order correct?
+- Does Slice 3 (foot rotation in LegAnimator) depend on Slice 1 (SurfaceNormal property on BalanceController) or can it use its own independent raycast?
+- Should the move force fix (if worth doing) come before or after height maintenance?
+
+### 5. Risks
+What could go wrong?
+- BalanceController raycasting every FixedUpdate at 100Hz — performance concern?
+- Foot rotation slerping — could this fight the IK solver or cause leg instability?
+- Surface-relative height maintenance — what happens at the top of a slope transitioning to flat? Sharp height target jump?
+- Lean into slope (visual only) — could the visual tilt confuse players about actual physics state?
+
+### 6. Physics correctness
+- Is `Physics.Raycast` from hips the right sampling approach, or should we aggregate foot contact normals?
+- Does Unity's ConfigurableJoint IK (used for feet) support rotation targets easily, or is there a better approach for foot orientation?
+- Any concerns about the height maintenance approach at transition zones (top/bottom of slope)?
+
+### 7. Anything else
+Any gaps, wrong assumptions, or a better overall approach we haven't considered?
+
+---
+
+After your review, output a revised plan doc incorporating your suggestions. Keep the same structure and slice format. Mark significant changes with <!-- OPUS: reason --> comments so the changes are visible.
