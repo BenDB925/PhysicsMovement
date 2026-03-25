@@ -1,0 +1,160 @@
+You are implementing Slice 1 of Plan 07 (Get-Up & Crumple Fall) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md
+
+---
+
+## HANDOFF CONTEXT
+
+ProceduralStandUp.cs already exists (435 lines) and is wired up in CharacterState and the prefab. The 4-phase get-up sequence runs, but the character launches into the air after getting up. Root cause: `_forcedStandImpulse = 350f` fires as a ForceMode.Impulse after `_maxStandUpAttempts` is exhausted — 350 N·s is twice the jump force. The phase sequence is probably failing its height gates (thresholds were guessed, never tuned), and there's no debug visibility to see what's happening.
+
+This slice adds debug visibility and fixes the rocket launch. It does NOT tune the phase values — that's slice 2c after Benny plays with the debug log.
+
+---
+
+## YOUR TASK: Slice 1 — Diagnose & Fix Forced Stand
+
+**File to modify: `Assets/Scripts/Character/ProceduralStandUp.cs` only.**
+Do not touch any other files.
+
+---
+
+### Change 1: Add debug logging
+
+Add a serialized bool field near the top of the class:
+```csharp
+[Header("Debug")]
+[SerializeField] private bool _debugLog = false;
+```
+
+Add a private helper:
+```csharp
+private void DebugLog(string message)
+{
+    if (_debugLog) Debug.Log($"[ProceduralStandUp] {message}");
+}
+```
+
+Add `DebugLog` calls at the following points:
+- In `Begin()`: log `$"Begin called. Attempts={_standUpAttempts}/{_maxStandUpAttempts}. FaceUp={Vector3.Dot(_hipsRb != null ? _hipsRb.transform.up : Vector3.up, Vector3.up):F2}. GroundY={_groundY:F3}"`
+- In `EnterPhase()`: log `$"EnterPhase -> {phase}"`
+- In `TickArmPush()` every 10 fixed frames (use `_phaseTimer` modulo check): log `$"ArmPush: chestHeight={chestHeight:F3} target={_armPushTargetHeight:F3} timer={_phaseTimer:F2}/{_armPushTimeout:F2}"`
+- In `TickLegTuck()` every 10 fixed frames: log `$"LegTuck: hipsHeight={hipsHeight:F3} target={_legTuckTargetHeight:F3} grounded={grounded} timer={_phaseTimer:F2}/{_legTuckTimeout:F2}"`
+- In `TickStand()` every 10 fixed frames: log `$"Stand: hipsHeight={hipsHeight:F3} standingHeight={standingHeight:F3} isFallen={isFallen} grounded={grounded} timer={_phaseTimer:F2}/{_standTimeout:F2}"`
+- In `AdvancePhase()`: log `$"Phase {CurrentPhase} -> advancing"`
+- In `Fail()`: log `$"Phase {CurrentPhase} FAILED. Severity={failureSeverity:F2}. Attempts={_standUpAttempts}"`
+- In `ApplyForcedStand()`: log `$"ForcedStand triggered. Attempts exhausted."`
+
+---
+
+### Change 2: Fix the rocket launch
+
+**Replace `ApplyForcedStand()`** with a multi-frame force version.
+
+Add new serialized fields:
+```csharp
+[SerializeField, Range(1, 30)] private int _forcedStandFrames = 8;
+```
+
+Change `_forcedStandImpulse` default from `350f` to `60f`.
+
+Add a private counter field:
+```csharp
+private int _forcedStandFrameCounter;
+```
+
+In `ApplyForcedStand()`, instead of `_hipsRb.AddForce(Vector3.up * _forcedStandImpulse, ForceMode.Impulse)`, set:
+```csharp
+_forcedStandFrameCounter = _forcedStandFrames;
+```
+
+Then in `FixedUpdate()`, after the phase switch, add:
+```csharp
+if (_forcedStandFrameCounter > 0)
+{
+    if (_hipsRb != null)
+        _hipsRb.AddForce(Vector3.up * _forcedStandImpulse, ForceMode.Force);
+    _forcedStandFrameCounter--;
+}
+```
+
+This spreads the force over `_forcedStandFrames` frames (default 8 = 0.08s at 100Hz) instead of a single impulse pop.
+
+The rest of `ApplyForcedStand()` stays as-is (ClearSurrender, ResetSpringProfile, reset counters, fire OnCompleted).
+
+---
+
+### Change 3: Fix _groundY drift
+
+In `FixedUpdate()`, at the top before the phase switch, add:
+```csharp
+if (IsActive && _ragdollSetup != null && _hipsRb != null)
+{
+    foreach (Rigidbody rb in _ragdollSetup.AllBodies)
+    {
+        _groundY = Mathf.Min(_groundY, rb.position.y);
+    }
+}
+```
+
+`_groundY` must only ever decrease (use `Mathf.Min`) — never raise it. A limb lifting up during get-up must not push `_groundY` upward and make height gates easier to pass.
+
+---
+
+## CONSTRAINTS
+
+- Modify `ProceduralStandUp.cs` only
+- Do NOT change any serialized field defaults in the prefab — only code changes
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- No questions — make best call, document reasoning in commit message
+
+---
+
+## After changes: run regression suite
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "GetUpTests|FallCrumpleTests|LandingRecoveryTests|BalanceControllerTests|MovementQualityTests|LapCourseTests|JumpTests|SprintJumpStabilityTests"
+```
+
+Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
+
+**Known pre-existing failures — do NOT stop for these:**
+- `SustainedLocomotionCollapse_TransitionsIntoFallen`
+- `CompleteLap_WithinTimeLimit_NoFalls`
+- `TurnAndWalk_CornerRecovery`
+- `LandingRecovery_SpringRampsGraduallyAfterLanding`
+
+If only the above fail: proceed to commit.
+If any OTHER test fails: write fail status, send Telegram ping, stop.
+
+---
+
+## Commit
+
+Single commit on branch `slice/07-1-diagnose-and-fix-forced-stand`:
+`fix(07-1): add get-up debug logging, fix forced-stand rocket launch, fix groundY drift`
+
+---
+
+## Write status file
+
+`H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+```json
+{"slice":"07-1","status":"pass","branch":"slice/07-1-diagnose-and-fix-forced-stand","notes":"N/N green. Debug logging added, forcedStand now ForceMode.Force over 8 frames at 60N, groundY clamped to Mathf.Min."}
+```
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-07-1 STATUS: pass. NOTES: debug logging added; rocket launch fixed (60N over 8 frames); groundY drift clamped. Ready for play testing." } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
