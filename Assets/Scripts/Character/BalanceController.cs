@@ -18,6 +18,15 @@ namespace PhysicsDrivenMovement.Character
     public class BalanceController : MonoBehaviour
     {
         private const float MaximumSprintReachLandingAbsorbLeanDeg = 1.5f;
+
+        /// <summary>Minimum smoothed yaw rate (deg/s) before momentum lean activates.
+        /// Eliminates noise-level yaw contributions from facing direction jitter.</summary>
+        private const float MomentumLeanMinYawRateDeg = 5f;
+
+        /// <summary>Upright deviation (deg) above which momentum lean is fully suppressed.
+        /// Prevents the lateral lean from interfering with collapse detection or
+        /// destabilising the character during high-tilt recovery.</summary>
+        private const float MomentumLeanUprightAngleCutoff = 20f;
         // TUNING LOG:
         // - Character stands still: ✓
         // - 200 N push → recovers within 3 s: ✗ (pending in-editor verification)
@@ -1491,12 +1500,14 @@ namespace PhysicsDrivenMovement.Character
                                          !effectivelyGrounded ||
                                          _suppressPelvisExpression ||
                                          suppressMomentumLeanForJumpPhase ||
-                                         _landingAbsorbTimer > 0f;
+                                         _landingAbsorbTimer > 0f ||
+                                         uprightAngle > MomentumLeanUprightAngleCutoff;
             float momentumLeanTarget = 0f;
             if (!forceZeroMomentumLean &&
                 _momentumLeanMaxDeg > 0f &&
                 _momentumLeanFullTurnRate > 0.001f &&
-                _legAnimator != null)
+                _legAnimator != null &&
+                Mathf.Abs(_smoothedYawRateDeg) >= MomentumLeanMinYawRateDeg)
             {
                 float normalizedYaw = Mathf.Clamp(_smoothedYawRateDeg / _momentumLeanFullTurnRate, -1f, 1f);
                 momentumLeanTarget = normalizedYaw * _momentumLeanMaxDeg * _legAnimator.SmoothedInputMag;
