@@ -14,7 +14,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     {
         private const int WarmUpFrames = 30;
         private const int PreSprintFrames = 80;
-        private const int SprintFrames = 220;
+        private const int SprintLeadInFrames = 60;
+        private const int SprintMeasurementFrames = 80;
+        private const int SprintFrames = PreSprintFrames + SprintLeadInFrames + SprintMeasurementFrames;
         private const int StopFrames = 20;
         private const int WalkJumpFrames = 30;
         private const int PostSprintLandingFrames = 15;
@@ -77,22 +79,30 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+
+            Vector3 walkWindowStart = Flatten(_rig.HipsBody.position);
             yield return RunFixedFrames(PreSprintFrames);
             float speedAtWalkWindow = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float walkWindowDistance = GetHorizontalDistance(_rig.HipsBody.position, walkWindowStart);
 
-            yield return RunFixedFrames(SprintFrames - PreSprintFrames);
+            yield return RunFixedFrames(SprintLeadInFrames);
+
+            Vector3 sprintWindowStart = Flatten(_rig.HipsBody.position);
+            yield return RunFixedFrames(SprintMeasurementFrames);
             float speedAtSprintWindow = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float sprintWindowDistance = GetHorizontalDistance(_rig.HipsBody.position, sprintWindowStart);
 
             // Assert
             TestContext.Out.WriteLine($"[METRIC] AutoSprint WalkRamp walkCap={walkSpeedCap:F2} sprintCap={sprintSpeedCap:F2}");
             TestContext.Out.WriteLine($"[METRIC] AutoSprint WalkRamp speed80={speedAtWalkWindow:F2} speed220={speedAtSprintWindow:F2}");
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint WalkRamp dist80={walkWindowDistance:F2} dist140to220={sprintWindowDistance:F2}");
 
             Assert.That(speedAtWalkWindow, Is.LessThan(walkSpeedCap * 1.2f),
                 $"After {PreSprintFrames} frames of sustained movement, horizontal speed should still be in walk territory. " +
                 $"Observed {speedAtWalkWindow:F2} with walk cap {walkSpeedCap:F2}.");
-            Assert.That(speedAtSprintWindow, Is.GreaterThan(walkSpeedCap * 1.5f),
-                $"After {SprintFrames} frames of sustained movement, horizontal speed should be clearly in sprint territory. " +
-                $"Observed {speedAtSprintWindow:F2} with walk cap {walkSpeedCap:F2} and sprint cap {sprintSpeedCap:F2}.");
+            Assert.That(sprintWindowDistance, Is.GreaterThan(walkWindowDistance * 1.5f),
+                $"The late movement window should cover materially more ground than the opening walk window once auto-sprint has had time to engage. " +
+                $"Observed {sprintWindowDistance:F2}m in frames 140-220 versus {walkWindowDistance:F2}m in frames 0-80.");
         }
 
         [UnityTest]
@@ -104,24 +114,39 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
-            yield return RunFixedFrames(SprintFrames);
+
+            Vector3 initialWalkWindowStart = Flatten(_rig.HipsBody.position);
+            yield return RunFixedFrames(PreSprintFrames);
+            float initialWalkWindowDistance = GetHorizontalDistance(_rig.HipsBody.position, initialWalkWindowStart);
+
+            yield return RunFixedFrames(SprintLeadInFrames);
+            Vector3 sprintWindowStart = Flatten(_rig.HipsBody.position);
+            yield return RunFixedFrames(SprintMeasurementFrames);
             float speedBeforeStop = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float sprintWindowDistance = GetHorizontalDistance(_rig.HipsBody.position, sprintWindowStart);
 
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
             yield return RunFixedFrames(StopFrames);
 
             _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            Vector3 restartWindowStart = Flatten(_rig.HipsBody.position);
             yield return RunFixedFrames(PreSprintFrames);
             float speedAfterRestart = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float restartWindowDistance = GetHorizontalDistance(_rig.HipsBody.position, restartWindowStart);
 
             // Assert
             TestContext.Out.WriteLine($"[METRIC] AutoSprint StopReset preStop={speedBeforeStop:F2} restart80={speedAfterRestart:F2}");
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint StopReset walk80={initialWalkWindowDistance:F2} sprint140to220={sprintWindowDistance:F2} restart80={restartWindowDistance:F2}");
 
-            Assert.That(speedBeforeStop, Is.GreaterThan(walkSpeedCap * 1.5f),
-                $"The pre-stop run should already be at sprint pace before the reset check. Observed {speedBeforeStop:F2}.");
+            Assert.That(sprintWindowDistance, Is.GreaterThan(initialWalkWindowDistance * 1.5f),
+                $"Before the stop/reset window, the late movement window should already cover materially more ground than the opening walk window. " +
+                $"Observed {sprintWindowDistance:F2}m versus {initialWalkWindowDistance:F2}m.");
             Assert.That(speedAfterRestart, Is.LessThan(walkSpeedCap * 1.2f),
                 $"After stopping long enough to clear the grace window, the first {PreSprintFrames} restart frames should return to walk pace. " +
                 $"Observed {speedAfterRestart:F2} with walk cap {walkSpeedCap:F2}.");
+            Assert.That(restartWindowDistance, Is.LessThanOrEqualTo(initialWalkWindowDistance * 1.2f),
+                $"After the reset, the first restart window should return to roughly the same ground-covering pace as the original walk window. " +
+                $"Observed {restartWindowDistance:F2}m after restart versus {initialWalkWindowDistance:F2}m on the opening walk window.");
         }
 
         [UnityTest]
@@ -271,6 +296,16 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static float GetHorizontalSpeed(Vector3 velocity)
         {
             return new Vector2(velocity.x, velocity.z).magnitude;
+        }
+
+        private static Vector3 Flatten(Vector3 position)
+        {
+            return new Vector3(position.x, 0f, position.z);
+        }
+
+        private static float GetHorizontalDistance(Vector3 endPosition, Vector3 startPosition)
+        {
+            return Vector3.Distance(Flatten(endPosition), startPosition);
         }
 
         private static IEnumerator RunFixedFrames(int frames)
