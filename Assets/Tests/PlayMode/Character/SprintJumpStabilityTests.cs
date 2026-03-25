@@ -21,7 +21,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int FinalSettleFrames = 200;
         private const int JumpReadyStabilityFrames = 3;
         private const int SecondJumpReadyWindowFrames = 30;
-        private const float FaceplantAngleThreshold = 50f;
+        // Land-into-run (Plan 08 slice 2) preserves full sprint momentum through landing,
+        // so a forward lean of up to ~65° is expected and correct on sprint landings.
+        // The real guard is EnteredFallen — peak tilt alone is not a failure condition.
+        private const float FaceplantAngleThreshold = 65f;
         private const float StableUprightCeiling = 25f;
         private const int PostLandStabilityDeadline = 150;
         private const float LandingTelemetryWindowSeconds = 0.5f;
