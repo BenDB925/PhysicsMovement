@@ -480,6 +480,12 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         public float SmoothedInputMag => _smoothedInputMag;
 
+        /// <summary>
+        /// True when all organic gait variation is bypassed and collaborators should also
+        /// suppress their own organic asymmetry.
+        /// </summary>
+        public bool IsOrganicVariationDisabled => _disableOrganicVariation;
+
         internal float StepAngleDegrees => GetEffectiveStepAngle();
         internal float LeftStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: true);
         internal float RightStepAngleDegrees => GetEffectiveStepAngle(GetCurrentSprintNormalized(), isLeftLeg: false);
@@ -770,6 +776,15 @@ namespace PhysicsDrivenMovement.Character
             // STEP 2: Fall back to PlayerMovement when the director has not published a
             //         command frame yet so inspector/debug readers still see the sprint blend.
             return _playerMovement != null ? Mathf.Clamp01(_playerMovement.SprintNormalized) : 0f;
+        }
+
+        /// <summary>
+        /// Returns the configured organic variation seed so collaborators can initialise
+        /// deterministic companion RNG streams.
+        /// </summary>
+        public int GetOrganicSeedForTest()
+        {
+            return _noiseSeed;
         }
 
         /// <summary>Resets the organic RNG to a known seed. Call from PlayMode tests for deterministic results.</summary>

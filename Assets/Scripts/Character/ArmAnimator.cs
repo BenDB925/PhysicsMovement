@@ -23,7 +23,9 @@ namespace PhysicsDrivenMovement.Character
     ///
     /// LowerArm joints receive a lighter SLERP drive (configured by <see cref="RagdollSetup"/>)
     /// so the constant elbow-bend targetRotation is honoured by PhysX while keeping a
-    /// slightly loose feel. Hand joints remain floppy (no drive).
+    /// slightly loose feel. Hand joints remain floppy (no drive). Organic per-stride
+    /// amplitude variation and a subtle left-arm phase offset can be layered on top of
+    /// the base counter-swing, both gated by <see cref="LegAnimator.IsOrganicVariationDisabled"/>.
     ///
     /// <see cref="RagdollSetup"/> must apply SLERP drives to UpperArm_L/R and LowerArm_L/R
     /// for this component's targetRotation commands to take physical effect.
@@ -75,6 +77,17 @@ namespace PhysicsDrivenMovement.Character
                  "UpperArm joints use axis=forward, so rotation around Vector3.right " +
                  "in targetRotation space produces frontal-plane abduction.")]
         private float _restAbductionAngle = 12f;
+
+        [Header("Organic Arm Variation")]
+        [SerializeField, Tooltip("Maximum amplitude variation per stride as a fraction of effective swing angle. " +
+             "0.12 = +/-12% variation. Bypassed when LegAnimator._disableOrganicVariation is true.")]
+        [Range(0f, 0.3f)]
+        private float _armAmplitudeVariation = 0.12f;
+
+        [SerializeField, Tooltip("Fixed phase offset (radians) added to the left arm's swing phase. " +
+             "0.05 = ~3 degrees of phase lead/lag vs the right arm. Bypassed when organic variation is disabled.")]
+        [Range(-0.2f, 0.2f)]
+        private float _leftArmPhaseOffset = 0.05f;
 
         [Header("Recovery Brace")]
         [SerializeField, Range(0f, 1f)]
@@ -240,6 +253,18 @@ namespace PhysicsDrivenMovement.Character
         /// <summary>Rest abduction rotation cached in Awake for the right upper arm (positive angle).</summary>
         private Quaternion _abductionR;
 
+        private System.Random _armRngLeft;
+        private System.Random _armRngRight;
+        private float _leftArmAmplitudeMod;
+        private float _rightArmAmplitudeMod;
+        private bool _leftArmCrossed;
+        private bool _rightArmCrossed;
+
+        private bool _disableArmVariation => _legAnimator == null || _legAnimator.IsOrganicVariationDisabled;
+
+        internal float DebugLeftSwingDeg { get; private set; }
+        internal float DebugRightSwingDeg { get; private set; }
+
         // ── Unity Lifecycle ──────────────────────────────────────────────────
 
         private void Awake()
@@ -263,6 +288,10 @@ namespace PhysicsDrivenMovement.Character
             // STEP 1a3: Cache CharacterState for airborne arm raise. Missing state means
             //           no airborne blend (arms use walk/idle pose only).
             TryGetComponent(out _characterState);
+
+            // STEP 1a4: Seed the arm organic-variation streams from the leg organic seed
+            //           so both systems share the same character personality by default.
+            InitializeOrganicVariation();
 
             // STEP 1b: Cache abduction quaternions.
             // In targetRotation space, Vector3.right (X) maps to rotation around the
@@ -426,11 +455,21 @@ namespace PhysicsDrivenMovement.Character
             //           ArmAnimator right arm uses  phase       (counter to right leg)
             float legPhase = _legAnimator.Phase;
 
-            float sinLeft  = Mathf.Sin(legPhase + Mathf.PI);   // opposite to left leg
+            bool bypassOrganicArmVariation = _disableArmVariation || _armAmplitudeVariation <= 0f;
+            float leftPhaseOffset = bypassOrganicArmVariation ? 0f : _leftArmPhaseOffset;
+            float sinLeft  = Mathf.Sin(legPhase + Mathf.PI + leftPhaseOffset);   // opposite to left leg
             float sinRight = Mathf.Sin(legPhase);              // opposite to right leg
+
+            UpdateOrganicArmVariation(sinLeft, sinRight, bypassOrganicArmVariation);
 
             float leftSwingDeg  = sinLeft  * effectiveArmSwingAngle * effectiveScale;
             float rightSwingDeg = sinRight * effectiveArmSwingAngle * effectiveScale;
+
+            leftSwingDeg *= _leftArmAmplitudeMod;
+            rightSwingDeg *= _rightArmAmplitudeMod;
+
+            DebugLeftSwingDeg = leftSwingDeg;
+            DebugRightSwingDeg = rightSwingDeg;
 
             // STEP 4b: Clamp swing angles to the hard cap.
             leftSwingDeg  = Mathf.Clamp(leftSwingDeg,  -_maxSwingAngleDeg, _maxSwingAngleDeg);
@@ -525,6 +564,9 @@ namespace PhysicsDrivenMovement.Character
         /// </summary>
         private void SetAllArmTargetsToRest()
         {
+            DebugLeftSwingDeg = 0f;
+            DebugRightSwingDeg = 0f;
+
             if (_upperArmL != null) { _upperArmL.targetRotation = _abductionL; }
             if (_upperArmR != null) { _upperArmR.targetRotation = _abductionR; }
 
@@ -549,6 +591,55 @@ namespace PhysicsDrivenMovement.Character
         private float GetEffectiveElbowBendAngle(float sprintNormalized)
         {
             return Mathf.Lerp(_elbowBendAngle, _sprintElbowBendAngle, Mathf.Clamp01(sprintNormalized));
+        }
+
+        private void InitializeOrganicVariation()
+        {
+            int seed = _legAnimator != null ? _legAnimator.GetOrganicSeedForTest() : 42;
+            _armRngLeft = new System.Random(seed + 5000);
+            _armRngRight = new System.Random(seed + 6000);
+            _leftArmAmplitudeMod = 1f;
+            _rightArmAmplitudeMod = 1f;
+            _leftArmCrossed = false;
+            _rightArmCrossed = false;
+        }
+
+        private void UpdateOrganicArmVariation(float sinLeft, float sinRight, bool bypassOrganicArmVariation)
+        {
+            bool sinLeftPositive = sinLeft >= 0f;
+            bool sinRightPositive = sinRight >= 0f;
+
+            if (!bypassOrganicArmVariation)
+            {
+                if (sinLeftPositive && !_leftArmCrossed)
+                {
+                    _leftArmCrossed = true;
+                    double leftRandom = _armRngLeft.NextDouble();
+                    _leftArmAmplitudeMod = (float)(1.0 - _armAmplitudeVariation +
+                        leftRandom * 2.0 * _armAmplitudeVariation);
+                }
+                else if (!sinLeftPositive)
+                {
+                    _leftArmCrossed = false;
+                }
+
+                if (sinRightPositive && !_rightArmCrossed)
+                {
+                    _rightArmCrossed = true;
+                    double rightRandom = _armRngRight.NextDouble();
+                    _rightArmAmplitudeMod = (float)(1.0 - _armAmplitudeVariation +
+                        rightRandom * 2.0 * _armAmplitudeVariation);
+                }
+                else if (!sinRightPositive)
+                {
+                    _rightArmCrossed = false;
+                }
+            }
+            else
+            {
+                _leftArmAmplitudeMod = 1f;
+                _rightArmAmplitudeMod = 1f;
+            }
         }
 
         /// <summary>
