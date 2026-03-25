@@ -1,0 +1,170 @@
+You are implementing Slice 2b of Plan 07 (Get-Up & Crumple Fall) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1 and 2a are merged. The character now crumples naturally on surrender (joints soften over 0.25s), and the forced-stand rocket launch is fixed. The 0.4s GettingUp minimum dwell is also in.
+
+Current problem with `TickOrientProne` in ProceduralStandUp.cs:
+
+```csharp
+Vector3 currentForward = _hipsRb.transform.forward;
+Vector3 desiredForward = Vector3.down;
+Vector3 rollAxis = Vector3.Cross(currentForward, desiredForward).normalized;
+if (rollAxis.sqrMagnitude > 0.001f)
+{
+    _hipsRb.AddTorque(rollAxis * _orientTorque, ForceMode.Force);
+}
+```
+
+This tries to rotate `hips.forward` toward `Vector3.down`. But:
+1. It does not check whether the character is already face-down or face-up — it applies the same torque regardless
+2. It does not check whether the torque is being applied in the correct direction for the current pose
+3. When the character is face-up (lying on their back), the torque may roll them the wrong way or oscillate
+4. The `_proneDotThreshold` check uses `Dot(hips.forward, down)` but this advances even if the character rolled onto their back instead of their front
+
+The correct approach:
+- `Dot(hips.up, Vector3.up) > threshold` means face-up (lying on back)
+- `Dot(hips.up, Vector3.up) < -threshold` means face-down (lying on front) — this is what we want
+- Torque direction should be chosen to roll toward face-down via the shorter arc
+
+---
+
+## YOUR TASK: Slice 2b — Face-Up Detection & Correct Roll Direction
+
+**File to modify: `Assets/Scripts/Character/ProceduralStandUp.cs` only.**
+Do not touch any other files.
+
+---
+
+### Change 1: Add IsFaceUp property
+
+Add a public read-only property that other systems (and tests) can query:
+
+```csharp
+/// <summary>True when the hips up-vector points toward world-up (character is lying on their back).</summary>
+public bool IsFaceUp => _hipsRb != null && Vector3.Dot(_hipsRb.transform.up, Vector3.up) > 0.3f;
+
+/// <summary>True when the hips up-vector points toward world-down (character is lying face-down/prone).</summary>  
+public bool IsFaceDown => _hipsRb != null && Vector3.Dot(_hipsRb.transform.up, Vector3.up) < -0.3f;
+```
+
+---
+
+### Change 2: Fix TickOrientProne
+
+Replace the entire roll torque block in `TickOrientProne` with correct face-up-aware logic:
+
+**New approach:**
+- Desired pose: hips.up points toward `Vector3.down` (face-down/prone)
+- Compute the torque axis as `Cross(hipsUp, Vector3.down)` — this gives the shortest-arc rotation from current hips.up toward world-down
+- This automatically handles both face-up and face-down cases and always rolls toward prone
+
+```csharp
+// Roll hips so the up-vector points toward world-down (prone/face-down).
+// Cross(hipsUp, targetUp) gives the shortest-arc rotation axis regardless of
+// whether the character is currently face-up or face-down.
+Vector3 hipsUp = _hipsRb.transform.up;
+Vector3 desiredUp = Vector3.down;
+Vector3 rollAxis = Vector3.Cross(hipsUp, desiredUp).normalized;
+if (rollAxis.sqrMagnitude > 0.001f)
+{
+    _hipsRb.AddTorque(rollAxis * _orientTorque, ForceMode.Force);
+}
+```
+
+**Fix the advance condition:**
+
+The existing advance condition uses:
+```csharp
+float faceDownDot = Vector3.Dot(_hipsRb.transform.forward, Vector3.down);
+if (faceDownDot >= _proneDotThreshold)
+```
+
+Replace with a check against `hips.up` which is what we're actually controlling:
+
+```csharp
+float proneProgress = Vector3.Dot(_hipsRb.transform.up, Vector3.down);
+if (proneProgress >= _proneDotThreshold)
+```
+
+Also add a DebugLog when the prone check passes:
+```csharp
+DebugLog($"OrientProne: proneProgress={proneProgress:F2} threshold={_proneDotThreshold:F2} faceUp={IsFaceUp}");
+```
+
+---
+
+### Change 3: Add face-up note to Begin() debug log
+
+Update the Begin() debug log line to use the new IsFaceUp property:
+
+```csharp
+DebugLog($"Begin called. Attempts={_standUpAttempts}/{_maxStandUpAttempts}. IsFaceUp={IsFaceUp}. IsFaceDown={IsFaceDown}. GroundY={_groundY:F3}");
+```
+
+---
+
+## CONSTRAINTS
+
+- Modify `ProceduralStandUp.cs` only
+- Do NOT change serialized field defaults in the prefab
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- No questions — make best call, document reasoning in commit message
+
+---
+
+## After changes: run regression suite
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "GetUpTests|BalanceControllerTests|MovementQualityTests|LandingRecoveryTests|JumpTests|SprintJumpStabilityTests"
+```
+
+Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
+
+**Known pre-existing / order-sensitive failures — do NOT stop for these:**
+- `SustainedLocomotionCollapse_TransitionsIntoFallen`
+- `CompleteLap_WithinTimeLimit_NoFalls`
+- `TurnAndWalk_CornerRecovery`
+- `LandingRecovery_SpringRampsGraduallyAfterLanding`
+- `LandingRecovery_DampingDisabledWhenFactorIsOne` (order-sensitive)
+- `WalkStraight_NoFalls` (order-sensitive)
+
+If only the above fail: proceed to commit.
+If any OTHER test fails: write fail status, send Telegram ping, stop.
+
+---
+
+## Commit
+
+Branch: `slice/07-2b-face-up-detection`
+Single commit:
+`fix(07-2b): fix OrientProne roll direction - use hips.up→down arc, add IsFaceUp/IsFaceDown properties`
+
+---
+
+## Write status file
+
+`H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+```json
+{"slice":"07-2b","status":"pass","branch":"slice/07-2b-face-up-detection","notes":"N/N green. OrientProne now rolls via Cross(hipsUp, worldDown) - correct for both face-up and face-down starts. IsFaceUp/IsFaceDown properties added."}
+```
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-07-2b STATUS: pass. NOTES: OrientProne roll direction fixed - works correctly from face-up and face-down. Ready for play testing." } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
