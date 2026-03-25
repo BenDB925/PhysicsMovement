@@ -1,12 +1,12 @@
 # Plan 05 — Organic Movement & Gait Variation
 
-**Status:** Active
-**Current next step:** Start Slice 7 (regression gate + parameter summary) now that Slice 6 is complete and the focused momentum-lean PlayMode slice is green.
+**Status:** Complete ✅ — all 7 slices shipped (2026-03-25)
+**Current next step:** Plan 05 complete; use the parameter reference below for prefab tuning handoff.
 
-Active slice checkpoint: Slice 6 is complete on `slice/05-6-momentum-lean`. `BalanceController` now derives a smoothed yaw-rate signal from facing-direction changes, applies a bounded lateral momentum-lean roll that stacks with the existing forward/back expression, suppresses that roll during airborne and recent jump-recovery windows, and exposes `DebugSmoothedYawRate` plus `DebugMomentumLeanDeg` for regression coverage. Both player prefabs now override `_momentumLeanMaxDeg: 2.5`, `_momentumLeanFullTurnRate: 200`, and `_momentumLeanSmoothing: 6`, `MomentumLeanTests` landed beside the existing gait slice coverage, and focused PlayMode verification via `MomentumLeanTests|ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests` finished `30/30` green on 2026-03-25.
+Final slice checkpoint: Slice 7 ran the full organic-variation regression filter on 2026-03-25 and finished `74/78` green. The only reds were the known excluded quartet: `SustainedLocomotionCollapse_TransitionsIntoFallen`, `CompleteLap_WithinTimeLimit_NoFalls`, `TurnAndWalk_CornerRecovery`, and `LandingRecovery_SpringRampsGraduallyAfterLanding`.
 # Plan 05 — Organic Movement & Gait Variation
 
-**Status:** Active
+**Status:** Complete ✅ — all 7 slices shipped (2026-03-25)
 **Branch prefix:** `slice/05-N-name`
 **Watcher state file:** `C:\Users\Usuario\.openclaw\workspace\scripts\gait-watcher-state.json`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\prompts\`
@@ -223,5 +223,31 @@ Slice 7 gate: `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|MovementQ
 | 2026-03-24 | 05-4b | GitHub Copilot | pass | Added idle bob support in `BalanceController`, shipped centered idle bob plus micro-step behavior in `LegAnimator`, authored `IdleVerticalBobTests`, tuned the prefab bob overrides to `_idleBobAmplitude: 0.02` / `_idleBobFrequency: 0.5`, and finished the focused PlayMode slice `30/30` green on `slice/05-4b-idle-bob`. |
 | 2026-03-25 | 05-5 | GitHub Copilot | pass | Added ArmAnimator per-stride amplitude variation plus fixed left-arm phase offset, exposed the minimal LegAnimator seams for arm organic gating, updated both player prefabs to `_armAmplitudeVariation: 0.12` / `_leftArmPhaseOffset: 0.05`, authored `ArmSwingVariationTests`, and finished the focused PlayMode slice `27/27` green on `slice/05-5-arm-swing-variation`. |
 | 2026-03-25 | 05-6 | GitHub Copilot | pass | Added BalanceController yaw-rate-driven momentum lean plus debug seams, updated both player prefabs to `_momentumLeanMaxDeg: 2.5` / `_momentumLeanFullTurnRate: 200` / `_momentumLeanSmoothing: 6`, authored `MomentumLeanTests`, then suppressed the new lean through recent jump recovery so the focused PlayMode slice finished `30/30` green on `slice/05-6-momentum-lean`. |
+| 2026-03-25 | 05-7 | GitHub Copilot | pass | Ran the full slice-7 PlayMode regression filter and finished `74/78` green. The only failures were the four known pre-existing or order-sensitive reds, so the gate stayed green for Plan 05, the parameter reference table was written, and the plan was marked complete. |
 
-**Current next step:** Start Slice 7 (regression gate + parameter summary) now that Slice 6 is complete and the focused momentum-lean regression slice is green.
+**Current next step:** None — Plan 05 complete.
+
+## Parameter Reference (Prefab Tuning Guide)
+
+All organic variation parameters are prefab overrides. The `_noiseSeed` alone defines the character's personality — changing it produces an entirely different movement pattern while preserving all the same ranges and behaviours. Set `_disableOrganicVariation = true` on LegAnimator to restore fully deterministic movement for debugging or testing.
+
+| Component | Parameter | Current Prefab Value | Range | Effect |
+|---|---|---|---|---|
+| LegAnimator | `_noiseSeed` | 42 | int | Changes the character's movement personality; a different seed produces a different organic pattern. |
+| LegAnimator | `_disableOrganicVariation` | false | bool | Master kill-switch; true restores fully deterministic movement for debugging and tests. |
+| LegAnimator | `_idleSwayForce` | 33 | 0-100 N | Higher values produce stronger idle weight shifts; lower values keep the character more planted. |
+| LegAnimator | `_idleSwayFrequency` | 1 | 0.1-5 Hz | Higher values speed up the side-to-side rhythm; lower values make the sway slower and calmer. |
+| LegAnimator | `_idleSwayEnterDelay` | 0.5 | 0-2 s | Higher values delay the onset of idle sway; lower values make it start sooner after stopping. |
+| LegAnimator | `_idleSwayFadeOutDuration` | 0.3 | 0.05-2 s | Higher values let sway linger longer after movement resumes; lower values snap it out faster. |
+| LegAnimator | `_idleBobAmplitude` | 0.02 | 0-0.02 m | Higher values increase the visible breathing bob; lower values make the vertical motion subtler. |
+| LegAnimator | `_idleBobFrequency` | 0.5 | 0.05-2 Hz | Higher values make the bob cycle faster; lower values feel more relaxed and slow. |
+| LegAnimator | `_microStepIdleDelay` | 2.5 | 0.5-10 s | Higher values wait longer before a corrective micro-step; lower values trigger corrections sooner. |
+| LegAnimator | `_microStepDriftThreshold` | 0.01 | 0.001-0.05 m | Higher values allow more idle drift before correcting; lower values produce quicker re-plants. |
+| LegAnimator | `_microStepCooldown` | 1.5 | 0.1-5 s | Higher values reduce how often micro-steps can fire; lower values allow more frequent corrections. |
+| LegAnimator | `_leftStrideAsymmetry` | 1.04 | 1.0-2.0 | Higher values lengthen left-leg strides more; values closer to 1.0 reduce the asymmetry. |
+| LegAnimator | `_rightStrideAsymmetry` | 1.0 | 1.0-2.0 | Higher values lengthen right-leg strides; keeping it at 1.0 preserves the current left-biased gait. |
+| ArmAnimator | `_armAmplitudeVariation` | 0.12 | 0-0.3 | Higher values add more per-stride arm swing randomness; lower values make the arms more uniform. |
+| ArmAnimator | `_leftArmPhaseOffset` | 0.05 | -0.2-0.2 rad | Positive values lead the left arm slightly and negative values lag it; larger magnitudes make the asymmetry more obvious. |
+| BalanceController | `_momentumLeanMaxDeg` | 2.5 | 0-8 deg | Higher values allow more visible lean into turns; lower values keep turn expression tighter and calmer. |
+| BalanceController | `_momentumLeanFullTurnRate` | 200 | 30-540 deg/s | Lower values reach full lean on gentler turns; higher values require sharper turns to hit the cap. |
+| BalanceController | `_momentumLeanSmoothing` | 6 | 1-20 | Higher values make the lean react faster to direction changes; lower values make it ease in more slowly. |
