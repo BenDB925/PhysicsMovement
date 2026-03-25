@@ -17,6 +17,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SprintLeadInFrames = 60;
         private const int SprintMeasurementFrames = 80;
         private const int SprintFrames = PreSprintFrames + SprintLeadInFrames + SprintMeasurementFrames;
+        private const int PreJumpSpeedSampleFrames = 5;
         private const int StopFrames = 20;
         private const int WalkJumpFrames = 30;
         private const int PostSprintLandingFrames = 15;
@@ -155,7 +156,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             yield return RunFixedFrames(SprintFrames);
             yield return WaitForJumpReady();
 
-            float preJumpSpeed = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float preJumpSpeed = 0f;
+            for (int frame = 0; frame < PreJumpSpeedSampleFrames; frame++)
+            {
+                preJumpSpeed += GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+                yield return new WaitForFixedUpdate();
+            }
+
+            preJumpSpeed /= PreJumpSpeedSampleFrames;
             JumpObservation observation = new JumpObservation();
 
             // Act
