@@ -1,9 +1,9 @@
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
-**Current next step:** Start Slice 6 (momentum lean on direction change) now that Slice 5 is complete and the focused arm-expression PlayMode slice is green again.
+**Current next step:** Start Slice 7 (regression gate + parameter summary) now that Slice 6 is complete and the focused momentum-lean PlayMode slice is green.
 
-Active slice checkpoint: Slice 5 is complete on `slice/05-5-arm-swing-variation`. `ArmAnimator` now applies per-stride left/right amplitude modifiers plus a fixed left-arm phase offset, all bypassed when `LegAnimator` organic variation is disabled or when `_armAmplitudeVariation` is zero. `LegAnimator` exposes `GetOrganicSeedForTest()` and `IsOrganicVariationDisabled` for companion systems, both player prefabs now override `_armAmplitudeVariation: 0.12` and `_leftArmPhaseOffset: 0.05`, and the new `ArmSwingVariationTests` fixture landed alongside the existing gait regression slice. Focused PlayMode verification via `ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests` finished `27/27` green on 2026-03-25.
+Active slice checkpoint: Slice 6 is complete on `slice/05-6-momentum-lean`. `BalanceController` now derives a smoothed yaw-rate signal from facing-direction changes, applies a bounded lateral momentum-lean roll that stacks with the existing forward/back expression, suppresses that roll during airborne and recent jump-recovery windows, and exposes `DebugSmoothedYawRate` plus `DebugMomentumLeanDeg` for regression coverage. Both player prefabs now override `_momentumLeanMaxDeg: 2.5`, `_momentumLeanFullTurnRate: 200`, and `_momentumLeanSmoothing: 6`, `MomentumLeanTests` landed beside the existing gait slice coverage, and focused PlayMode verification via `MomentumLeanTests|ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests` finished `30/30` green on 2026-03-25.
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
@@ -222,5 +222,6 @@ Slice 7 gate: `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|MovementQ
 | 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 | 2026-03-24 | 05-4b | GitHub Copilot | pass | Added idle bob support in `BalanceController`, shipped centered idle bob plus micro-step behavior in `LegAnimator`, authored `IdleVerticalBobTests`, tuned the prefab bob overrides to `_idleBobAmplitude: 0.02` / `_idleBobFrequency: 0.5`, and finished the focused PlayMode slice `30/30` green on `slice/05-4b-idle-bob`. |
 | 2026-03-25 | 05-5 | GitHub Copilot | pass | Added ArmAnimator per-stride amplitude variation plus fixed left-arm phase offset, exposed the minimal LegAnimator seams for arm organic gating, updated both player prefabs to `_armAmplitudeVariation: 0.12` / `_leftArmPhaseOffset: 0.05`, authored `ArmSwingVariationTests`, and finished the focused PlayMode slice `27/27` green on `slice/05-5-arm-swing-variation`. |
+| 2026-03-25 | 05-6 | GitHub Copilot | pass | Added BalanceController yaw-rate-driven momentum lean plus debug seams, updated both player prefabs to `_momentumLeanMaxDeg: 2.5` / `_momentumLeanFullTurnRate: 200` / `_momentumLeanSmoothing: 6`, authored `MomentumLeanTests`, then suppressed the new lean through recent jump recovery so the focused PlayMode slice finished `30/30` green on `slice/05-6-momentum-lean`. |
 
-**Current next step:** Start Slice 6 (momentum lean on direction change) now that Slice 5 is complete and the focused arm-expression regression slice is green again.
+**Current next step:** Start Slice 7 (regression gate + parameter summary) now that Slice 6 is complete and the focused momentum-lean regression slice is green.
