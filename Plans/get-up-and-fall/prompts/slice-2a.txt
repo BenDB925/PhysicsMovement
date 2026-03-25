@@ -1,0 +1,169 @@
+You are implementing Slice 2a of Plan 07 (Get-Up & Crumple Fall) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slice 1 is complete. Debug logging is in ProceduralStandUp.cs, and the forced-stand rocket launch is fixed (60N over 8 frames instead of 350N impulse).
+
+The remaining problem: when the character falls over, it doesn't look like a natural collapse. The arms stay rigid and pinned to the body, the character braces instead of going limp. The body tumbles stiffly.
+
+Root cause (confirmed by reading the code):
+- `TriggerSurrender()` in BalanceController.cs sets `_ragdollSetup.SetSpringProfile(0.25f, 0.25f, 0.25f, 0.15f)`
+- The `0.15f` blend duration is nearly instant — spring profile snaps to 25% stiffness rather than ramping
+- `0.25f` multiplier may also be too high — arms at 25% stiffness still feel rigid enough to brace
+- The support scales (UprightStrengthScale, HeightMaintenanceScale, StabilizationScale) also snap to 0f immediately — no ramp
+
+This slice replaces the snap with a proper crumple ramp so the body softens naturally over ~0.2s.
+
+---
+
+## YOUR TASK: Slice 2a — Crumple Fall Ramp
+
+**Files to modify: `Assets/Scripts/Character/BalanceController.cs` only.**
+Do not touch any other files.
+
+---
+
+### Change 1: Add crumple duration field
+
+Add a new serialized field near the other surrender fields (around the `_surrenderAngleThreshold` section):
+
+```csharp
+[SerializeField, Range(0.05f, 0.5f), Tooltip("Duration in seconds to ramp joint stiffness to near-zero on surrender. Higher = slower, more natural crumple.")]
+private float _surrenderCrumpleDuration = 0.25f;
+```
+
+---
+
+### Change 2: Replace snap with ramp in TriggerSurrender
+
+Find the `TriggerSurrender` method. It currently has:
+```csharp
+CancelAllRamps();
+IsSurrendered = true;
+UprightStrengthScale = 0f;
+HeightMaintenanceScale = 0f;
+StabilizationScale = 0f;
+```
+
+Replace the three immediate zero-sets with ramp calls. The ramps must be set up AFTER `CancelAllRamps()` (which clears any in-progress ramps). Change to:
+
+```csharp
+CancelAllRamps();
+IsSurrendered = true;
+RampUprightStrength(0f, _surrenderCrumpleDuration);
+RampHeightMaintenance(0f, _surrenderCrumpleDuration);
+RampStabilization(0f, _surrenderCrumpleDuration);
+```
+
+---
+
+### Change 3: Lower spring multipliers and add blend duration
+
+Find the `SetSpringProfile` call inside `TriggerSurrender`:
+```csharp
+_ragdollSetup.SetSpringProfile(0.25f, 0.25f, 0.25f, 0.15f);
+```
+
+Replace with:
+```csharp
+_ragdollSetup.SetSpringProfile(0.05f, 0.08f, 0.05f, _surrenderCrumpleDuration);
+```
+
+Values rationale:
+- Arms (0.05f): nearly limp — arms should flop and hit the ground, not brace
+- Legs (0.08f): slightly stiffer than arms — legs naturally have more tension even when falling
+- Torso (0.05f): limp — should crumple under momentum
+- Blend duration: use `_surrenderCrumpleDuration` so the spring ramp matches the support scale ramp
+
+---
+
+### Change 4: Add ImpactKnockdown test seam
+
+To support future tests that trigger falls via physics impact, add a public method to BalanceController that applies a force impulse to the hips Rigidbody and then immediately triggers surrender. This is a test seam — gated so it can only be called in tests.
+
+Find where `_hipsRb` or the main Rigidbody is referenced in BalanceController. Add the following method:
+
+```csharp
+/// <summary>
+/// Test seam: applies a horizontal impulse to the hips and triggers surrender.
+/// Simulates an external impact knockdown for use in PlayMode tests only.
+/// </summary>
+/// <param name="direction">World-space direction of the impulse (will be normalized).</param>
+/// <param name="force">Impulse magnitude in Newtons.</param>
+public void TriggerImpactKnockdownForTest(Vector3 direction, float force)
+{
+    Rigidbody rb = GetComponent<Rigidbody>();
+    if (rb != null)
+    {
+        rb.AddForce(direction.normalized * force, ForceMode.Impulse);
+    }
+    TriggerSurrender(1f);
+}
+```
+
+---
+
+## CONSTRAINTS
+
+- Modify `BalanceController.cs` only
+- Do NOT change any other scripts
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- No questions — make best call, document reasoning in commit message
+
+---
+
+## After changes: run regression suite
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "LandingRecoveryTests|BalanceControllerTests|MovementQualityTests|JumpTests|SprintJumpStabilityTests|LapCourseTests"
+```
+
+Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
+
+**Known pre-existing / order-sensitive failures — do NOT stop for these:**
+- `SustainedLocomotionCollapse_TransitionsIntoFallen`
+- `CompleteLap_WithinTimeLimit_NoFalls`
+- `TurnAndWalk_CornerRecovery`
+- `LandingRecovery_SpringRampsGraduallyAfterLanding`
+- `LandingRecovery_DampingDisabledWhenFactorIsOne` (order-sensitive, passes in isolation)
+- `WalkStraight_NoFalls` (order-sensitive, passes in isolation)
+
+If only the above fail: proceed to commit.
+If any OTHER test fails: write fail status, send Telegram ping, stop.
+
+---
+
+## Commit
+
+Branch: `slice/07-2a-crumple-fall-ramp`
+Single commit:
+`feat(07-2a): crumple fall ramp - surrender now softens joints over 0.25s instead of snapping`
+
+---
+
+## Write status file
+
+`H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+```json
+{"slice":"07-2a","status":"pass","branch":"slice/07-2a-crumple-fall-ramp","notes":"N/N green. Surrender now ramps support scales + spring profile over 0.25s. Arms/torso drop to 0.05x stiffness, legs 0.08x. TriggerImpactKnockdownForTest seam added."}
+```
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-07-2a STATUS: pass. NOTES: crumple ramp live - surrender now softens over 0.25s, arms/torso go nearly limp. Ready for play testing." } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
