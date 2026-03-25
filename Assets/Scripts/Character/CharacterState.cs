@@ -28,6 +28,9 @@ namespace PhysicsDrivenMovement.Character
         [SerializeField, Range(0f, 10f)]
         private float _getUpDelay = 0.5f;
 
+        [SerializeField, Range(0.1f, 2f), Tooltip("Minimum time (s) the character must spend in GettingUp before it can exit to Standing/Moving. Prevents instant completion when the sequence gates pass immediately.")]
+        private float _getUpMinDwellDuration = 0.4f;
+
         [SerializeField, Range(0f, 10f)]
         private float _knockoutDuration = 1.5f;
 
@@ -318,7 +321,7 @@ namespace PhysicsDrivenMovement.Character
                         CleanUpProceduralStandUp();
                         nextState = CharacterStateType.Standing;
                     }
-                    else if (!_proceduralStandUpActive && !isFallen)
+                    else if (!_proceduralStandUpActive && !isFallen && _gettingUpTimer >= _getUpMinDwellDuration)
                     {
                         nextState = wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing;
                     }
