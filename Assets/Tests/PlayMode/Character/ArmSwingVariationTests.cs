@@ -22,7 +22,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SymmetryWarmUpFrames = 200;
         private const int SymmetrySampleFrames = 200;
         private const int BoundSampleFrames = 800;
-        private const float WalkInputMagnitude = 0.4f;
+        private const float WalkInputMagnitude = 1f;
         private const float PeakDifferenceToleranceDeg = 0.5f;
         private const float SwingClampEpsilonDeg = 0.001f;
 
