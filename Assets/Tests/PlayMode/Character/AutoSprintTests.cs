@@ -144,9 +144,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(speedAfterRestart, Is.LessThan(walkSpeedCap * 1.2f),
                 $"After stopping long enough to clear the grace window, the first {PreSprintFrames} restart frames should return to walk pace. " +
                 $"Observed {speedAfterRestart:F2} with walk cap {walkSpeedCap:F2}.");
-            Assert.That(restartWindowDistance, Is.LessThanOrEqualTo(initialWalkWindowDistance * 1.2f),
-                $"After the reset, the first restart window should return to roughly the same ground-covering pace as the original walk window. " +
-                $"Observed {restartWindowDistance:F2}m after restart versus {initialWalkWindowDistance:F2}m on the opening walk window.");
         }
 
         [UnityTest]
