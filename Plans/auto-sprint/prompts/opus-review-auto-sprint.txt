@@ -1,0 +1,82 @@
+You are reviewing a plan for a new Unity physics feature in the PhysicsDrivenMovementDemo project.
+
+## Project context
+- Unity 6000.3.9f1, 100Hz FixedUpdate, 12 solver iterations, physics-driven active ragdoll
+- All character scripts live on the Hips child of PlayerRagdoll prefab
+- Each "slice" = one agent session pasted into VS Code Copilot Chat (~2h max, ~2-3 files)
+- Game: handcrafted Wipeout/Only Up-style obstacle course, no respawns — movement feel is critical
+- Existing sprint infrastructure: `_sprintHeld` bool → `SprintNormalized` float (0-1, blends over `_sprintBlendDuration=0.25s`) → downstream consumers (LocomotionDirector, jump code, damping)
+- Test seam: `SetSprintInputForTest(bool held)` + `_overrideSprintInput` — must remain functional
+
+## Testing philosophy (CRITICAL)
+Tests must measure **what the game looks like when it's working**, not implementation details.
+
+Good test: "Character reaches sprint speed within N seconds of sustained movement" — observable outcome
+Bad test: "_sprintHeld is true after 1.2 seconds" — testing an internal variable
+
+Ask for every proposed test:
+- "If this feature was completely broken but internal variables still returned correct values, would this test catch it?"
+- "Is this testing the outcome (what the player experiences) or the input (what the code does internally)?"
+
+## The plan
+
+---
+
+# Plan 08 — Auto-Sprint
+
+Remove the sprint button entirely. Character walks when you first move, auto-ramps to sprint after ~1.2s of sustained movement. Stopping resets the timer. "Land into a run" — landing from a sprint-speed jump flows directly into a run without stumble.
+
+**Slice 1 — Auto-sprint timer**: Replace `_sprintHeld = sprint button` with timer-based logic in `PlayerMovement.cs`. `_autoSprintDelay = 1.2s`, small reset grace `_autoSprintResetOnStopDelay = 0.1s`. `SetSprintInputForTest` override still works.
+
+**Slice 2 — Land into a run**: Store `_wasSprintingAtLaunch` at jump wind-up. On landing, if `SprintNormalized > _landIntoRunSprintThreshold (0.9)`: skip horizontal damping, set auto-sprint timer immediately to delay value. Walk-jumps unaffected.
+
+**Slice 3 — Tests**: `AutoSprintTests.cs` — walk ramps to sprint after delay, stopping resets timer, land-into-run maintains speed, walk-jump does not land at sprint speed.
+
+---
+
+## Your review
+
+Be direct and critical. "Looks good" is not useful feedback.
+
+### 1. Results-based testing (most important)
+For every proposed test:
+- Is it testing an observable outcome or an internal variable?
+- Would it catch a regression where the feature is visually/functionally broken?
+- `AutoSprint_WalkRampsToSprintAfterDelay` — frame counts are hardcoded; is asserting `SprintNormalized` too internal? What's the player-observable version?
+- `AutoSprint_LandIntoRun_MaintainsSpeed` — speed measurement is good; what threshold is realistic?
+- What tests are MISSING? What does "broken auto-sprint" look like in practice?
+
+### 2. Root cause vs patchwork
+- Is "set timer to delay value on landing" actually the right fix for land-into-run, or is there a cleaner underlying model?
+- Are there cases where the auto-sprint delay should be longer or shorter (e.g. after a fall, after getting up, after being knocked down)? Should sprint reset on fall/knockdown?
+- Does the 0.1s reset grace feel right, or will it cause weird re-sprinting after quick direction changes?
+
+### 3. Slice sizing
+- Only 2 logic slices + 1 test slice — is this right-sized or can slice 1 and 2 merge safely?
+- Is the Input Actions file change (removing sprint button binding) safe to do in slice 1, or should it wait until tests are green?
+
+### 4. Gaps
+- What happens to sprint state during jump wind-up and airborne? Currently `_sprintHeld` drives jump behaviour — does auto-sprint interact with jump code correctly?
+- What about the existing `SprintRampFrames = 500` test constant — will auto-sprint break any existing tests that manually ramp sprint?
+- Should there be a minimum movement distance before sprint activates, not just time? (Prevents sprinting in place if somehow move input is held but character isn't moving)
+- Any UI/feedback implications — currently sprint button gave tactile feedback; auto-sprint is invisible. Does the player need any visual cue that sprint is active?
+
+### 5. Ordering
+- Does land-into-run (slice 2) depend on auto-sprint timer (slice 1) being in place first, or could it be standalone?
+- Should the sprint button be removed in slice 1, or kept as an override/debug option permanently?
+
+### 6. Risks
+- Existing tests that use `SetSprintInputForTest(true)` — confirmed safe, but are there tests that call `SetSprintInputForTest(false)` and expect walk speed even after 1.2s of movement?
+- Any places in the codebase that check `CurrentSprintHeld` directly that might behave differently?
+- Could the auto-sprint timer cause unexpected sprint activation in edge cases (e.g. character being pushed by physics but player isn't inputting movement)?
+
+### 7. Physics correctness
+- `_jumpLandingDampingTimer = 0` to skip damping — is this the right way to skip it, or does other code depend on the damping window running?
+- Any interaction between `MinimumSprintReachVelocityPreservationFactor` and the land-into-run skip?
+
+### 8. Anything else
+Gaps, wrong assumptions, better overall approach?
+
+---
+
+After your review, output a revised plan doc incorporating your suggestions. Keep the same structure and slice format. Mark significant changes with <!-- OPUS: reason --> comments.
