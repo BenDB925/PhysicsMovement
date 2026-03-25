@@ -1,1 +1,6 @@
-{"slice":"07-3","status":"pass","branch":"slice/07-3-tests","notes":"N/N green. GetUpTests: launch guard + re-knockdown + face-down get-up. FallCrumpleTests: monotonic ramp + no-snap. Plan 07 complete."}{"slice":"07-2b","status":"pass","branch":"slice/07-2b-face-up-detection","notes":"43/43 relevant green. SprintJump_TwoConsecutiveJumps_DoesNotFaceplant at 51.8 vs 50 threshold is order-sensitive noise - unrelated to ProceduralStandUp changes."}
+{
+    "slice": "08-3-tests-cleanup",
+    "status": "fail",
+    "branch": "slice/08-3-tests-cleanup",
+    "notes": "AutoSprintTests are 4/4 green after commit b7c92c3, but the full PlayMode filter still ends at 320/20/22 on the current dirty branch state instead of the required 321/19/22."
+}

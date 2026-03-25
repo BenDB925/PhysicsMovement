@@ -230,8 +230,8 @@ Below is the revised plan incorporating the above findings.
 
 # Plan 08 — Auto-Sprint (Revised)
 
-**Status:** Active — Slice 1 implemented, regression pending
-**Current next step:** Run the slice 1 PlayMode regression filter on `slice/08-1-auto-sprint-timer`
+**Status:** Blocked — Slice 3 is implemented and the focused AutoSprint suite is green, but the broad PlayMode gate on the current slice 08 branch state still sits at 20 failures.
+**Current next step:** Triage the remaining broad PlayMode red relative to the 19-failure target, with special attention to the unrelated dirty prefab/scene changes currently present in the worktree before merging the auto-sprint stack.
 **Branch prefix:** `slice/08-N-name`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\auto-sprint\prompts\`
 
@@ -403,7 +403,13 @@ All tests use horizontal velocity measurements, not `SprintNormalized` checks: <
 
 ## Agent Log
 
-- 2026-03-25: Slice 1 implemented on `slice/08-1-auto-sprint-timer`. `PlayerMovement.cs` now derives `_sprintHeld` from fixed-step sustained movement with a stop grace window, preserves `SetSprintInputForTest`, and removes the runtime sprint-button poll. Pending: run the requested PlayMode regression filter.
+- 2026-03-25: Slice 1 implemented on `slice/08-1-auto-sprint-timer`. `PlayerMovement.cs` now derives `_sprintHeld` from fixed-step sustained movement with a stop grace window, preserves `SetSprintInputForTest`, and removes the runtime sprint-button poll.
+- 2026-03-25: Requested PlayMode regression command failed the gate at the infrastructure layer. Attempt 1 timed out after 10 minutes (`Logs/test_playmode_20260325_144759.log`). Attempt 2 hit Unity's `Recovering Scene Backups` dialog in batch mode and produced no trustworthy results XML (`Logs/test_playmode_20260325_145801.log`). Next step: clear the recovery state, then rerun the same filter.
+- 2026-03-25: Cleared `Temp/__Backupscenes` and reran the exact slice prompt command. Attempt 1 still timed out after 10 minutes while verbose `FallPoseRecorder` logging was active (`Logs/test_playmode_20260325_153929.log`). The timeout recreated `Temp/__Backupscenes/0.backup`, so attempt 2 immediately hit Unity's `Recovering Scene Backups` dialog again and produced no XML (`Logs/test_playmode_20260325_154931.log`).
+- 2026-03-25: Slice 3 implemented on `slice/08-3-tests-cleanup`. Added `Assets/Tests/PlayMode/Character/AutoSprintTests.cs`, exposed `PlayerMovement.MaxSpeed` and `PlayerMovement.SprintSpeedMultiplier`, added a narrow sprint-override clear test seam for prefab-backed auto-sprint verification, removed the Sprint bindings from both `PlayerInputActions.inputactions` and `PlayerInputActions.cs`, and updated `PlayerInputActionsTests` to assert the Sprint action remains but is unbound.
+- 2026-03-25: Focused verification initially regressed at the threshold edge: `AutoSprint_LandIntoRun_MaintainsSpeed` failed once at 74.7% retained speed (`Logs/test_playmode_20260325_191431.log`, `TestResults/PlayMode.xml`). The slice branch now includes `fix(08-3): stabilize land-into-run speed sampling`, which averages a short pre-jump sprint window instead of sampling one potentially spiky frame.
+- 2026-03-25: Focused verification passed for the exact prompt command after the stabilization fix: `AutoSprintTests` went 4/4 green (`Logs/test_playmode_20260325_191817.log`, `TestResults/latest-summary.md`).
+- 2026-03-25: Full prompt filter completed at 320 passed, 20 failed, 22 skipped, 362 total (`Logs/test_playmode_20260325_191852.log`, `TestResults/latest-summary.md`). This improves the earlier 319/21/22 run by removing the AutoSprint flake, but it still misses the effective `321/19/22` target by one failure and the worktree currently contains unrelated dirty prefab/scene changes (`Assets/Prefabs/PlayerRagdoll_Skinned.prefab`, `Assets/Scenes/Arena_01.unity`, `PhysicsDrivenMovementDemo.slnx`) that may be influencing the remaining broad red set.
 
 ---
 
