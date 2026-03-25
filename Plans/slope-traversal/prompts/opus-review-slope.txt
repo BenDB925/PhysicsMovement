@@ -4,14 +4,18 @@ You are reviewing a plan for a new Unity physics feature in the PhysicsDrivenMov
 - Unity 6000.3.9f1, 100Hz FixedUpdate, 12 solver iterations, physics-driven active ragdoll
 - All character scripts live on the Hips child of PlayerRagdoll prefab
 - Existing slope-related infrastructure: `surfaceNormalQuality` in `StepPlanner` / `FootContactObservation`; `ApplyStepUpFootLiftAssist` in BalanceController
-- Test pattern: results-based PlayMode tests measuring observable physical outcomes
 - Each "slice" = one agent session pasted into VS Code Copilot Chat (~2h max, ~2-3 files)
 - Game: handcrafted Wipeout/Only Up-style obstacle course — inclines are core to the experience
 
-## The plan
+## Testing philosophy (CRITICAL)
+Tests must measure **what the game looks like when it's working**, not implementation details.
 
----
+Good test: "Character traverses a 35° incline in under 10 seconds" — observable outcome
+Bad test: "SlopeAngleDeg returns 35.0 when standing on a slope" — testing an internal variable
 
+Ask for every proposed test:
+- "If this feature was completely broken but internal variables still returned correct values, would this test catch it?"
+- "Is this testing the outcome or the input?"
 # Plan 09 — Slope Traversal
 
 The character currently struggles on inclines — feet don't plant correctly on slopes, height maintenance fights the terrain, and uphill movement is slow and jank.
@@ -79,3 +83,4 @@ Any gaps, wrong assumptions, or a better overall approach we haven't considered?
 ---
 
 After your review, output a revised plan doc incorporating your suggestions. Keep the same structure and slice format. Mark significant changes with <!-- OPUS: reason --> comments so the changes are visible.
+
