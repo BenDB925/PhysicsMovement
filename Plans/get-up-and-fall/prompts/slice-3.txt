@@ -1,0 +1,179 @@
+You are implementing Slice 3 of Plan 07 (Get-Up & Crumple Fall) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md
+
+---
+
+## HANDOFF CONTEXT
+
+All Plan 07 code slices are complete and merged to master. The character now:
+- Crumples naturally on surrender (joints soften over 0.25s ramp)
+- Rolls to prone using correct face-up-aware torque (IsFaceUp/IsFaceDown properties)
+- Pushes up through OrientProne → ArmPush → LegTuck → Stand phases
+- WasSurrendered survives Fallen↔Airborne grounding flicker bounces
+- HandleStandUpCompleted defers to FixedUpdate dwell gate (no bypass)
+- NudgeOutOfGeometry fires on stand-up completion (up to 3 passes, ComputePenetration)
+- _getUpMinDwellDuration = 0.4s prevents instant GettingUp exits
+
+Current master HEAD: dc7d2d9
+
+---
+
+## YOUR TASK: Slice 3 — Tests
+
+Create **two new test files**. No changes to any existing scripts.
+
+---
+
+## Test File 1: `Assets/Tests/PlayMode/Character/GetUpTests.cs`
+
+Standard test setup: load `PlayerRagdoll` prefab via AssetDatabase, instantiate, find components on Hips child, yield WaitForFixedUpdate for physics to settle.
+
+**Required components** (all on Hips child GameObject):
+- `BalanceController balanceCtrl`
+- `CharacterState charState`
+- `ProceduralStandUp proceduralStandUp`
+
+**Test 1: `GetUp_FromFaceDown_ReachesStanding_WithinTimeout`**
+
+```
+1. Instantiate prefab, settle 20 frames
+2. Force character to ground: SetGroundStateForTest(true, false), yield 5 frames
+3. Trigger surrender: balanceCtrl.TriggerSurrender(0.5f)
+4. Yield until charState.CurrentState == Fallen (max 60 frames)
+5. Assert reached Fallen within timeout
+6. Yield until charState.CurrentState == Standing OR Moving (max 800 frames = 8s at 100Hz)
+7. Assert reached Standing/Moving within timeout
+   Message: $"Character did not reach Standing after get-up. Last state: {charState.CurrentState} after 800 frames"
+```
+
+**Test 2: `GetUp_NeverExceedsMaxLaunchHeight`**
+
+```
+1. Instantiate prefab, settle 20 frames
+2. Trigger surrender: balanceCtrl.TriggerSurrender(0.8f) — high severity
+3. Track maxHipsY: record _hipsRb.position.y every frame for 600 frames
+4. Get standing hips height from BalanceController: balanceCtrl.StandingHipsHeight (or use const 0.95f if property not available)
+5. Assert maxHipsY < standingHipsHeight * 2.5f
+   Message: $"Hips reached {maxHipsY:F2}m during get-up — exceeds launch threshold {standingHipsHeight * 2.5f:F2}m"
+```
+
+For step 4: check if `BalanceController` has a public `StandingHipsHeight` property. If not, use the literal `0.95f` with a comment noting it matches the prefab value.
+
+**Test 3: `GetUp_ReKnockdownDuringStandUp_ReEntersFallen`**
+
+```
+1. Instantiate prefab, settle 20 frames
+2. Trigger first surrender: balanceCtrl.TriggerSurrender(0.5f)
+3. Yield until charState.CurrentState == GettingUp (max 300 frames)
+4. Assert reached GettingUp: $"Character did not enter GettingUp. State: {charState.CurrentState}"
+5. Immediately trigger second surrender: balanceCtrl.TriggerImpactKnockdownForTest(Vector3.back, 200f)
+6. Yield until charState.CurrentState == Fallen (max 60 frames)
+7. Assert re-entered Fallen: $"Character did not re-enter Fallen after mid-get-up knockdown. State: {charState.CurrentState}"
+```
+
+---
+
+## Test File 2: `Assets/Tests/PlayMode/Character/FallCrumpleTests.cs`
+
+Same setup pattern.
+
+**Test 1: `Fall_JointStiffnessRampsMonotonicallyOnSurrender`**
+
+```
+1. Instantiate prefab, settle 20 frames
+2. Record baseline UprightStrengthScale (should be ~1.0)
+3. Trigger surrender: balanceCtrl.TriggerSurrender(0.5f)
+4. Sample balanceCtrl.UprightStrengthScale every 5 fixed frames for 30 frames (6 samples)
+5. Assert each sample is <= previous sample (monotonically non-increasing)
+   Message: $"UprightStrengthScale increased from {prev:F3} to {curr:F3} at sample {i} — not a smooth ramp"
+6. Assert final sample < 0.1f (ramp reached near-zero)
+   Message: $"UprightStrengthScale never reached near-zero after surrender ramp. Final: {samples[^1]:F3}"
+```
+
+**Test 2: `Fall_DoesNotSnapToFaceplantAngle`**
+
+```
+1. Instantiate prefab, settle 20 frames  
+2. Set moving: SetMoveInputForTest(new Vector2(0, 1)), yield 30 frames to build speed
+3. Trigger surrender: balanceCtrl.TriggerSurrender(0.5f)
+4. Sample hips upright angle every frame for 15 frames, using:
+   float angle = Mathf.Acos(Mathf.Clamp(Vector3.Dot(hipsTransform.up, Vector3.up), -1f, 1f)) * Mathf.Rad2Deg
+5. Compare consecutive samples: Assert no single-frame delta exceeds 20 degrees
+   Message: $"Hips snapped {delta:F1} deg in one frame at frame {i} — crumple ramp not working"
+```
+
+---
+
+## CONSTRAINTS
+
+- Create new test files only — do NOT modify any existing scripts
+- Follow the same SetUp/TearDown pattern as existing PlayMode tests (save+restore Time.fixedDeltaTime and Physics.defaultSolverIterations)
+- Do NOT run LapOptimizer_ComprehensiveFullPrefab (always excluded)
+- Do NOT modify Run-UnityTests.ps1
+- Do NOT commit InitTestScene*.unity files
+- No questions — make best call, document reasoning in commit message
+- If BalanceController.StandingHipsHeight property does not exist, use const 0.95f with comment
+
+---
+
+## After writing tests: run them
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "GetUpTests|FallCrumpleTests|BalanceControllerTests|MovementQualityTests|LandingRecoveryTests|JumpTests|SprintJumpStabilityTests"
+```
+
+Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
+
+**Known pre-existing failures — do NOT stop for these:**
+- `SustainedLocomotionCollapse_TransitionsIntoFallen`
+- `TurnAndWalk_CornerRecovery`
+- `LandingRecovery_DampingDisabledWhenFactorIsOne`
+- `LandingRecovery_SpringRampsGraduallyAfterLanding`
+- `CompleteLap_WithinTimeLimit_NoFalls`
+- `SprintJump_TwoConsecutiveJumps_DoesNotFaceplant` (order-sensitive, 51.8° vs 50° threshold)
+- `WalkStraight_NoFalls` (order-sensitive)
+
+If only the above fail: proceed to commit.
+If any OTHER test fails: investigate first. If clearly pre-existing or order-sensitive, document and proceed. If genuinely new: write fail status, send Telegram ping, stop.
+
+---
+
+## Commit
+
+Branch: `slice/07-3-tests`
+Single commit:
+`test(07-3): add GetUpTests and FallCrumpleTests - launch guard, re-knockdown, crumple ramp`
+
+---
+
+## Update plan doc
+
+After committing tests, update `H:\Work\PhysicsDrivenMovementDemo\Plans\get-up-and-fall\07-get-up-and-crumple-fall.md`:
+- Mark Slice 3 complete
+- Update "Current next step" to "Plan 07 COMPLETE"
+- Fill in the Parameter Reference section with all ProceduralStandUp and crumple fields and their current prefab values
+
+---
+
+## Write status file
+
+`H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+```json
+{"slice":"07-3","status":"pass","branch":"slice/07-3-tests","notes":"N/N green. GetUpTests: launch guard + re-knockdown + face-down get-up. FallCrumpleTests: monotonic ramp + no-snap. Plan 07 complete."}
+```
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-07-3 STATUS: pass. NOTES: GetUpTests + FallCrumpleTests written and green. Plan 07 COMPLETE." } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
