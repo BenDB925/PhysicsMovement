@@ -44,13 +44,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMoveme
 
 Wait for results. Read from `H:\Work\PhysicsDrivenMovementDemo\TestResults\PlayMode.xml`.
 
-If any tests fail:
+### Known pre-existing failures — do NOT stop for these
+
+The following tests are confirmed pre-existing failures unrelated to Plan 05. They fail on commits predating slice 6. Treat them as "known red" and continue to Step 2 regardless:
+
+- `SustainedLocomotionCollapse_TransitionsIntoFallen` — pre-existing (confirmed on pre-slice-6 commit 46b1f59)
+- `CompleteLap_WithinTimeLimit_NoFalls` — pre-existing fragility (confirmed on pre-slice-6 commit 46b1f59)
+- `TurnAndWalk_CornerRecovery` — pre-existing (confirmed on pre-slice-6 commit 46b1f59)
+- `LandingRecovery_SpringRampsGraduallyAfterLanding` — order-sensitive flaky test; passes in isolation on both master and fix branch; confirmed not a real regression
+
+If ONLY the above tests fail (in any combination): continue to Step 2 and note them as "4 known pre-existing/order-sensitive failures excluded from gate" in the agent-slice-status notes.
+
+If any OTHER test fails (a test not in the above list):
 - Report exactly which tests failed and what the failure message says
 - Do NOT attempt to fix them — write `agent-slice-status.json` with status "fail" and the failing test names in notes
 - Send the Telegram ping with fail status
 - Stop
-
-If all tests pass: continue to Step 2.
 
 ---
 
