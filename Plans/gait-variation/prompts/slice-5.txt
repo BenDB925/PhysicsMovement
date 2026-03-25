@@ -1,0 +1,243 @@
+You are implementing Slice 5 of Plan 05 (Organic Movement & Gait Variation) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1–4B are complete and merged to master. Current HEAD: 5b3a6b0.
+
+What exists in LegAnimator.cs (organic variation system):
+- `_noiseSeed` (int, SerializeField), `_disableOrganicVariation` (bool, SerializeField)
+- `_organicRng` (System.Random, seed), `_organicRngRight` (seed+1000)
+- `_organicRngLateralLeft` (seed+2000), `_organicRngLateralRight` (seed+3000)
+- Step angle noise: ±8° walk, ±4° sprint, clamped [30°,90°], regenerated per-stride
+- Lateral placement noise via `StepTarget.WidthBias`
+- Stride asymmetry: `_leftStrideAsymmetry` (prefab: 1.04), `_rightStrideAsymmetry` (1.0)
+- Idle sway, idle bob, micro-step all gated by `_disableOrganicVariation`
+- `SetOrganicVariationSeedForTest(int seed)` public test seam
+
+ArmAnimator.cs — what you're modifying:
+- Reads `_legAnimator.Phase` for swing phase; `leftSwingDeg` / `rightSwingDeg` computed at lines ~429–433
+- `effectiveArmSwingAngle` = blended from `_armSwingAngle` (20°) and `_sprintArmSwingAngle` (45°) by `SprintNormalized`
+- `effectiveScale` = `curvedMag * _armSwingScale` — the amplitude scalar
+- Hard caps: `_maxSwingAngleDeg = 60°`, `_maxElbowAngleDeg = 55°`
+- Jump arm coordination already exists (wind-up pull-back, launch thrust)
+- `_disableOrganicVariation` does NOT currently exist in ArmAnimator — add it as a reference to LegAnimator's value (read it from `_legAnimator` rather than duplicating it)
+
+---
+
+## YOUR TASK: Slice 5 — Arm Swing Variation & Phase Offset
+
+Two distinct features: **per-stride amplitude variation** and **left/right phase offset**.
+
+---
+
+### Feature 1: Per-Stride Amplitude Variation
+
+Each arm gets a small random amplitude multiplier that changes once per stride cycle (when that arm crosses phase 0). This makes the two arms feel subtly independent — one arm might swing a little wider than the other on a given step.
+
+**New serialized fields on ArmAnimator:**
+```csharp
+[Header("Organic Arm Variation")]
+[SerializeField, Tooltip("Maximum amplitude variation per stride as a fraction of effective swing angle. " +
+    "0.12 = ±12% variation. Bypassed when LegAnimator._disableOrganicVariation is true.")]
+[Range(0f, 0.3f)]
+private float _armAmplitudeVariation = 0.12f;
+```
+
+**New private state:**
+```csharp
+private System.Random _armRngLeft;   // seeded from LegAnimator seed + 5000
+private System.Random _armRngRight;  // seeded from LegAnimator seed + 6000
+private float _leftArmAmplitudeMod;  // current per-stride multiplier, range [1 - variation, 1 + variation]
+private float _rightArmAmplitudeMod; // current per-stride multiplier
+private bool _leftArmCrossed;        // true after crossing phase 0, false when re-triggered
+private bool _rightArmCrossed;       // same for right
+```
+
+**Seeding:** In `Awake` (or wherever LegAnimator is accessed), initialise the RNGs:
+```csharp
+int seed = _legAnimator != null ? _legAnimator.GetOrganicSeedForTest() : 42;
+_armRngLeft  = new System.Random(seed + 5000);
+_armRngRight = new System.Random(seed + 6000);
+_leftArmAmplitudeMod  = 1f;
+_rightArmAmplitudeMod = 1f;
+```
+
+To get the seed from LegAnimator, add this public method to LegAnimator.cs:
+```csharp
+public int GetOrganicSeedForTest() => _noiseSeed;
+```
+
+**Per-stride update (in FixedUpdate, after reading legPhase):**
+
+Left arm crosses phase 0 when `sinLeft` changes sign from negative to positive (arm starts forward swing). Right arm crosses when `sinRight` changes sign similarly. On each crossing, roll a new multiplier:
+
+```csharp
+bool sinLeftPositive  = sinLeft  >= 0f;
+bool sinRightPositive = sinRight >= 0f;
+
+if (!_disableArmVariation)
+{
+    // Left arm: regenerate on positive zero-crossing
+    if (sinLeftPositive && !_leftArmCrossed)
+    {
+        _leftArmCrossed = true;
+        double r = _armRngLeft.NextDouble(); // [0, 1)
+        _leftArmAmplitudeMod = (float)(1.0 - _armAmplitudeVariation + r * 2.0 * _armAmplitudeVariation);
+    }
+    else if (!sinLeftPositive)
+    {
+        _leftArmCrossed = false;
+    }
+
+    // Right arm: same pattern
+    if (sinRightPositive && !_rightArmCrossed)
+    {
+        _rightArmCrossed = true;
+        double r = _armRngRight.NextDouble();
+        _rightArmAmplitudeMod = (float)(1.0 - _armAmplitudeVariation + r * 2.0 * _armAmplitudeVariation);
+    }
+    else if (!sinRightPositive)
+    {
+        _rightArmCrossed = false;
+    }
+}
+else
+{
+    _leftArmAmplitudeMod  = 1f;
+    _rightArmAmplitudeMod = 1f;
+}
+```
+
+**Apply the multiplier** after computing `leftSwingDeg` / `rightSwingDeg` but BEFORE the hard cap clamp:
+```csharp
+leftSwingDeg  *= _leftArmAmplitudeMod;
+rightSwingDeg *= _rightArmAmplitudeMod;
+```
+
+**Gate:** `_disableArmVariation` — a private bool computed each frame:
+```csharp
+bool _disableArmVariation => _legAnimator == null || _legAnimator.IsOrganicVariationDisabled;
+```
+
+Add this public property to LegAnimator.cs:
+```csharp
+public bool IsOrganicVariationDisabled => _disableOrganicVariation;
+```
+
+---
+
+### Feature 2: Left/Right Phase Offset
+
+A small, fixed per-arm phase offset creates a subtle asymmetry in arm timing — the arms don't swing in perfect anti-phase with each other. This stacks with stride asymmetry from Slice 3 to make the gait feel genuinely personal rather than mechanical.
+
+**New serialized field on ArmAnimator:**
+```csharp
+[SerializeField, Tooltip("Fixed phase offset (radians) added to the left arm's swing phase. " +
+    "0.05 = ~3° of phase lead/lag vs the right arm. Bypassed when organic variation is disabled.")]
+[Range(-0.2f, 0.2f)]
+private float _leftArmPhaseOffset = 0.05f;
+```
+
+**Apply in FixedUpdate**, when computing sinLeft:
+```csharp
+float leftPhaseOffset = _disableArmVariation ? 0f : _leftArmPhaseOffset;
+float sinLeft  = Mathf.Sin(legPhase + Mathf.PI + leftPhaseOffset);
+float sinRight = Mathf.Sin(legPhase);  // right arm unchanged
+```
+
+---
+
+## Tests to write
+
+New file: `Assets/Tests/PlayMode/Character/ArmSwingVariationTests.cs`
+
+Setup pattern: same as `IdleSwayTests.cs` — load real prefab, spawn at `new Vector3(3000f, 0f, 0f)`, wait for settle.
+
+**Test 1: `ArmSwing_WhenWalking_LeftAndRightAmplitudesDiffer`**
+- Set `_disableOrganicVariation = false`, `_armAmplitudeVariation = 0.12f`
+- Apply walk input for 600 frames
+- Record peak absolute `leftSwingDeg` and `rightSwingDeg` over 10 consecutive stride cycles (approximate by sampling every 50 frames for 500 frames)
+- Assert: max recorded left peak ≠ max recorded right peak within 0.5° tolerance (they differ at some point)
+- Assert: both peaks are within [0°, 60°] (hard cap respected)
+- Assert: no fall
+
+To access swing angles, either expose them as `internal float DebugLeftSwingDeg` / `DebugLeftSwingDeg` fields (set each frame before clamping) or use reflection. Add the internal fields — they're useful for debugging anyway.
+
+**Test 2: `ArmSwing_WhenDisableOrganicVariation_AmplitudesAreSymmetric`**
+- Set `_disableOrganicVariation = true`
+- Apply walk input for 400 frames
+- Sample `leftSwingDeg` and `rightSwingDeg` every frame for 200 frames
+- For each sample: assert `Mathf.Abs(leftSwingDeg + rightSwingDeg) < 0.5f` (they should be equal and opposite — perfect symmetry when variation disabled; +rightSwing and -leftSwing are same magnitude since they're in antiphase)
+- Assert: no fall
+
+**Test 3: `ArmSwing_AmplitudeVariation_StaysWithinBounds`**
+- Set `_disableOrganicVariation = false`, `_armAmplitudeVariation = 0.12f`
+- Walk for 800 frames, record ALL sampled leftSwingDeg / rightSwingDeg values
+- Assert: no value exceeds `_maxSwingAngleDeg` (60°)
+- Assert: no value is NaN
+- Assert: no fall
+
+---
+
+## Test filter
+
+`"ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests"`
+
+Target: all green (existing relevant + 3 new).
+
+---
+
+## CONSTRAINTS
+
+- Do NOT modify `PlayerMovement.cs`, `BalanceController.cs`, `LegAnimator.cs` except for the two small additions (`GetOrganicSeedForTest()` and `IsOrganicVariationDisabled`) specified above
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- `_disableOrganicVariation = true` (on LegAnimator) must make arm variation return to perfectly symmetric swing — no amplitude mod, no phase offset
+- `_armAmplitudeVariation = 0` must also produce symmetric swing (bounds check)
+- All new serialized fields go in prefab overrides — defaults in this prompt are the starting values
+- Set prefab overrides on both `PlayerRagdoll.prefab` and `PlayerRagdoll_Skinned.prefab`: `_armAmplitudeVariation = 0.12`, `_leftArmPhaseOffset = 0.05`
+- No questions — make best call, document reasoning, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output every file you'll modify and what you'll change. Then proceed — plan is pre-approved.
+
+---
+
+## BRANCH
+
+Create branch `slice/05-5-arm-swing-variation` from master HEAD (5b3a6b0) before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `feat(05-5): per-stride arm amplitude variation and phase offset` — ArmAnimator + minimal LegAnimator additions
+2. `test(05-5): add ArmSwingVariationTests` — test file
+3. `fix(05-5): ...` — any tuning
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"05-5","status":"pass","branch":"slice/05-5-arm-swing-variation","notes":"<one line>"}`
+- Commit: `chore: slice 05-5 complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-5 STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
