@@ -66,7 +66,6 @@ namespace PhysicsDrivenMovement.Character
         private float _gettingUpTimer;
         private float _collapseDeferralTimer;
         private float _airborneLimboTimer;
-        private float _limboForcedDwellTimer;
         private float _activeFloorDwellTargetTime;
         private int _getUpImpulseAppliedCount;
         private bool _enteredFallenFromCollapse;
@@ -216,14 +215,11 @@ namespace PhysicsDrivenMovement.Character
             switch (CurrentState)
             {
                 case CharacterStateType.Standing:
-                    if (_limboForcedDwellTimer > 0f)
-                        _limboForcedDwellTimer -= Time.fixedDeltaTime;
-
                     if (isFallen || collapseTriggersfall)
                     {
                         nextState = CharacterStateType.Fallen;
                     }
-                    else if (shouldBeAirborne && _limboForcedDwellTimer <= 0f)
+                    else if (shouldBeAirborne)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
@@ -272,7 +268,6 @@ namespace PhysicsDrivenMovement.Character
                         if (_airborneLimboTimer >= 1.5f)
                         {
                             _airborneLimboTimer = 0f;
-                            _limboForcedDwellTimer = 0.4f;
                             nextState = CharacterStateType.Standing;
                         }
                     }
