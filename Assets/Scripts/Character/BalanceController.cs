@@ -154,6 +154,10 @@ namespace PhysicsDrivenMovement.Character
           [Tooltip("Duration in seconds used by ClearSurrender() to restore the local support scales.")]
           private float _clearSurrenderRampDuration = 0.35f;
 
+        [SerializeField, Range(0.05f, 0.5f)]
+        [Tooltip("Duration in seconds to ramp joint stiffness to near-zero on surrender. Higher = slower, more natural crumple.")]
+        private float _surrenderCrumpleDuration = 0.25f;
+
         [Header("Startup Stand Assist")]
         [SerializeField]
         [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
@@ -670,9 +674,9 @@ namespace PhysicsDrivenMovement.Character
 
             CancelAllRamps();
             IsSurrendered = true;
-            UprightStrengthScale = 0f;
-            HeightMaintenanceScale = 0f;
-            StabilizationScale = 0f;
+            RampUprightStrength(0f, _surrenderCrumpleDuration);
+            RampHeightMaintenance(0f, _surrenderCrumpleDuration);
+            RampStabilization(0f, _surrenderCrumpleDuration);
             _suppressPelvisExpression = true;
             _surrenderExtremeAngleFrameCount = 0;
 
@@ -692,9 +696,28 @@ namespace PhysicsDrivenMovement.Character
 
             if (_ragdollSetup != null)
             {
-                _ragdollSetup.SetSpringProfile(0.25f, 0.25f, 0.25f, 0.15f);
+                _ragdollSetup.SetSpringProfile(0.05f, 0.08f, 0.05f, _surrenderCrumpleDuration);
             }
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Test seam: applies a horizontal impulse to the hips and triggers surrender.
+        /// Simulates an external impact knockdown for use in PlayMode tests only.
+        /// </summary>
+        /// <param name="direction">World-space direction of the impulse (will be normalized).</param>
+        /// <param name="force">Impulse magnitude in Newtons.</param>
+        public void TriggerImpactKnockdownForTest(Vector3 direction, float force)
+        {
+            Rigidbody rb = _rb != null ? _rb : GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.AddForce(direction.normalized * force, ForceMode.Impulse);
+            }
+
+            TriggerSurrender(1f);
+        }
+#endif
 
         /// <summary>
         /// Clears the surrendered flag and restores the local balance support scales with a deterministic ramp.
