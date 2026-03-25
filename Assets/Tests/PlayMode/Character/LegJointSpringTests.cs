@@ -51,9 +51,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private ConfigurableJoint _lowerLegLJoint;
         private ConfigurableJoint _lowerLegRJoint;
 
-        [SetUp]
+                private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
+[SetUp]
         public void SetUp()
         {
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerRagdollPrefabPath);
             Assert.That(prefab, Is.Not.Null,
                 $"PlayerRagdoll prefab must be loadable from '{PlayerRagdollPrefabPath}'.");
@@ -77,6 +86,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
             if (_hips != null)
             {
                 Object.Destroy(_hips);

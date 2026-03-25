@@ -16,9 +16,18 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private static readonly Vector3 TestOriginOffset = new Vector3(0f, 0f, 8000f);
         private PlayerPrefabTestRig _rig;
 
-        [SetUp]
+                private float _savedFixedDeltaTime;
+        private int _savedSolverIterations;
+        private int _savedSolverVelocityIterations;
+[SetUp]
         public void SetUp()
         {
+            _savedFixedDeltaTime = Time.fixedDeltaTime;
+            _savedSolverIterations = Physics.defaultSolverIterations;
+            _savedSolverVelocityIterations = Physics.defaultSolverVelocityIterations;
+            Time.fixedDeltaTime = 0.01f;
+            Physics.defaultSolverIterations = 12;
+            Physics.defaultSolverVelocityIterations = 4;
             _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
             {
                 TestOrigin = TestOriginOffset,
@@ -31,6 +40,9 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
+            Time.fixedDeltaTime = _savedFixedDeltaTime;
+            Physics.defaultSolverIterations = _savedSolverIterations;
+            Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
             _rig?.Dispose();
             _rig = null;
         }
