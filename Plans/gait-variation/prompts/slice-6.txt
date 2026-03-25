@@ -1,0 +1,240 @@
+You are implementing Slice 6 of Plan 05 (Organic Movement & Gait Variation) in the Unity project at H:\Work\PhysicsDrivenMovementDemo.
+
+---
+
+## MANDATORY FIRST STEPS
+
+1. Read H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md
+2. Read H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md
+3. Read H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\05-organic-movement-and-gait-variation.md
+
+---
+
+## HANDOFF CONTEXT
+
+Slices 1–5 are complete and merged to master. Current HEAD: the merge commit after slice 5 (arm swing variation).
+
+What exists in the expression stack (BalanceController.cs, around line 1460):
+```csharp
+float totalPelvisTilt = _smoothedPelvisTiltDeg    // acceleration/decel lean (STEP 3.9)
+                      + transientLeanDeg           // one-shot impulse
+                      + landingPelvisTilt          // landing counter-lean
+                      + desiredLeanDegrees;        // LocomotionDirector command
+totalPelvisTilt = Mathf.Clamp(totalPelvisTilt, -_totalPelvisTiltCapDeg, _totalPelvisTiltCapDeg);
+```
+`_totalPelvisTiltCapDeg = 15f`. `_pelvisTiltMaxDeg = 3f`. `_pelvisTiltSmoothing = 8f`.
+
+The tilt axis for `totalPelvisTilt` is the **lateral axis** (perpendicular to facing direction, in the horizontal plane) — it produces forward/backward pitch.
+
+PlayerMovement.cs exposes:
+- `SprintNormalized` (0–1)
+- `SmoothedMoveInput` or similar — check what's available for lateral input
+- No yaw rate property currently exists
+
+BalanceController already reads `_currentBodySupportCommand.FacingDirection` for the tilt axis.
+
+---
+
+## YOUR TASK: Slice 6 — Momentum Lean on Direction Change
+
+When the character changes direction (turns), they should lean slightly into the turn — a subtle lateral tilt toward the inside of the curve. This is purely visual (BalanceController visual lean target only — NOT physics forces). It stacks additively with the existing forward/back lean in `totalPelvisTilt`.
+
+---
+
+### Design
+
+**Signal to use:** Angular yaw rate of the character's facing direction. This is cleanly available by tracking the change in facing direction between FixedUpdate frames in BalanceController.
+
+**New private state in BalanceController:**
+```csharp
+private Vector3 _prevFacingDirection;
+private float _smoothedYawRateDeg;   // smoothed yaw rate in deg/s
+private float _momentumLeanDeg;      // current smoothed lateral lean contribution
+```
+
+**New serialized fields in BalanceController:**
+```csharp
+[Header("Momentum Lean")]
+[SerializeField, Tooltip("Maximum lateral lean angle (degrees) at full turn rate. " +
+    "2–3 degrees looks natural without looking exaggerated. Default 2.5.")]
+[Range(0f, 8f)]
+private float _momentumLeanMaxDeg = 2.5f;
+
+[SerializeField, Tooltip("Yaw rate (deg/s) that produces full lean. " +
+    "At MaxFacingTurnRate=540 deg/s this should be around 180–270 for a gentle lean.")]
+[Range(30f, 540f)]
+private float _momentumLeanFullTurnRate = 200f;
+
+[SerializeField, Tooltip("Smoothing speed for the momentum lean signal (units/s). " +
+    "Higher = more responsive. Default 6.")]
+[Range(1f, 20f)]
+private float _momentumLeanSmoothing = 6f;
+```
+
+**Yaw rate computation (in FixedUpdate, before STEP 3.9 or just before STEP 4):**
+
+```csharp
+// Track facing direction change to derive yaw rate
+Vector3 currentFacing = Vector3.ProjectOnPlane(
+    _currentBodySupportCommand.FacingDirection, Vector3.up);
+
+float instantYawRate = 0f;
+if (currentFacing.sqrMagnitude > 0.001f && _prevFacingDirection.sqrMagnitude > 0.001f
+    && Time.fixedDeltaTime > 0f)
+{
+    float angleDelta = Vector3.SignedAngle(
+        _prevFacingDirection.normalized,
+        currentFacing.normalized,
+        Vector3.up);
+    instantYawRate = angleDelta / Time.fixedDeltaTime;
+}
+_prevFacingDirection = currentFacing.sqrMagnitude > 0.001f ? currentFacing.normalized : _prevFacingDirection;
+
+_smoothedYawRateDeg = Mathf.Lerp(_smoothedYawRateDeg, instantYawRate,
+    Time.fixedDeltaTime * _momentumLeanSmoothing);
+```
+
+**Lean computation:**
+
+```csharp
+float momentumLeanContribution = 0f;
+if (_momentumLeanMaxDeg > 0f && !IsFallen && effectivelyGrounded)
+{
+    float normalizedYaw = Mathf.Clamp(_smoothedYawRateDeg / _momentumLeanFullTurnRate, -1f, 1f);
+    // Positive yaw = turning left (counter-clockwise) → lean left (negative lateral = left in facing space)
+    momentumLeanContribution = normalizedYaw * _momentumLeanMaxDeg * _legAnimator.SmoothedInputMag;
+}
+```
+
+**Inject into totalPelvisTilt as a LATERAL lean (not forward/back):**
+
+The existing `totalPelvisTilt` is a forward/back pitch around the lateral axis. Momentum lean is a roll around the forward axis (lean sideways into the turn). These are different axes and should NOT be summed into the same scalar.
+
+Instead, modify the uprightTarget construction (around line 1470 in BalanceController) to apply the lateral lean separately:
+
+```csharp
+// Existing forward/back tilt:
+Vector3 uprightTarget = Vector3.up;
+if (Mathf.Abs(totalPelvisTilt) > 0.01f)
+{
+    Vector3 tiltFacing = Vector3.ProjectOnPlane(
+        _currentBodySupportCommand.FacingDirection, Vector3.up);
+    if (tiltFacing.sqrMagnitude > 0.001f)
+    {
+        Vector3 lateralAxis = Vector3.Cross(Vector3.up, tiltFacing.normalized);
+        uprightTarget = Quaternion.AngleAxis(totalPelvisTilt, lateralAxis) * Vector3.up;
+    }
+}
+
+// NEW: lateral momentum lean — rotate uprightTarget sideways into the turn
+if (Mathf.Abs(momentumLeanContribution) > 0.01f)
+{
+    Vector3 facingXZ = Vector3.ProjectOnPlane(
+        _currentBodySupportCommand.FacingDirection, Vector3.up);
+    if (facingXZ.sqrMagnitude > 0.001f)
+    {
+        // Lean around the facing axis (forward axis) — positive = lean left
+        uprightTarget = Quaternion.AngleAxis(-momentumLeanContribution, facingXZ.normalized) * uprightTarget;
+    }
+}
+```
+
+**Gates:**
+- Only when `effectivelyGrounded && !IsFallen`
+- `_legAnimator.SmoothedInputMag` scales it to zero at idle
+- When `_suppressPelvisExpression` is true, also zero this lean
+- When `_landingAbsorbTimer > 0f`, also zero this lean (same suppression as tilt)
+
+**Initialisation:** In `Start` or `OnEnable`, set `_prevFacingDirection = Vector3.forward` as a safe default.
+
+---
+
+## Tests to write
+
+New tests in **existing file**: `Assets/Tests/PlayMode/Character/LandingRecoveryTests.cs`
+— Actually, these don't fit there. New file: `Assets/Tests/PlayMode/Character/MomentumLeanTests.cs`
+
+Setup: same pattern as other tests — load real prefab, spawn at `new Vector3(4000f, 0f, 0f)`, wait 120 frames to settle.
+
+**Test 1: `MomentumLean_WhenTurningLeft_LateralLeanIsNonZero`**
+- Apply walk input forward for 200 frames (settle into walk)
+- Then apply input at 90° (sharp left turn) for 150 frames
+- Read `_smoothedYawRateDeg` via reflection or expose as `internal float DebugSmoothedYawRate`
+- Assert: `DebugSmoothedYawRate > 15f` during turn (character is actually yawing)
+- Assert: no fall
+
+**Test 2: `MomentumLean_WhenStraight_LeanIsNearZero`**
+- Apply walk input straight for 400 frames
+- Sample `DebugSmoothedYawRate` for last 100 frames
+- Assert: `Mathf.Abs(DebugSmoothedYawRate) < 30f` (within straight-walking tolerance)
+- Assert: no fall
+
+**Test 3: `MomentumLean_WhenIdle_LeanIsZero`**
+- No input for 300 frames after settle
+- Assert: `Mathf.Abs(momentumLean)` == 0 (SmoothedInputMag gates it)
+- Best way: expose `internal float DebugMomentumLeanDeg` set each frame to `momentumLeanContribution`
+- Assert: `Mathf.Abs(BalanceController.DebugMomentumLeanDeg) < 0.01f` for last 100 frames
+- Assert: no fall
+
+Add these internal debug properties to BalanceController:
+```csharp
+internal float DebugSmoothedYawRate => _smoothedYawRateDeg;
+internal float DebugMomentumLeanDeg { get; private set; }
+```
+Set `DebugMomentumLeanDeg = momentumLeanContribution` each frame.
+
+---
+
+## Test filter
+
+`"MomentumLeanTests|ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests"`
+
+Target: all green (existing relevant + 3 new).
+
+---
+
+## CONSTRAINTS
+
+- Only modify `BalanceController.cs` and the new test file
+- Do NOT modify `PlayerMovement.cs`, `LegAnimator.cs`, `ArmAnimator.cs`
+- Do NOT modify `Run-UnityTests.ps1`
+- Do NOT commit `InitTestScene*.unity` files
+- This is VISUAL ONLY — do NOT apply any Rigidbody forces, AddForce, or change joint targets for this feature
+- The lean must be zero when: idle, fallen, airborne, landing absorb active, `_suppressPelvisExpression` true
+- Hard cap: `momentumLeanContribution` must never exceed `_momentumLeanMaxDeg` in absolute value
+- Set prefab overrides on `PlayerRagdoll.prefab`: `_momentumLeanMaxDeg = 2.5`, `_momentumLeanFullTurnRate = 200`, `_momentumLeanSmoothing = 6`
+- No questions — make best call, document reasoning, move on
+
+---
+
+## PLAN (output first, then execute)
+
+Before making any changes, output every file you'll modify and what you'll change. Then proceed — plan is pre-approved.
+
+---
+
+## BRANCH
+
+Create branch `slice/05-6-momentum-lean` from current master HEAD before starting.
+
+---
+
+## COMMIT PATTERN
+
+1. `feat(05-6): lateral momentum lean on direction change` — BalanceController
+2. `test(05-6): add MomentumLeanTests` — test file
+3. `fix(05-6): ...` — any tuning
+
+After all tests green:
+- Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+  `{"slice":"05-6","status":"pass","branch":"slice/05-6-momentum-lean","notes":"<one line>"}`
+- Commit: `chore: slice 05-6 complete - N/N green`
+
+---
+
+## FINAL STEP (mandatory)
+
+```powershell
+$body = @{ chat_id = "8630971080"; text = "slice-05-6 STATUS: pass/fail. Tests: N/N. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
