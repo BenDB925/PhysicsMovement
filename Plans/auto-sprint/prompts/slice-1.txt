@@ -1,0 +1,85 @@
+You are implementing Slice 1 of Plan 08 — Auto-Sprint for PhysicsDrivenMovementDemo.
+
+## Read first
+- `H:\Work\PhysicsDrivenMovementDemo\.copilot-instructions.md`
+- `H:\Work\PhysicsDrivenMovementDemo\CODING_STANDARDS.md`
+- `H:\Work\PhysicsDrivenMovementDemo\Plans\auto-sprint\08-auto-sprint.md` (the revised plan — follow this exactly)
+- `H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\PlayerMovement.cs` (the file you'll modify)
+
+## Branch
+Create and work on: `slice/08-1-auto-sprint-timer`
+Branch from master.
+
+## Plan (approved — proceed without asking questions)
+
+Replace the sprint button input with a timer-based auto-sprint system in `PlayerMovement.cs`.
+
+### What to change
+
+1. **Add new serialized fields** (after the existing sprint fields, around line 48-52):
+   ```csharp
+   [Header("Auto-Sprint")]
+   [Tooltip("Seconds of sustained movement before sprint activates automatically.")]
+   [SerializeField] private float _autoSprintDelay = 1.2f;
+
+   [Tooltip("Seconds of zero move input before the auto-sprint timer resets.")]
+   [SerializeField] private float _autoSprintStopGraceWindow = 0.1f;
+   ```
+
+2. **Add private state fields** (near the other sprint state fields):
+   ```csharp
+   private float _autoSprintTimer;
+   private float _autoSprintStopGraceTimer;
+   ```
+
+3. **In FixedUpdate**, after move input is snapshotted and before sprint is consumed, add the timer logic:
+   - If `_overrideSprintInput` is true: skip entirely (test seam preserved — `SetSprintInputForTest` still works)
+   - Else if move input magnitude > 0.1f AND `_characterState.CurrentState` is not `CharacterStateType.Fallen` AND not `CharacterStateType.GettingUp`:
+     - `_autoSprintStopGraceTimer = _autoSprintStopGraceWindow`
+     - `_autoSprintTimer += Time.fixedDeltaTime`
+   - Else if `_autoSprintStopGraceTimer > 0f`:
+     - `_autoSprintStopGraceTimer -= Time.fixedDeltaTime`
+   - Else:
+     - `_autoSprintTimer = 0f`
+   - `_sprintHeld = _autoSprintTimer >= _autoSprintDelay`
+
+4. **In Update()**: Remove (or comment out with `// AUTO-SPRINT: button polling removed`) the line that polls the sprint button:
+   ```csharp
+   _sprintHeld = _inputActions.Player.Sprint.IsPressed();
+   ```
+   Leave the sprint button binding in `PlayerInputActions.inputactions` — that's removed in slice 3.
+
+5. **Do NOT change** `SetSprintInputForTest`, `_overrideSprintInput`, `SprintNormalized`, or any downstream consumers.
+
+## Exit criteria
+- Walking forward with move input held: character starts at walk speed, ramps to sprint after ~1.2s (observable as speed increase — don't test `SprintNormalized` directly)
+- Stopping for >0.2s and restarting resets the timer — character walks again
+- `SetSprintInputForTest(true)` still forces sprint regardless of timer
+- `SetSprintInputForTest(false)` still suppresses sprint regardless of timer
+- CharacterState Fallen/GettingUp does not increment the timer
+
+## Test filter for regression run
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 2 -Unattended -TestFilter "!LapOptimizer_ComprehensiveFullPrefab"
+```
+
+All tests should pass (minus known pre-existing failures listed in the plan doc).
+
+## No questions rule
+Make your best call, add a comment explaining reasoning, and move on. Do not ask for clarification.
+
+## Commit pattern
+- `feat(08-1): add auto-sprint timer replacing sprint button input`
+
+## On finish
+Write `H:\Work\PhysicsDrivenMovementDemo\agent-slice-status.json`:
+```json
+{"slice":"08-1-auto-sprint-timer","status":"pass","branch":"slice/08-1-auto-sprint-timer","notes":"<one line summary>"}
+```
+Or "fail" with a brief explanation if tests don't pass.
+
+Then send a Telegram notification:
+```powershell
+$body = @{ chat_id = "8630971080"; text = "Slice 08-1 auto-sprint timer: STATUS. NOTES: one line summary" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```
