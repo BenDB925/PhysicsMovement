@@ -103,13 +103,19 @@ namespace PhysicsDrivenMovement.Character
         private int _maxStandUpAttempts = 3;
 
         [SerializeField, Tooltip("Upward impulse applied as forced safety net after max failed attempts.")]
-        private float _forcedStandImpulse = 350f;
+        private float _forcedStandImpulse = 60f;
+
+        [SerializeField, Range(1, 30), Tooltip("Number of fixed frames over which the forced stand safety net applies upward force.")]
+        private int _forcedStandFrames = 8;
 
         [SerializeField, Tooltip("Duration (s) for spring profile reset after stand completes.")]
         private float _completionSpringResetDuration = 0.2f;
 
         [SerializeField, Tooltip("Duration (s) for early-phase height support ramps before the final stand phase clears surrender.")]
         private float _phaseSupportRampDuration = 0.15f;
+
+        [Header("Debug")]
+        [SerializeField] private bool _debugLog = false;
 
         // ─── References ─────────────────────────────────────────────────────
         [Header("References")]
@@ -123,6 +129,7 @@ namespace PhysicsDrivenMovement.Character
         private int _standUpAttempts;
         private float _severity;
         private float _groundY;
+        private int _forcedStandFrameCounter;
 
         // ─── Public API ─────────────────────────────────────────────────────
 
@@ -151,14 +158,16 @@ namespace PhysicsDrivenMovement.Character
             _severity = Mathf.Clamp01(severity);
             _standUpAttempts++;
 
+            CacheRigidbodies();
+            CaptureGroundY();
+            DebugLog($"Begin called. Attempts={_standUpAttempts}/{_maxStandUpAttempts}. FaceUp={Vector3.Dot(_hipsRb != null ? _hipsRb.transform.up : Vector3.up, Vector3.up):F2}. GroundY={_groundY:F3}");
+
             if (_standUpAttempts > _maxStandUpAttempts)
             {
                 ApplyForcedStand();
                 return;
             }
 
-            CacheRigidbodies();
-            CaptureGroundY();
             EnterPhase(StandUpPhase.OrientProne);
         }
 
@@ -183,24 +192,45 @@ namespace PhysicsDrivenMovement.Character
 
         private void FixedUpdate()
         {
-            if (!IsActive) return;
+            if (!IsActive && _forcedStandFrameCounter <= 0) return;
 
-            _phaseTimer += Time.fixedDeltaTime;
-
-            switch (CurrentPhase)
+            if (IsActive)
             {
-                case StandUpPhase.OrientProne:
-                    TickOrientProne();
-                    break;
-                case StandUpPhase.ArmPush:
-                    TickArmPush();
-                    break;
-                case StandUpPhase.LegTuck:
-                    TickLegTuck();
-                    break;
-                case StandUpPhase.Stand:
-                    TickStand();
-                    break;
+                _phaseTimer += Time.fixedDeltaTime;
+
+                if (IsActive && _ragdollSetup != null && _hipsRb != null)
+                {
+                    foreach (Rigidbody rb in _ragdollSetup.AllBodies)
+                    {
+                        _groundY = Mathf.Min(_groundY, rb.position.y);
+                    }
+                }
+
+                switch (CurrentPhase)
+                {
+                    case StandUpPhase.OrientProne:
+                        TickOrientProne();
+                        break;
+                    case StandUpPhase.ArmPush:
+                        TickArmPush();
+                        break;
+                    case StandUpPhase.LegTuck:
+                        TickLegTuck();
+                        break;
+                    case StandUpPhase.Stand:
+                        TickStand();
+                        break;
+                }
+            }
+
+            if (_forcedStandFrameCounter > 0)
+            {
+                if (_hipsRb != null)
+                {
+                    _hipsRb.AddForce(Vector3.up * _forcedStandImpulse, ForceMode.Force);
+                }
+
+                _forcedStandFrameCounter--;
             }
         }
 
@@ -210,6 +240,7 @@ namespace PhysicsDrivenMovement.Character
         {
             CurrentPhase = phase;
             _phaseTimer = 0f;
+            DebugLog($"EnterPhase -> {phase}");
 
             switch (phase)
             {
@@ -252,6 +283,7 @@ namespace PhysicsDrivenMovement.Character
 
         private void AdvancePhase()
         {
+            DebugLog($"Phase {CurrentPhase} -> advancing");
             OnPhaseCompleted?.Invoke();
 
             switch (CurrentPhase)
@@ -276,6 +308,7 @@ namespace PhysicsDrivenMovement.Character
 
         private void Fail(float failureSeverity)
         {
+            DebugLog($"Phase {CurrentPhase} FAILED. Severity={failureSeverity:F2}. Attempts={_standUpAttempts}");
             CurrentPhase = StandUpPhase.Inactive;
             _phaseTimer = 0f;
             OnFailed?.Invoke(failureSeverity);
@@ -328,6 +361,11 @@ namespace PhysicsDrivenMovement.Character
 
             float chestHeight = pushTarget.position.y - _groundY;
 
+            if (ShouldLogPhaseTick())
+            {
+                DebugLog($"ArmPush: chestHeight={chestHeight:F3} target={_armPushTargetHeight:F3} timer={_phaseTimer:F2}/{_armPushTimeout:F2}");
+            }
+
             // Diminishing push force as we approach target.
             float progress = Mathf.Clamp01(chestHeight / _armPushTargetHeight);
             float force = _armPushForce * (1f - progress);
@@ -367,6 +405,12 @@ namespace PhysicsDrivenMovement.Character
             if (_hipsRb == null) { AdvancePhase(); return; }
 
             float hipsHeight = _hipsRb.position.y - _groundY;
+            bool grounded = _balanceController != null && _balanceController.IsGrounded;
+
+            if (ShouldLogPhaseTick())
+            {
+                DebugLog($"LegTuck: hipsHeight={hipsHeight:F3} target={_legTuckTargetHeight:F3} grounded={grounded} timer={_phaseTimer:F2}/{_legTuckTimeout:F2}");
+            }
 
             // Upward assist on hips.
             float progress = Mathf.Clamp01(hipsHeight / _legTuckTargetHeight);
@@ -382,7 +426,6 @@ namespace PhysicsDrivenMovement.Character
             }
 
             // Success: hips high enough and grounded (foot contact).
-            bool grounded = _balanceController != null && _balanceController.IsGrounded;
             if (hipsHeight >= _legTuckTargetHeight && grounded)
             {
                 AdvancePhase();
@@ -414,6 +457,11 @@ namespace PhysicsDrivenMovement.Character
             bool isFallen = _balanceController != null && _balanceController.IsFallen;
             bool grounded = _balanceController != null && _balanceController.IsGrounded;
 
+            if (ShouldLogPhaseTick())
+            {
+                DebugLog($"Stand: hipsHeight={hipsHeight:F3} standingHeight={standingHeight:F3} isFallen={isFallen} grounded={grounded} timer={_phaseTimer:F2}/{_standTimeout:F2}");
+            }
+
             // Success: near standing height, not fallen, grounded.
             if (hipsHeight >= standingHeight * _standHeightFraction && !isFallen && grounded)
             {
@@ -437,6 +485,32 @@ namespace PhysicsDrivenMovement.Character
         }
 
         // ─── Helpers ────────────────────────────────────────────────────────
+
+        private void DebugLog(string message)
+        {
+            if (_debugLog)
+            {
+                Debug.Log($"[ProceduralStandUp] {message}");
+            }
+        }
+
+        private bool ShouldLogPhaseTick()
+        {
+            if (!_debugLog)
+            {
+                return false;
+            }
+
+            float logInterval = Time.fixedDeltaTime * 10f;
+            if (logInterval <= 0f)
+            {
+                return false;
+            }
+
+            float remainder = _phaseTimer % logInterval;
+            float tolerance = Time.fixedDeltaTime * 0.5f;
+            return remainder <= tolerance || logInterval - remainder <= tolerance;
+        }
 
         private void CacheRigidbodies()
         {
@@ -493,12 +567,10 @@ namespace PhysicsDrivenMovement.Character
 
         private void ApplyForcedStand()
         {
+            DebugLog("ForcedStand triggered. Attempts exhausted.");
             CacheRigidbodies();
 
-            if (_hipsRb != null)
-            {
-                _hipsRb.AddForce(Vector3.up * _forcedStandImpulse, ForceMode.Impulse);
-            }
+            _forcedStandFrameCounter = _forcedStandFrames;
 
             if (_balanceController != null)
             {
