@@ -142,7 +142,7 @@ function Invoke-UnityTestPlatform {
 
     # Wait for Unity to exit — up to 10 minutes (PlayMode physics tests can take 3-4 min).
     # Start-Process -Wait is unreliable in nested PowerShell invocations; use WaitForExit() directly.
-    $exited = $proc.WaitForExit(600000)
+    $exited = $proc.WaitForExit(1200000)
     if (-not $exited) {
         $proc.Kill()
         return [PSCustomObject]@{
