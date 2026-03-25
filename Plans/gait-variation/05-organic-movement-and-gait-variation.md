@@ -1,13 +1,12 @@
 # Plan 05 — Organic Movement & Gait Variation
 
 **Status:** Active
-**Current next step:** Start Slice 5 (arm swing variation & phase offset) now that Slice 4B is complete and the focused gait-variation PlayMode slice is green again.
+**Current next step:** Start Slice 6 (momentum lean on direction change) now that Slice 5 is complete and the focused arm-expression PlayMode slice is green again.
 
-Active slice checkpoint: `slice/05-4a-idle-sway` remains the last completed merged slice with the idle lateral sway force path in `LegAnimator.cs`, the `IdleSwayTests.cs` outcome suite, prefab overrides tuned to `_idleSwayForce: 33` and `_idleSwayFrequency: 1.0`, and a hardened `JumpTests` harness/tolerance for the previously order-sensitive landing-absorption check. Slice 4B is now complete on `slice/05-4b-idle-bob`; `BalanceController.SetIdleBobOffset`, the `LegAnimator` idle bob plus micro-step runtime path, the new `IdleVerticalBobTests` PlayMode suite, and prefab overrides tuned to `_idleBobAmplitude: 0.02`, `_idleBobFrequency: 0.5`, `_microStepIdleDelay: 2.5`, `_microStepDriftThreshold: 0.01`, and `_microStepCooldown: 1.5` are in place. The compile-red from direct `MicroStepCount` test access was fixed via reflection, the idle gate was latched narrowly enough to keep self-generated sway from canceling idle detection, and the final bob fix kept the centered sine wave in `LegAnimator` while adding a bob-specific force contribution in `BalanceController` so the standing-height support no longer swallowed the vertical oscillation. Focused PlayMode verification via `IdleVerticalBobTests|IdleSwayTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests` finished `30/30` green on 2026-03-24.
-| 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
+Active slice checkpoint: Slice 5 is complete on `slice/05-5-arm-swing-variation`. `ArmAnimator` now applies per-stride left/right amplitude modifiers plus a fixed left-arm phase offset, all bypassed when `LegAnimator` organic variation is disabled or when `_armAmplitudeVariation` is zero. `LegAnimator` exposes `GetOrganicSeedForTest()` and `IsOrganicVariationDisabled` for companion systems, both player prefabs now override `_armAmplitudeVariation: 0.12` and `_leftArmPhaseOffset: 0.05`, and the new `ArmSwingVariationTests` fixture landed alongside the existing gait regression slice. Focused PlayMode verification via `ArmSwingVariationTests|OrganicGaitVariationTests|JumpTests|SprintJumpStabilityTests` finished `27/27` green on 2026-03-25.
 # Plan 05 — Organic Movement & Gait Variation
 
-**Status:** Planning
+**Status:** Active
 **Branch prefix:** `slice/05-N-name`
 **Watcher state file:** `C:\Users\Usuario\.openclaw\workspace\scripts\gait-watcher-state.json`
 **Slice prompts dir:** `H:\Work\PhysicsDrivenMovementDemo\Plans\gait-variation\prompts\`
@@ -222,5 +221,6 @@ Slice 7 gate: `"JumpTests|SprintJumpStabilityTests|JumpGapOutcomeTests|MovementQ
 | 2026-03-24 | 05-3 | OpenClaw main | fail | Added serialized stride asymmetry fields, prefab defaults, and new StrideAsymmetryTests. Target slice tests improved from 27/31 to 30/31 green after isolating organic-noise tests and softening the asymmetry path, but SprintJumpStabilityTests still regresses (Landing #1 peak tilt 55.9° > 50° in TwoConsecutiveJumps). |
 | 2026-03-24 | 05-4a | GitHub Copilot | pass | Added idle sway in `LegAnimator`, authored `IdleSwayTests`, tuned the prefab sway overrides, hardened the fade-out control path and adjacent JumpTests harness, and finished the focused PlayMode slice `31/31` green on `slice/05-4a-idle-sway`. |
 | 2026-03-24 | 05-4b | GitHub Copilot | pass | Added idle bob support in `BalanceController`, shipped centered idle bob plus micro-step behavior in `LegAnimator`, authored `IdleVerticalBobTests`, tuned the prefab bob overrides to `_idleBobAmplitude: 0.02` / `_idleBobFrequency: 0.5`, and finished the focused PlayMode slice `30/30` green on `slice/05-4b-idle-bob`. |
+| 2026-03-25 | 05-5 | GitHub Copilot | pass | Added ArmAnimator per-stride amplitude variation plus fixed left-arm phase offset, exposed the minimal LegAnimator seams for arm organic gating, updated both player prefabs to `_armAmplitudeVariation: 0.12` / `_leftArmPhaseOffset: 0.05`, authored `ArmSwingVariationTests`, and finished the focused PlayMode slice `27/27` green on `slice/05-5-arm-swing-variation`. |
 
-**Current next step:** Start Slice 5 (arm swing variation & phase offset) now that Slice 4B is complete and the focused gait-variation regression slice is green again.
+**Current next step:** Start Slice 6 (momentum lean on direction change) now that Slice 5 is complete and the focused arm-expression regression slice is green again.

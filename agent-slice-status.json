@@ -1,1 +1,1 @@
-{"slice":"06-3","status":"pass","branch":"slice/06-3-landing-damping","notes":"Landing damping assertions were stabilized against the prefab-backed speed envelope and the focused PlayMode filter finished 35/35 green."}
+{"slice":"05-5","status":"pass","branch":"slice/05-5-arm-swing-variation","notes":"Arm swing variation, phase offset, prefabs, and focused PlayMode regression finished 27/27 green."}
