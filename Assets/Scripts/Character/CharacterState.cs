@@ -494,10 +494,10 @@ namespace PhysicsDrivenMovement.Character
         {
             if (CurrentState != CharacterStateType.GettingUp) return;
             CleanUpProceduralStandUp();
-
-            float moveMagnitude = _playerMovement != null ? _playerMovement.CurrentMoveInput.magnitude : 0f;
-            bool wantsMove = moveMagnitude >= _moveEnterThreshold;
-            ChangeState(wantsMove ? CharacterStateType.Moving : CharacterStateType.Standing);
+            // Do not exit immediately — let the FixedUpdate dwell check handle the
+            // transition so the minimum dwell gate (_getUpMinDwellDuration) is respected.
+            // _proceduralStandUpActive is now false; FixedUpdate will exit on next frame
+            // after the dwell has elapsed.
         }
 
         private void HandleStandUpFailed(float failureSeverity)
