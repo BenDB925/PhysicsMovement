@@ -10,23 +10,26 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 
 - State: Active
 - Branch: `plan/10-input-recorder`
-- Current next step: Add the `InputPlayback` utility, then swap the GhostDriver-driven regression tests to recording playback.
+- Current next step: Replace the GhostDriver-driven regression tests in `MovementQualityTests.cs` and `LapCourseTests.cs` with recording playback.
 - Active blockers: VS Code diagnostics have not refreshed the new debug asmdef yet; final Unity verification will confirm the recorder compiles in the real project graph.
 
 ## Quick Resume
 
 - 2026-03-27: Stage 1 complete. Added `Assets/Scripts/Debug/InputRecorder.cs` plus a narrow debug asmdef so the recorder can live at the requested path and still bind directly to the Input System.
 - The recorder latches jump presses between `Update` and `FixedUpdate`, so the JSON matches the one-frame `SetJumpInputForTest` seam instead of a held button state.
-- Next useful restart point: implement `Assets/Tests/PlayMode/Utilities/InputPlayback.cs`, then replace the MovementQuality and lap regression tests.
+- 2026-03-27: Stage 2 complete. Added `Assets/Tests/PlayMode/Utilities/InputPlayback.cs` to load recordings from `Assets/Tests/PlayMode/Recordings` and feed them through `SetMoveInputForTest` and `SetJumpInputForTest`.
+- Next useful restart point: replace the MovementQuality and lap regression tests, then add the recordings directory and summary-script cleanup.
 
 ## Verified Artifacts
 
 - `Assets/Scripts/Debug/InputRecorder.cs`: Recorder implementation and JSON save path.
 - `Assets/Scripts/Debug/PhysicsDrivenMovement.Character.Debug.asmdef`: Narrow assembly boundary for the requested debug folder.
+- `Assets/Tests/PlayMode/Utilities/InputPlayback.cs`: Test-side JSON loader and frame-application helper.
 
 ## Progress Notes
 
 - 2026-03-27: Completed Stage 1 and kept the recorder at the exact plan path by adding a dedicated debug asmdef instead of moving the script into the character folder.
+- 2026-03-27: Completed Stage 2 by adding `InputPlayback` with minimal validation and the same recording path contract the recorder writes to.
 
 ---
 
