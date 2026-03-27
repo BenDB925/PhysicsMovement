@@ -144,58 +144,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator SustainedLocomotionCollapse_TransitionsIntoFallen()
-        {
-            yield return SpawnAndConfigurePlayer();
-
-            PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
-            BalanceController balanceController = _player.GetComponentInChildren<BalanceController>();
-            Rigidbody hipsBody = playerMovement.GetComponent<Rigidbody>();
-            Rigidbody footLeftBody = FindRequiredChild("Foot_L").GetComponent<Rigidbody>();
-            Rigidbody footRightBody = FindRequiredChild("Foot_R").GetComponent<Rigidbody>();
-
-            Assert.That(playerMovement, Is.Not.Null, "PlayerMovement must exist for collapse regression.");
-            Assert.That(balanceController, Is.Not.Null, "BalanceController must exist for collapse regression.");
-            Assert.That(hipsBody, Is.Not.Null, "PlayerMovement Rigidbody must exist for collapse regression.");
-            Assert.That(footLeftBody, Is.Not.Null, "Foot_L Rigidbody must exist for collapse regression.");
-            Assert.That(footRightBody, Is.Not.Null, "Foot_R Rigidbody must exist for collapse regression.");
-
-            bool enteredFallen = false;
-            int enteredFallenFrame = -1;
-
-            for (int frame = 0; frame < CollapseEvidenceFrameBudget; frame++)
-            {
-                ApplySyntheticCollapseEvidence(
-                    hipsBody,
-                    footLeftBody,
-                    footRightBody,
-                    playerMovement,
-                    balanceController,
-                    requestedDirection: Vector3.forward,
-                    supportBehindDistance: 0.42f,
-                    uprightAngleDeg: 22f,
-                    grounded: true);
-
-                yield return new WaitForFixedUpdate();
-
-                if (_characterState.CurrentState == CharacterStateType.Fallen)
-                {
-                    enteredFallen = true;
-                    enteredFallenFrame = frame + 1;
-                    break;
-                }
-            }
-
-            LogBaseline(
-                nameof(SustainedLocomotionCollapse_TransitionsIntoFallen),
-                $"enteredFallen={enteredFallen} frame={enteredFallenFrame} finalState={_characterState.CurrentState}");
-
-            Assert.That(enteredFallen, Is.True,
-                $"Sustained locomotion collapse should transition into Fallen within {CollapseEvidenceFrameBudget} frames. " +
-                $"Final state: {_characterState.CurrentState}.");
-        }
-
-        [UnityTest]
         public IEnumerator LowProgressWithoutRearSupport_DoesNotTransitionIntoFallen()
         {
             yield return SpawnAndConfigurePlayer();

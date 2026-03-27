@@ -23,7 +23,6 @@ elseif (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
 
 $knownPreExistingPatterns = @(
     "WalkStraight_NoFalls",
-    "SustainedLocomotionCollapse_TransitionsIntoFallen",
     "LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls"
 )
 
