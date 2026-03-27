@@ -6,6 +6,28 @@ Replace the failing GhostDriver-steered navigation tests with deterministic inpu
 Benny records a real play-through once; tests replay it frame-for-frame via `SetMoveInputForTest`.
 Physics-deterministic: same inputs → same outcome every time. No steering algorithm to maintain.
 
+## Status
+
+- State: Active
+- Branch: `plan/10-input-recorder`
+- Current next step: Add the `InputPlayback` utility, then swap the GhostDriver-driven regression tests to recording playback.
+- Active blockers: VS Code diagnostics have not refreshed the new debug asmdef yet; final Unity verification will confirm the recorder compiles in the real project graph.
+
+## Quick Resume
+
+- 2026-03-27: Stage 1 complete. Added `Assets/Scripts/Debug/InputRecorder.cs` plus a narrow debug asmdef so the recorder can live at the requested path and still bind directly to the Input System.
+- The recorder latches jump presses between `Update` and `FixedUpdate`, so the JSON matches the one-frame `SetJumpInputForTest` seam instead of a held button state.
+- Next useful restart point: implement `Assets/Tests/PlayMode/Utilities/InputPlayback.cs`, then replace the MovementQuality and lap regression tests.
+
+## Verified Artifacts
+
+- `Assets/Scripts/Debug/InputRecorder.cs`: Recorder implementation and JSON save path.
+- `Assets/Scripts/Debug/PhysicsDrivenMovement.Character.Debug.asmdef`: Narrow assembly boundary for the requested debug folder.
+
+## Progress Notes
+
+- 2026-03-27: Completed Stage 1 and kept the recorder at the exact plan path by adding a dedicated debug asmdef instead of moving the script into the character folder.
+
 ---
 
 ## How it works
