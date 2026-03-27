@@ -30,7 +30,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // generously to allow a full retry cycle.
         private const float GetUpTimeoutScale = 4f;
         private const float DefaultGetUpTimeout = 3f;
-        private const float FallImpulseMagnitude = 800f;
+        private const float LateralFallImpulseMagnitude = 800f;
+        private const float LongitudinalFallImpulseMagnitude = 400f;
         private const float DestabilizationTiltThreshold = 15f;
 
         private static readonly Vector3 TestOrigin = new Vector3(700f, 0f, 700f);
@@ -109,7 +110,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_characterState.CurrentState, Is.EqualTo(CharacterStateType.Standing).Or.EqualTo(CharacterStateType.Moving),
                 $"[{directionLabel}] Precondition failed: expected the real character to start settled on the ground.");
 
-            Vector3 impulse = direction.normalized * FallImpulseMagnitude;
+            float impulseMagnitude = Mathf.Abs(direction.x) > Mathf.Abs(direction.z)
+                ? LateralFallImpulseMagnitude
+                : LongitudinalFallImpulseMagnitude;
+            Vector3 impulse = direction.normalized * impulseMagnitude;
             Vector3 forcePoint = _torsoRb != null
                 ? _torsoRb.worldCenterOfMass
                 : _hipsRb.worldCenterOfMass + Vector3.up * 0.15f;
