@@ -1016,7 +1016,8 @@ namespace PhysicsDrivenMovement.Character
 
             UpdateScaleRamps();
 
-            if (IsSurrendered)
+            if (IsSurrendered &&
+                (_characterState == null || _characterState.CurrentState != CharacterStateType.GettingUp))
             {
                 UprightStrengthScale = 0f;
                 HeightMaintenanceScale = 0f;

@@ -17,6 +17,7 @@ Fix all currently-failing tests. Get to a genuinely clean baseline.
 - 2026-03-27: Focused `SurrenderTests` verification exposed a remaining one-frame lag in `TriggerSurrender()`: `IsSurrendered` became true before the three support scales were zeroed. Fixed by snapping the scales to `0f` inside `TriggerSurrender()` before the crumple ramps are configured.
 - 2026-03-27: Focused `GetUpReliabilityTests` verification showed that applying `800f` to all directions over-destabilized the backward case into a long unrecovered fall. Narrowed the stronger impulse to lateral directions only and kept fore/aft at the prior `400f` magnitude.
 - 2026-03-27: Focused `GetUpReliabilityTests` still left the backward case unrecovered after the surrender timing fix, so the fore/aft impulse was reduced further to `300f` while keeping the stronger `800f` lateral pushes for the originally failing left/right cases.
+- 2026-03-27: Full `ProceduralStandUpTests` verification surfaced `ArmPush_RestoresHeightSupportBeforeStandPhase`. Cause: the new per-frame surrender zeroing in `BalanceController.FixedUpdate()` also ran during `CharacterStateType.GettingUp`, wiping out the partial support ramps that `ProceduralStandUp` restores in `ArmPush` and `LegTuck`. Fixed by skipping that per-frame zeroing while the character is in `GettingUp`; same-frame zeroing remains enforced by `TriggerSurrender()`.
 
 ## Principles
 
