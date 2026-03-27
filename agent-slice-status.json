@@ -1,6 +1,6 @@
 {
-    "slice": "08-3-tests-cleanup",
+    "slice": "09-test-cleanup",
     "status": "fail",
-    "branch": "slice/08-3-tests-cleanup",
-    "notes": "AutoSprintTests are 4/4 green after commit b7c92c3, but the full PlayMode filter still ends at 320/20/22 on the current dirty branch state instead of the required 321/19/22."
+    "branch": "plan/09-test-cleanup",
+    "notes": "PlayMode reduced to 92 total with 7 failures: the expected 4 known reds plus 3 jump/landing reds that overlap unrelated dirty PlayerRagdoll_Skinned.prefab tuning already present in the worktree."
 }
