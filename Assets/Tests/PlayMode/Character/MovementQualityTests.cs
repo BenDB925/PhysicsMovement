@@ -103,6 +103,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             bool enteredFallen = false;
             int framesApplied = 0;
+            int fallenAtFrame = -1;
 
             // Only count Fallen during active playback, not during the last 60 frames
             // where inputs naturally taper off and the character decelerates.
@@ -113,8 +114,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 playback.ApplyFrame(frame, playerMovement);
                 framesApplied++;
                 yield return new WaitForFixedUpdate();
-                if (frame < fallenCheckUntil)
-                    enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
+                if (frame < fallenCheckUntil && _characterState.CurrentState == CharacterStateType.Fallen)
+                {
+                    enteredFallen = true;
+                    fallenAtFrame = frame;
+                    break;
+                }
             }
 
             playerMovement.SetMoveInputForTest(Vector2.zero);
@@ -126,7 +131,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             LogBaseline(
                 nameof(WalkStraight_RecordedPlayback_NoFalls),
-                $"framesApplied={framesApplied}/{playback.FrameCount} enteredFallen={enteredFallen}");
+                $"framesApplied={framesApplied}/{playback.FrameCount} enteredFallen={enteredFallen} fallenAtFrame={fallenAtFrame}");
 
             Assert.That(enteredFallen, Is.False,
                 $"Recorded walk-straight playback entered Fallen after {framesApplied} frames.");
@@ -247,8 +252,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
             Assert.That(playerMovement, Is.Not.Null, "PlayerRagdoll prefab is missing PlayerMovement.");
-            SetPrivateFloat(playerMovement, "_moveForce", 1500f);
-            SetPrivateFloat(playerMovement, "_maxSpeed", 8f);
 
             FallPoseRecorder recorder = playerMovement.gameObject.AddComponent<FallPoseRecorder>();
             ConfigureFallRecorder(recorder);
