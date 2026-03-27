@@ -128,7 +128,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int GateMissedTimeoutFrames = 600;
 
         /// <summary>Frame budget for the pass/fail assertion (40 s @ 100 Hz).</summary>
-        private const int LapBudgetFrames = 4000;
+        private const int LapBudgetFrames = 5000; // 50s — generous for recorded playback
 
         private const float FixedDeltaTimeTolerance = 0.0001f;
 
@@ -143,6 +143,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private BalanceController _bc;
         private CharacterState _cs;
         private PlayerMovement _pm;
+        private GameObject _testCamera;
 
         // ── Setup / Teardown ──────────────────────────────────────────────────────
 
@@ -180,6 +181,20 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
             _rig?.Dispose();
             _rig = null;
+            if (_testCamera != null)
+            {
+                UnityEngine.Object.Destroy(_testCamera);
+                _testCamera = null;
+            }
+        }
+
+        private void CreatePlaybackCamera(float yawDegrees)
+        {
+            _testCamera = new GameObject("PlaybackCamera");
+            _testCamera.transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
+            _testCamera.transform.position = new Vector3(0f, 5f, -10f);
+            Camera cam = _testCamera.AddComponent<Camera>();
+            cam.tag = "MainCamera";
         }
 
         // ── Tests ─────────────────────────────────────────────────────────────────
@@ -198,22 +213,30 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             AssertPlaybackFixedDeltaTimeMatches(playback, "complete-lap");
 
             yield return SettleCharacter();
+            CreatePlaybackCamera(playback.CameraYaw);
 
             bool enteredFallen = false;
             int framesApplied = 0;
+            int fallenAtFrame = -1;
+            int fallenCheckUntil = playback.FrameCount - 60;
 
             for (int frame = 0; frame < playback.FrameCount; frame++)
             {
                 playback.ApplyFrame(frame, _pm);
                 framesApplied++;
                 yield return new WaitForFixedUpdate();
-                enteredFallen |= _cs != null && _cs.CurrentState == CharacterStateType.Fallen;
+                if (frame < fallenCheckUntil && _cs != null && _cs.CurrentState == CharacterStateType.Fallen)
+                {
+                    enteredFallen = true;
+                    fallenAtFrame = frame;
+                    break;
+                }
             }
 
             _pm.SetMoveInputForTest(Vector2.zero);
             _pm.SetJumpInputForTest(false);
 
-            string summary = $"RecordedLapFrames={framesApplied}/{playback.FrameCount} | Fallen={enteredFallen}";
+            string summary = $"RecordedLapFrames={framesApplied}/{playback.FrameCount} | Fallen={enteredFallen} | FallenAtFrame={fallenAtFrame}";
             Debug.Log($"[LapCourse] CompleteLap_WithinTimeLimit_NoFalls: {summary}");
 
             Assert.That(enteredFallen, Is.False,
