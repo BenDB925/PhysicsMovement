@@ -1,6 +1,1 @@
-{
-    "slice": "09-test-cleanup",
-    "status": "fail",
-    "branch": "plan/09-test-cleanup",
-    "notes": "PlayMode reduced to 92 total with 7 failures: the expected 4 known reds plus 3 jump/landing reds that overlap unrelated dirty PlayerRagdoll_Skinned.prefab tuning already present in the worktree."
-}
+{"slice":"10-input-recorder","status":"pass","branch":"plan/10-input-recorder","notes":"InputRecorder + playback tests in place; recordings pending Benny's play-through"}

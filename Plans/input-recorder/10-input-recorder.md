@@ -8,10 +8,10 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 
 ## Status
 
-- State: Active
+- State: Complete
 - Branch: `plan/10-input-recorder`
-- Current next step: Add the recordings directory placeholder, update `Write-TestSummary.ps1`, then run the focused PlayMode verification slice.
-- Active blockers: VS Code diagnostics have not refreshed the new debug asmdef yet; final Unity verification will confirm the recorder compiles in the real project graph.
+- Current next step: Benny records `walk-straight`, `turn-and-walk`, and `complete-lap`, then re-runs the focused PlayMode slice.
+- Active blockers: Recording JSON files are intentionally still missing until Benny captures the play-throughs.
 
 ## Quick Resume
 
@@ -19,7 +19,8 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 - The recorder latches jump presses between `Update` and `FixedUpdate`, so the JSON matches the one-frame `SetJumpInputForTest` seam instead of a held button state.
 - 2026-03-27: Stage 2 complete. Added `Assets/Tests/PlayMode/Utilities/InputPlayback.cs` to load recordings from `Assets/Tests/PlayMode/Recordings` and feed them through `SetMoveInputForTest` and `SetJumpInputForTest`.
 - 2026-03-27: Stage 3 complete. `MovementQualityTests` now replays `walk-straight` and `turn-and-walk` recordings, and `LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls` now replays `complete-lap` while the diagnostic ghost-driver lap remains available.
-- Next useful restart point: add the recordings directory placeholder, trim the known-failure summary patterns, and run the focused PlayMode regression slice.
+- 2026-03-27: Stage 4 complete. Added `Assets/Tests/PlayMode/Recordings/.gitkeep`, removed the old MovementQuality failure classifications from `Write-TestSummary.ps1`, and verified the focused PlayMode slice with 2 passes, 3 skips, and 0 failures.
+- Next useful restart point: capture the three recordings with `InputRecorder`, place them in `Assets/Tests/PlayMode/Recordings`, and rerun the focused PlayMode slice to convert the skips into live coverage.
 
 ## Verified Artifacts
 
@@ -28,12 +29,15 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 - `Assets/Tests/PlayMode/Utilities/InputPlayback.cs`: Test-side JSON loader and frame-application helper.
 - `Assets/Tests/PlayMode/Character/MovementQualityTests.cs`: Recorded playback regressions for straight and turn-and-walk paths.
 - `Assets/Tests/PlayMode/Character/LapCourseTests.cs`: Recorded playback regression for the full lap gate while preserving the ghost-driver diagnostic.
+- `Assets/Tests/PlayMode/Recordings/.gitkeep`: Tracked placeholder for Benny's future JSON recordings.
+- `TestResults/latest-summary.md`: Focused PlayMode verification result (`MovementQualityTests;LapCourseTests` -> 5 total, 2 passed, 3 skipped, 0 failed).
 
 ## Progress Notes
 
 - 2026-03-27: Completed Stage 1 and kept the recorder at the exact plan path by adding a dedicated debug asmdef instead of moving the script into the character folder.
 - 2026-03-27: Completed Stage 2 by adding `InputPlayback` with minimal validation and the same recording path contract the recorder writes to.
 - 2026-03-27: Completed Stage 3 by replacing only the targeted GhostDriver-dependent regression gates; `GhostDriver.cs`, `WaypointCourseRunner.cs`, and the lap-time diagnostic remain intact.
+- 2026-03-27: Completed Stage 4 by adding the recordings placeholder, trimming the obsolete summary buckets, and verifying the focused PlayMode slice with clean compile and expected skips.
 
 ---
 

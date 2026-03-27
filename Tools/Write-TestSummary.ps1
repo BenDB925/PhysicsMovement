@@ -22,13 +22,10 @@ elseif (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
 }
 
 $knownPreExistingPatterns = @(
-    "WalkStraight_NoFalls",
     "LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls"
 )
 
-$suspectedOrderSensitivePatterns = @(
-    "TurnAndWalk_CornerRecovery"
-)
+$suspectedOrderSensitivePatterns = @()
 
 function Convert-ToProjectRelativePath {
     param([string]$Path)
