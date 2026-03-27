@@ -30,7 +30,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // generously to allow a full retry cycle.
         private const float GetUpTimeoutScale = 4f;
         private const float DefaultGetUpTimeout = 3f;
-        private const float FallImpulseMagnitude = 400f;
+        private const float FallImpulseMagnitude = 800f;
         private const float DestabilizationTiltThreshold = 15f;
 
         private static readonly Vector3 TestOrigin = new Vector3(700f, 0f, 700f);

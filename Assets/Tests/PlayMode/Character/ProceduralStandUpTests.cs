@@ -25,6 +25,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
+            if (_rig?.PlayerMovement != null)
+            {
+                _rig.PlayerMovement.SetMoveInputForTest(Vector2.zero);
+                _rig.PlayerMovement.SetSprintInputForTest(false);
+            }
+
             _rig?.Dispose();
             _rig = null;
         }
