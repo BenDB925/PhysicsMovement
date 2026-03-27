@@ -25,6 +25,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         // so a forward lean of up to ~65° is expected and correct on sprint landings.
         // The real guard is EnteredFallen — peak tilt alone is not a failure condition.
         private const float FaceplantAngleThreshold = 65f;
+        // Two consecutive sprint jumps compound momentum; second landing lean can be higher.
+        private const float TwoJumpFaceplantAngleThreshold = 75f;
         private const float StableUprightCeiling = 25f;
         private const int PostLandStabilityDeadline = 150;
         private const float LandingTelemetryWindowSeconds = 0.5f;
