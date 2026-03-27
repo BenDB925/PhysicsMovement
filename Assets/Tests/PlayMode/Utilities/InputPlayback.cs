@@ -13,9 +13,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     {
         private readonly RecordedFrame[] _frames;
 
-        private InputPlayback(float recordedFixedDeltaTime, RecordedFrame[] frames)
+        private InputPlayback(float recordedFixedDeltaTime, float cameraYaw, RecordedFrame[] frames)
         {
             RecordedFixedDeltaTime = recordedFixedDeltaTime;
+            CameraYaw = cameraYaw;
             _frames = frames ?? Array.Empty<RecordedFrame>();
         }
 
@@ -28,6 +29,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// FixedUpdate timestep that was active when the recording was captured.
         /// </summary>
         public float RecordedFixedDeltaTime { get; }
+
+        /// <summary>
+        /// Camera yaw (degrees) at the time of recording. Use this to set up a test camera
+        /// so camera-relative input maps to the same world directions as during the recording.
+        /// </summary>
+        public float CameraYaw { get; }
 
         /// <summary>
         /// Loads a named recording from Assets/Tests/PlayMode/Recordings.
@@ -51,7 +58,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             }
 
             // STEP 2: Normalize null frame arrays so tests can still reason about empty recordings.
-            return new InputPlayback(recording.fixedDeltaTime, recording.frames ?? Array.Empty<RecordedFrame>());
+            return new InputPlayback(recording.fixedDeltaTime, recording.cameraYaw, recording.frames ?? Array.Empty<RecordedFrame>());
         }
 
         /// <summary>
@@ -91,6 +98,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private sealed class RecordingData
         {
             public float fixedDeltaTime = 0f;
+            public float cameraYaw = 0f;
             public RecordedFrame[] frames = Array.Empty<RecordedFrame>();
         }
 

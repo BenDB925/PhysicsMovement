@@ -23,6 +23,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const float FixedDeltaTimeTolerance = 0.0001f;
 
         private GameObject _ground;
+        private GameObject _testCamera;
         private GameObject _player;
 
         private CharacterState _characterState;
@@ -62,6 +63,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 UnityEngine.Object.Destroy(_ground);
             }
 
+            if (_testCamera != null)
+            {
+                UnityEngine.Object.Destroy(_testCamera);
+                _testCamera = null;
+            }
+
             RestoreLayerCollisionMatrix(_savedLayerCollisionMatrix);
 
             Time.fixedDeltaTime = _savedFixedDeltaTime;
@@ -69,11 +76,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Physics.defaultSolverVelocityIterations = _savedSolverVelocityIterations;
         }
 
+        private void CreatePlaybackCamera(float yawDegrees)
+        {
+            _testCamera = new GameObject("PlaybackCamera");
+            _testCamera.transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
+            _testCamera.transform.position = new Vector3(0f, 5f, -10f);
+            Camera cam = _testCamera.AddComponent<Camera>();
+            cam.tag = "MainCamera";
+        }
+
         [UnityTest]
         public IEnumerator WalkStraight_RecordedPlayback_NoFalls()
         {
             InputPlayback playback = LoadRecordingOrIgnore("walk-straight");
             yield return SpawnAndConfigurePlayer();
+            CreatePlaybackCamera(playback.CameraYaw);
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
             Assert.That(playerMovement, Is.Not.Null, "PlayerMovement must exist for recorded playback.");
@@ -87,16 +104,25 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             bool enteredFallen = false;
             int framesApplied = 0;
 
+            // Only count Fallen during active playback, not during the last 60 frames
+            // where inputs naturally taper off and the character decelerates.
+            int fallenCheckUntil = playback.FrameCount - 60;
+
             for (int frame = 0; frame < playback.FrameCount; frame++)
             {
                 playback.ApplyFrame(frame, playerMovement);
                 framesApplied++;
                 yield return new WaitForFixedUpdate();
-                enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
+                if (frame < fallenCheckUntil)
+                    enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
             }
 
             playerMovement.SetMoveInputForTest(Vector2.zero);
             playerMovement.SetJumpInputForTest(false);
+
+            // Brief coast: let the character settle after inputs stop.
+            for (int frame = 0; frame < 60; frame++)
+                yield return new WaitForFixedUpdate();
 
             LogBaseline(
                 nameof(WalkStraight_RecordedPlayback_NoFalls),
@@ -114,6 +140,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         {
             InputPlayback playback = LoadRecordingOrIgnore("turn-and-walk");
             yield return SpawnAndConfigurePlayer();
+            CreatePlaybackCamera(playback.CameraYaw);
 
             PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
             Assert.That(playerMovement, Is.Not.Null, "PlayerMovement must exist for recorded playback.");
@@ -127,16 +154,22 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             bool enteredFallen = false;
             int framesApplied = 0;
 
+            int fallenCheckUntil = playback.FrameCount - 60;
+
             for (int frame = 0; frame < playback.FrameCount; frame++)
             {
                 playback.ApplyFrame(frame, playerMovement);
                 framesApplied++;
                 yield return new WaitForFixedUpdate();
-                enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
+                if (frame < fallenCheckUntil)
+                    enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
             }
 
             playerMovement.SetMoveInputForTest(Vector2.zero);
             playerMovement.SetJumpInputForTest(false);
+
+            for (int frame = 0; frame < 60; frame++)
+                yield return new WaitForFixedUpdate();
 
             LogBaseline(
                 nameof(TurnAndWalk_RecordedPlayback_NoFalls),

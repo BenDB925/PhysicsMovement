@@ -146,7 +146,12 @@ namespace PhysicsDrivenMovement.Character
                     Directory.CreateDirectory(directoryPath);
                 }
 
-                InputRecording recording = new InputRecording(Time.fixedDeltaTime, _frames);
+                float cameraYaw = 0f;
+                Camera cam = Camera.main;
+                if (cam != null)
+                    cameraYaw = cam.transform.eulerAngles.y;
+
+                InputRecording recording = new InputRecording(Time.fixedDeltaTime, cameraYaw, _frames);
                 string json = JsonUtility.ToJson(recording, true);
                 File.WriteAllText(recordingPath, json);
                 _hasSavedCurrentSession = true;
@@ -211,11 +216,13 @@ namespace PhysicsDrivenMovement.Character
         private sealed class InputRecording
         {
             public float fixedDeltaTime;
+            public float cameraYaw;
             public RecordedFrame[] frames;
 
-            public InputRecording(float fixedDeltaTime, List<RecordedFrame> frames)
+            public InputRecording(float fixedDeltaTime, float cameraYaw, List<RecordedFrame> frames)
             {
                 this.fixedDeltaTime = fixedDeltaTime;
+                this.cameraYaw = cameraYaw;
                 this.frames = frames.ToArray();
             }
         }
