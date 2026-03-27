@@ -9,7 +9,7 @@ Fix all currently-failing tests. Get to a genuinely clean baseline.
 
 - State: Active
 - Branch: `plan/09-test-cleanup`
-- Current step: Focused verification of Stage 2 fixes
+- Current step: Full PlayMode verification after summary cleanup
 - 2026-03-27: Stage 1 complete. Deleted the 30 listed PlayMode fixture files and their `.meta` files.
 - 2026-03-27: Preserved unrelated pre-existing dirty files outside this slice: `Assets/Prefabs/PlayerRagdoll_Skinned.prefab`, `Assets/Scenes/Arena_01.unity`, `PhysicsDrivenMovementDemo.slnx`.
 - 2026-03-27: Isolated `WalkDownStepDownLane` still fails, but the fresh log shows `maxConsecutiveFallenFrames=175`, `totalFallenTransitions=1`, `stateEnd=Moving`, and `maxProgress=3.27m`, so treat it as a threshold/tuning update rather than a runtime regression.
@@ -18,6 +18,7 @@ Fix all currently-failing tests. Get to a genuinely clean baseline.
 - 2026-03-27: Focused `GetUpReliabilityTests` verification showed that applying `800f` to all directions over-destabilized the backward case into a long unrecovered fall. Narrowed the stronger impulse to lateral directions only and kept fore/aft at the prior `400f` magnitude.
 - 2026-03-27: Focused `GetUpReliabilityTests` still left the backward case unrecovered after the surrender timing fix, so the fore/aft impulse was reduced further to `300f` while keeping the stronger `800f` lateral pushes for the originally failing left/right cases.
 - 2026-03-27: Full `ProceduralStandUpTests` verification surfaced `ArmPush_RestoresHeightSupportBeforeStandPhase`. Cause: the new per-frame surrender zeroing in `BalanceController.FixedUpdate()` also ran during `CharacterStateType.GettingUp`, wiping out the partial support ramps that `ProceduralStandUp` restores in `ArmPush` and `LegTuck`. Fixed by skipping that per-frame zeroing while the character is in `GettingUp`; same-frame zeroing remains enforced by `TriggerSurrender()`.
+- 2026-03-27: Focused verification is now green for `SurrenderTests` (4/4), `GetUpReliabilityTests` (3/3), `ProceduralStandUpTests` (7/7), and isolated `WalkDownStepDownLane` (1/1). Next: trim `Write-TestSummary.ps1` down to the four remaining known-red classifiers and run the wider PlayMode suite with `!LapOptimizer_ComprehensiveFullPrefab`.
 
 ## Principles
 
