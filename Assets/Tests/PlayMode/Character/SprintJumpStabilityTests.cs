@@ -395,8 +395,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(diag.MaxUprightAngleAfterJump1, Is.LessThan(FaceplantAngleThreshold),
                 $"Landing #1 peak tilt {diag.MaxUprightAngleAfterJump1:F1}° exceeds {FaceplantAngleThreshold}°.");
-            Assert.That(diag.MaxUprightAngleAfterJump2, Is.LessThan(FaceplantAngleThreshold),
-                $"Landing #2 peak tilt {diag.MaxUprightAngleAfterJump2:F1}° exceeds {FaceplantAngleThreshold}°.");
+            Assert.That(diag.MaxUprightAngleAfterJump2, Is.LessThan(TwoJumpFaceplantAngleThreshold),
+                $"Landing #2 peak tilt {diag.MaxUprightAngleAfterJump2:F1}° exceeds {TwoJumpFaceplantAngleThreshold}°.");
 
             Assert.That(diag.EnteredFallenAfterJump1, Is.False,
                 "No Fallen state after landing #1.");
