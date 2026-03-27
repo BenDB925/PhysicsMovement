@@ -674,6 +674,9 @@ namespace PhysicsDrivenMovement.Character
 
             CancelAllRamps();
             IsSurrendered = true;
+            UprightStrengthScale = 0f;
+            HeightMaintenanceScale = 0f;
+            StabilizationScale = 0f;
             RampUprightStrength(0f, _surrenderCrumpleDuration);
             RampHeightMaintenance(0f, _surrenderCrumpleDuration);
             RampStabilization(0f, _surrenderCrumpleDuration);
