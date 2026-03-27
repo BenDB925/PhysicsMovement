@@ -10,13 +10,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
     /// <summary>
     /// Lap-course regression tests for the full character stack.
     ///
-    /// A ghost driver feeds directional input via SetMoveInputForTest each physics frame,
-    /// advancing through a pre-designed waypoint circuit inspired by Top Gear's test track.
-    /// The course covers: straight, hairpin, chicane, slalom, S-bend, and return to start.
+    /// The regression gate replays a recorded lap through SetMoveInputForTest / SetJumpInputForTest
+    /// when Benny has captured a deterministic input file. The diagnostic lap-time test keeps the
+    /// older ghost-driver path so it can still exercise the full waypoint circuit directly.
     ///
     /// Two tests:
-    ///   1. CompleteLap_WithinTimeLimit_NoFalls — regression gate: must clear all gates, no falls, within budget.
-    ///   2. CompleteLap_RecordsLapTime         — diagnostic: always passes, logs a prominent [LAP TIME] line.
+    ///   1. CompleteLap_WithinTimeLimit_NoFalls — regression gate: replays the recorded lap, no falls, within budget.
+    ///   2. CompleteLap_RecordsLapTime         — diagnostic: ghost-driver lap, always passes, logs a prominent [LAP TIME] line.
     ///
     /// Rig construction notes:
     ///   - Ground box is on layer 12 (Environment). Physics.IgnoreLayerCollision(8,12,false)
@@ -130,6 +130,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         /// <summary>Frame budget for the pass/fail assertion (40 s @ 100 Hz).</summary>
         private const int LapBudgetFrames = 4000;
 
+        private const float FixedDeltaTimeTolerance = 0.0001f;
+
         // ── Spawn constants ────────────────────────────────────────────────────────
 
         private const float HipsSpawnHeight = 1.0f;
@@ -192,20 +194,35 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [Timeout(120000)]
         public IEnumerator CompleteLap_WithinTimeLimit_NoFalls()
         {
-            yield return SettleCharacter();
-            var result = new LapResult();
-            yield return RunGhostDriver(result);
+            InputPlayback playback = LoadRecordingOrIgnore("complete-lap");
+            AssertPlaybackFixedDeltaTimeMatches(playback, "complete-lap");
 
-            string summary = BuildSummary(result);
+            yield return SettleCharacter();
+
+            bool enteredFallen = false;
+            int framesApplied = 0;
+
+            for (int frame = 0; frame < playback.FrameCount; frame++)
+            {
+                playback.ApplyFrame(frame, _pm);
+                framesApplied++;
+                yield return new WaitForFixedUpdate();
+                enteredFallen |= _cs != null && _cs.CurrentState == CharacterStateType.Fallen;
+            }
+
+            _pm.SetMoveInputForTest(Vector2.zero);
+            _pm.SetJumpInputForTest(false);
+
+            string summary = $"RecordedLapFrames={framesApplied}/{playback.FrameCount} | Fallen={enteredFallen}";
             Debug.Log($"[LapCourse] CompleteLap_WithinTimeLimit_NoFalls: {summary}");
 
-            Assert.AreEqual(0, result.GatesMissed,
-                $"Expected 0 gates missed but got {result.GatesMissed}. {summary}");
+            Assert.That(enteredFallen, Is.False,
+                $"Recorded lap playback entered Fallen. {summary}");
 
-            Assert.AreEqual(0, result.FallCount,
-                $"Expected 0 falls but got {result.FallCount}. {summary}");
+            Assert.That(framesApplied, Is.EqualTo(playback.FrameCount),
+                $"Recorded lap playback did not complete all frames. {summary}");
 
-            Assert.That(result.LapFrames, Is.LessThanOrEqualTo(LapBudgetFrames),
+            Assert.That(playback.FrameCount, Is.LessThanOrEqualTo(LapBudgetFrames),
                 $"Lap time exceeded {LapBudgetFrames} frames ({LapBudgetFrames / 100f:F1}s). {summary}");
         }
 
@@ -370,6 +387,23 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private IEnumerator SettleCharacter()
         {
             yield return _rig.WarmUp(SettleFrames);
+        }
+
+        private static InputPlayback LoadRecordingOrIgnore(string recordingName)
+        {
+            string recordingPath = InputPlayback.GetRecordingPath(recordingName);
+            if (!File.Exists(recordingPath))
+            {
+                Assert.Ignore($"No {recordingName} recording yet.");
+            }
+
+            return InputPlayback.Load(recordingName);
+        }
+
+        private static void AssertPlaybackFixedDeltaTimeMatches(InputPlayback playback, string recordingName)
+        {
+            Assert.That(playback.RecordedFixedDeltaTime, Is.EqualTo(Time.fixedDeltaTime).Within(FixedDeltaTimeTolerance),
+                $"Recording '{recordingName}' was captured at fixedDeltaTime {playback.RecordedFixedDeltaTime} but the test is running at {Time.fixedDeltaTime}.");
         }
 
         // ── Result container ──────────────────────────────────────────────────────

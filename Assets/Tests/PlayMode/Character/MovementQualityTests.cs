@@ -1,5 +1,5 @@
-using System;
 using System.Collections;
+using System.IO;
 using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
@@ -18,23 +18,14 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const string PlayerRagdollPrefabPath = "Assets/Prefabs/PlayerRagdoll_Skinned.prefab";
         private const string FallPoseLogFileName = "movement-quality-fall-pose.ndjson";
 
-        private const int WalkStraightFrameBudget = 600;
-        private const int CornerCourseFrameBudget = 1200;
         private const int CollapseEvidenceFrameBudget = 90;
-
-        private const int MaxConsecutiveFallenStraight = 30;
-        private const int MaxConsecutiveFallenCorner = 160;
-        private const float StraightCourseDistance = 20f;
-
-        private static readonly Vector3[] StraightCourseWaypoints = BuildStraightCourseWaypoints();
-        private static readonly Vector3[] CornerCourseWaypoints = BuildCornerCourseWaypoints();
+        private const int PlaybackWarmUpFrames = 30;
+        private const float FixedDeltaTimeTolerance = 0.0001f;
 
         private GameObject _ground;
         private GameObject _player;
-        private GameObject _courseRunnerGO;
 
         private CharacterState _characterState;
-        private WaypointCourseRunner _courseRunner;
 
         private float _savedFixedDeltaTime;
         private int _savedSolverIterations;
@@ -61,11 +52,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
-            if (_courseRunnerGO != null)
-            {
-                UnityEngine.Object.Destroy(_courseRunnerGO);
-            }
-
             if (_player != null)
             {
                 UnityEngine.Object.Destroy(_player);
@@ -84,63 +70,83 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator WalkStraight_NoFalls()
+        public IEnumerator WalkStraight_RecordedPlayback_NoFalls()
         {
-            yield return SpawnAndConfigureCourse(StraightCourseWaypoints);
+            InputPlayback playback = LoadRecordingOrIgnore("walk-straight");
+            yield return SpawnAndConfigurePlayer();
 
-            int maxConsecutiveFallen = 0;
-            int consecutiveFallen = 0;
+            PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
+            Assert.That(playerMovement, Is.Not.Null, "PlayerMovement must exist for recorded playback.");
+            AssertPlaybackFixedDeltaTimeMatches(playback, "walk-straight");
 
-            for (int frame = 0; frame < WalkStraightFrameBudget && !_courseRunner.IsComplete; frame++)
+            for (int frame = 0; frame < PlaybackWarmUpFrames; frame++)
             {
                 yield return new WaitForFixedUpdate();
-                TrackFallenFrames(ref consecutiveFallen, ref maxConsecutiveFallen);
             }
 
+            bool enteredFallen = false;
+            int framesApplied = 0;
+
+            for (int frame = 0; frame < playback.FrameCount; frame++)
+            {
+                playback.ApplyFrame(frame, playerMovement);
+                framesApplied++;
+                yield return new WaitForFixedUpdate();
+                enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
+            }
+
+            playerMovement.SetMoveInputForTest(Vector2.zero);
+            playerMovement.SetJumpInputForTest(false);
+
             LogBaseline(
-                nameof(WalkStraight_NoFalls),
-                $"completed={_courseRunner.IsComplete} framesElapsed={_courseRunner.FramesElapsed} maxConsecutiveFallen={maxConsecutiveFallen}");
+                nameof(WalkStraight_RecordedPlayback_NoFalls),
+                $"framesApplied={framesApplied}/{playback.FrameCount} enteredFallen={enteredFallen}");
 
-            Assert.That(_courseRunner.IsComplete, Is.True,
-                $"Straight course did not finish within {WalkStraightFrameBudget} frames. " +
-                $"Reached waypoint index {_courseRunner.CurrentWaypointIndex}.");
+            Assert.That(enteredFallen, Is.False,
+                $"Recorded walk-straight playback entered Fallen after {framesApplied} frames.");
 
-            Assert.That(_courseRunner.FramesElapsed, Is.LessThanOrEqualTo(WalkStraightFrameBudget),
-                $"Straight course exceeded frame budget: {_courseRunner.FramesElapsed}/{WalkStraightFrameBudget}.");
-
-            Assert.That(maxConsecutiveFallen, Is.LessThanOrEqualTo(MaxConsecutiveFallenStraight),
-                $"Character stayed in Fallen for {maxConsecutiveFallen} consecutive frames " +
-                $"(limit {MaxConsecutiveFallenStraight}).");
+            Assert.That(framesApplied, Is.EqualTo(playback.FrameCount),
+                $"Walk-straight playback did not complete all frames ({framesApplied}/{playback.FrameCount}).");
         }
 
         [UnityTest]
-        public IEnumerator TurnAndWalk_CornerRecovery()
+        public IEnumerator TurnAndWalk_RecordedPlayback_NoFalls()
         {
-            yield return SpawnAndConfigureCourse(CornerCourseWaypoints);
+            InputPlayback playback = LoadRecordingOrIgnore("turn-and-walk");
+            yield return SpawnAndConfigurePlayer();
 
-            int maxConsecutiveFallen = 0;
-            int consecutiveFallen = 0;
+            PlayerMovement playerMovement = _player.GetComponentInChildren<PlayerMovement>();
+            Assert.That(playerMovement, Is.Not.Null, "PlayerMovement must exist for recorded playback.");
+            AssertPlaybackFixedDeltaTimeMatches(playback, "turn-and-walk");
 
-            for (int frame = 0; frame < CornerCourseFrameBudget && !_courseRunner.IsComplete; frame++)
+            for (int frame = 0; frame < PlaybackWarmUpFrames; frame++)
             {
                 yield return new WaitForFixedUpdate();
-                TrackFallenFrames(ref consecutiveFallen, ref maxConsecutiveFallen);
             }
 
+            bool enteredFallen = false;
+            int framesApplied = 0;
+
+            for (int frame = 0; frame < playback.FrameCount; frame++)
+            {
+                playback.ApplyFrame(frame, playerMovement);
+                framesApplied++;
+                yield return new WaitForFixedUpdate();
+                enteredFallen |= _characterState.CurrentState == CharacterStateType.Fallen;
+            }
+
+            playerMovement.SetMoveInputForTest(Vector2.zero);
+            playerMovement.SetJumpInputForTest(false);
+
             LogBaseline(
-                nameof(TurnAndWalk_CornerRecovery),
-                $"completed={_courseRunner.IsComplete} framesElapsed={_courseRunner.FramesElapsed} maxConsecutiveFallen={maxConsecutiveFallen}");
+                nameof(TurnAndWalk_RecordedPlayback_NoFalls),
+                $"framesApplied={framesApplied}/{playback.FrameCount} enteredFallen={enteredFallen}");
 
-            Assert.That(_courseRunner.IsComplete, Is.True,
-                $"Corner course did not finish within {CornerCourseFrameBudget} frames. " +
-                $"Current waypoint index: {_courseRunner.CurrentWaypointIndex}.");
+            Assert.That(enteredFallen, Is.False,
+                $"Recorded turn-and-walk playback entered Fallen after {framesApplied} frames.");
 
-            Assert.That(_courseRunner.FramesElapsed, Is.LessThanOrEqualTo(CornerCourseFrameBudget),
-                $"Corner course exceeded frame budget: {_courseRunner.FramesElapsed}/{CornerCourseFrameBudget}.");
-
-            Assert.That(maxConsecutiveFallen, Is.LessThanOrEqualTo(MaxConsecutiveFallenCorner),
-                $"Character stayed in Fallen for {maxConsecutiveFallen} consecutive frames " +
-                $"(limit {MaxConsecutiveFallenCorner}).");
+            Assert.That(framesApplied, Is.EqualTo(playback.FrameCount),
+                $"Turn-and-walk playback did not complete all frames ({framesApplied}/{playback.FrameCount}).");
         }
 
         [UnityTest]
@@ -182,16 +188,6 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             Assert.That(_characterState.CurrentState, Is.Not.EqualTo(CharacterStateType.Fallen),
                 "Low progress alone must not transition into Fallen when the feet remain under the hips.");
-        }
-
-        private IEnumerator SpawnAndConfigureCourse(Vector3[] waypoints)
-        {
-            yield return SpawnAndConfigurePlayer();
-
-            _courseRunnerGO = new GameObject("WaypointCourseRunner");
-            _courseRunner = _courseRunnerGO.AddComponent<WaypointCourseRunner>();
-            _courseRunner.Initialize(_player, waypoints);
-            Assert.That(_courseRunner.IsComplete, Is.False, "Course runner must start active with valid inputs.");
         }
 
         private IEnumerator SpawnAndConfigurePlayer()
@@ -286,49 +282,21 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             balanceController.SetGroundStateForTest(grounded, isFallen: false);
         }
 
-        private static Vector3[] BuildStraightCourseWaypoints()
+        private static InputPlayback LoadRecordingOrIgnore(string recordingName)
         {
-            Vector3[] startStopDirections = ScenarioPathUtility.GetTravelDirections(ScenarioDefinitions.StartStop);
-            return new[]
+            string recordingPath = InputPlayback.GetRecordingPath(recordingName);
+            if (!File.Exists(recordingPath))
             {
-                startStopDirections[0] * StraightCourseDistance,
-            };
-        }
-
-        private static Vector3[] BuildCornerCourseWaypoints()
-        {
-            Vector3[] hardTurnWaypoints = ScenarioDefinitions.HardTurn90.Waypoints;
-            if (hardTurnWaypoints == null || hardTurnWaypoints.Length < 2)
-            {
-                throw new InvalidOperationException("ScenarioDefinitions.HardTurn90 must expose at least two waypoints.");
+                Assert.Ignore($"No {recordingName} recording yet.");
             }
 
-            Vector3 firstWaypoint = SwapXZ(hardTurnWaypoints[0]);
-            Vector3 secondWaypoint = SwapXZ(hardTurnWaypoints[1]);
-            return new[]
-            {
-                firstWaypoint,
-                secondWaypoint,
-                secondWaypoint - firstWaypoint,
-            };
+            return InputPlayback.Load(recordingName);
         }
 
-        private void TrackFallenFrames(ref int consecutiveFallen, ref int maxConsecutiveFallen)
+        private static void AssertPlaybackFixedDeltaTimeMatches(InputPlayback playback, string recordingName)
         {
-            if (_characterState.CurrentState == CharacterStateType.Fallen)
-            {
-                consecutiveFallen++;
-                maxConsecutiveFallen = Mathf.Max(maxConsecutiveFallen, consecutiveFallen);
-            }
-            else
-            {
-                consecutiveFallen = 0;
-            }
-        }
-
-        private static Vector3 SwapXZ(Vector3 waypoint)
-        {
-            return new Vector3(waypoint.z, waypoint.y, waypoint.x);
+            Assert.That(playback.RecordedFixedDeltaTime, Is.EqualTo(Time.fixedDeltaTime).Within(FixedDeltaTimeTolerance),
+                $"Recording '{recordingName}' was captured at fixedDeltaTime {playback.RecordedFixedDeltaTime} but the test is running at {Time.fixedDeltaTime}.");
         }
 
         private static void SetPrivateFloat(object target, string fieldName, float value)

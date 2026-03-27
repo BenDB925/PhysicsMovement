@@ -10,7 +10,7 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 
 - State: Active
 - Branch: `plan/10-input-recorder`
-- Current next step: Replace the GhostDriver-driven regression tests in `MovementQualityTests.cs` and `LapCourseTests.cs` with recording playback.
+- Current next step: Add the recordings directory placeholder, update `Write-TestSummary.ps1`, then run the focused PlayMode verification slice.
 - Active blockers: VS Code diagnostics have not refreshed the new debug asmdef yet; final Unity verification will confirm the recorder compiles in the real project graph.
 
 ## Quick Resume
@@ -18,18 +18,22 @@ Physics-deterministic: same inputs → same outcome every time. No steering algo
 - 2026-03-27: Stage 1 complete. Added `Assets/Scripts/Debug/InputRecorder.cs` plus a narrow debug asmdef so the recorder can live at the requested path and still bind directly to the Input System.
 - The recorder latches jump presses between `Update` and `FixedUpdate`, so the JSON matches the one-frame `SetJumpInputForTest` seam instead of a held button state.
 - 2026-03-27: Stage 2 complete. Added `Assets/Tests/PlayMode/Utilities/InputPlayback.cs` to load recordings from `Assets/Tests/PlayMode/Recordings` and feed them through `SetMoveInputForTest` and `SetJumpInputForTest`.
-- Next useful restart point: replace the MovementQuality and lap regression tests, then add the recordings directory and summary-script cleanup.
+- 2026-03-27: Stage 3 complete. `MovementQualityTests` now replays `walk-straight` and `turn-and-walk` recordings, and `LapCourseTests.CompleteLap_WithinTimeLimit_NoFalls` now replays `complete-lap` while the diagnostic ghost-driver lap remains available.
+- Next useful restart point: add the recordings directory placeholder, trim the known-failure summary patterns, and run the focused PlayMode regression slice.
 
 ## Verified Artifacts
 
 - `Assets/Scripts/Debug/InputRecorder.cs`: Recorder implementation and JSON save path.
 - `Assets/Scripts/Debug/PhysicsDrivenMovement.Character.Debug.asmdef`: Narrow assembly boundary for the requested debug folder.
 - `Assets/Tests/PlayMode/Utilities/InputPlayback.cs`: Test-side JSON loader and frame-application helper.
+- `Assets/Tests/PlayMode/Character/MovementQualityTests.cs`: Recorded playback regressions for straight and turn-and-walk paths.
+- `Assets/Tests/PlayMode/Character/LapCourseTests.cs`: Recorded playback regression for the full lap gate while preserving the ghost-driver diagnostic.
 
 ## Progress Notes
 
 - 2026-03-27: Completed Stage 1 and kept the recorder at the exact plan path by adding a dedicated debug asmdef instead of moving the script into the character folder.
 - 2026-03-27: Completed Stage 2 by adding `InputPlayback` with minimal validation and the same recording path contract the recorder writes to.
+- 2026-03-27: Completed Stage 3 by replacing only the targeted GhostDriver-dependent regression gates; `GhostDriver.cs`, `WaypointCourseRunner.cs`, and the lap-time diagnostic remain intact.
 
 ---
 
