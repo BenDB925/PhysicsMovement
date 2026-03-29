@@ -158,6 +158,27 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Duration in seconds to ramp joint stiffness to near-zero on surrender. Higher = slower, more natural crumple.")]
         private float _surrenderCrumpleDuration = 0.25f;
 
+        [Header("Impact Yield")]
+
+        [SerializeField, Range(1f, 20f)]
+        [Tooltip("Hips angular velocity (rad/s) that triggers impact yield. " +
+             "Normal walking/turning peaks around 1-2 rad/s. " +
+             "A solid cube hit produces 4-8+ rad/s.")]
+        private float _impactYieldAngularVelocityThreshold = 4f;
+
+        [SerializeField, Range(0f, 1f)]
+        [Tooltip("UprightStrength/HeightMaintenance/Stabilization scale during impact yield window. " +
+             "0 = fully limp, 1 = no yield. 0.1-0.2 gives visible reaction while still recovering.")]
+        private float _impactYieldStrengthScale = 0.15f;
+
+        [SerializeField, Range(0.05f, 1f)]
+        [Tooltip("How long (seconds) the yield window lasts after an impact is detected.")]
+        private float _impactYieldDuration = 0.35f;
+
+        [SerializeField, Range(0.1f, 2f)]
+        [Tooltip("Minimum seconds between impact yield triggers. Prevents rapid re-triggering.")]
+        private float _impactYieldCooldown = 0.5f;
+
         [Header("Startup Stand Assist")]
         [SerializeField]
         [Tooltip("Applies extra upward support while grounded during the first seconds after landing " +
@@ -499,12 +520,15 @@ namespace PhysicsDrivenMovement.Character
         private int _surrenderExtremeAngleFrameCount;
         private bool _suppressPelvisExpression;
         private float _surrenderCooldownTimer;
+        private float _impactYieldCooldownTimer;
+        private float _impactYieldTimer;
+        private bool _impactYieldActive;
 
         /// <summary>Lazily resolved reference to PlayerMovement for jump-airborne detection.</summary>
         private PlayerMovement _playerMovement;
-    private SupportScaleRamp _uprightStrengthRamp;
-    private SupportScaleRamp _heightMaintenanceRamp;
-    private SupportScaleRamp _stabilizationRamp;
+        private SupportScaleRamp _uprightStrengthRamp;
+        private SupportScaleRamp _heightMaintenanceRamp;
+        private SupportScaleRamp _stabilizationRamp;
 
         // ─── Public Properties ────────────────────────────────────────────────
 
@@ -672,6 +696,9 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
+            _impactYieldCooldownTimer = 0f;
+            _impactYieldTimer = 0f;
+            _impactYieldActive = false;
             CancelAllRamps();
             IsSurrendered = true;
             UprightStrengthScale = 0f;
@@ -731,6 +758,9 @@ namespace PhysicsDrivenMovement.Character
             SurrenderSeverity = 0f;
             _suppressPelvisExpression = false;
             _surrenderExtremeAngleFrameCount = 0;
+            _impactYieldCooldownTimer = 0f;
+            _impactYieldTimer = 0f;
+            _impactYieldActive = false;
 
             // Prevent immediate re-trigger while the character transitions through
             // extreme angles during the stand-up sequence (GettingUp → Airborne → etc.).
@@ -971,6 +1001,10 @@ namespace PhysicsDrivenMovement.Character
                 _surrenderAngleThreshold);
             _surrenderAngularVelocityThreshold = Mathf.Max(0f, _surrenderAngularVelocityThreshold);
             _clearSurrenderRampDuration = Mathf.Max(0f, _clearSurrenderRampDuration);
+            _impactYieldAngularVelocityThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold);
+            _impactYieldStrengthScale = Mathf.Clamp01(_impactYieldStrengthScale);
+            _impactYieldDuration = Mathf.Max(0.05f, _impactYieldDuration);
+            _impactYieldCooldown = Mathf.Max(0.1f, _impactYieldCooldown);
 
             _startupStandAssistDuration = Mathf.Max(0f, _startupStandAssistDuration);
             _startupAssistHeightRange = Mathf.Max(0.05f, _startupAssistHeightRange);
@@ -1033,6 +1067,21 @@ namespace PhysicsDrivenMovement.Character
                 IsGrounded = leftGrounded || rightGrounded;
             }
 
+            // STEP 1.5: Yield balance support briefly when a large angular impact hits the hips.
+            _impactYieldCooldownTimer = Mathf.Max(0f, _impactYieldCooldownTimer - Time.fixedDeltaTime);
+
+            if (_impactYieldTimer > 0f)
+            {
+                _impactYieldTimer = Mathf.Max(0f, _impactYieldTimer - Time.fixedDeltaTime);
+                if (_impactYieldTimer <= 0f)
+                {
+                    RampUprightStrength(1f, 0.3f);
+                    RampHeightMaintenance(1f, 0.3f);
+                    RampStabilization(1f, 0.3f);
+                    _impactYieldActive = false;
+                }
+            }
+
             // Hips-height proxy: treat character as "effectively grounded" when hips
             // are close to or below standing height.  This provides a safety net when
             // the GroundSensor SphereCast fails (e.g. scene ground on wrong layer).
@@ -1087,6 +1136,20 @@ namespace PhysicsDrivenMovement.Character
             }
             IsFallen  = nowFallen;
             _wasFallen = nowFallen;
+
+            if (!IsFallen && !IsSurrendered && !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
+            {
+                float angularSpeed = _rb.angularVelocity.magnitude;
+                if (angularSpeed >= _impactYieldAngularVelocityThreshold)
+                {
+                    RampUprightStrength(_impactYieldStrengthScale, 0.05f);
+                    RampHeightMaintenance(_impactYieldStrengthScale, 0.05f);
+                    RampStabilization(_impactYieldStrengthScale, 0.05f);
+                    _impactYieldTimer = _impactYieldDuration;
+                    _impactYieldCooldownTimer = _impactYieldCooldown;
+                    _impactYieldActive = true;
+                }
+            }
 
             // STEP 3.5: Apply startup stand assist while grounded and low.
             // HeightMaintenanceScale from the director command gates and modulates the
