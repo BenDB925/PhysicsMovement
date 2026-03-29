@@ -1137,7 +1137,9 @@ namespace PhysicsDrivenMovement.Character
             IsFallen  = nowFallen;
             _wasFallen = nowFallen;
 
-            if (!IsFallen && !IsSurrendered && !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
+            bool suppressImpactYieldForJumpLanding = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
+            if (!IsFallen && !IsSurrendered && !suppressImpactYieldForJumpLanding &&
+                !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
             {
                 float angularSpeed = _rb.angularVelocity.magnitude;
                 if (angularSpeed >= _impactYieldAngularVelocityThreshold)
