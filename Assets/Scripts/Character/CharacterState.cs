@@ -262,18 +262,21 @@ namespace PhysicsDrivenMovement.Character
                     {
                         // Limbo escape: stuck on geometry (e.g. knees on ledge, feet dangling).
                         // Upright but not grounded, velocity near zero for an extended period.
+                        // Also fires when Airborne too long even with move input (covers cowboy-on-rocks
+                        // where move input applies force but the character can't actually go anywhere).
                         float hipSpeed = _rb != null ? _rb.linearVelocity.magnitude : 0f;
-                        bool likelyStuck = hipSpeed < 0.15f && _balanceController.UprightAngle * Mathf.Rad2Deg < 45f;
+                        bool likelyStuck = hipSpeed < 0.3f && _balanceController.UprightAngle < 45f;
                         if (likelyStuck)
                             _airborneLimboTimer += Time.fixedDeltaTime;
                         else
-                            _airborneLimboTimer = 0f;
+                            _airborneLimboTimer = Mathf.Max(0f, _airborneLimboTimer - Time.fixedDeltaTime * 2f);
 
                         if (_airborneLimboTimer >= 1.5f)
                         {
                             _airborneLimboTimer = 0f;
                             _limboForcedDwellTimer = 0.4f;
                             nextState = CharacterStateType.Standing;
+                            ApplyLimboEscapeNudge();
                         }
                     }
                     break;
@@ -518,6 +521,55 @@ namespace PhysicsDrivenMovement.Character
             _enteredFallenFromCollapse = false;
             ChangeState(CharacterStateType.Fallen);
         }
+    }
+
+    /// <summary>
+    /// Applies a physics nudge to escape geometry when the character is stuck in Airborne limbo.
+    /// Uses ComputePenetration to push away from overlapping colliders, plus a small upward impulse.
+    /// </summary>
+    private void ApplyLimboEscapeNudge()
+    {
+        if (_rb == null) return;
+
+        const float NudgeImpulse   = 3f;   // upward impulse to clear geometry
+        const float SeparationImpulse = 4f; // per-collider separation impulse
+        const float CheckRadius    = 0.7f;  // sphere around hips to find nearby colliders
+
+        Collider[] nearby = Physics.OverlapSphere(_rb.position, CheckRadius,
+            Physics.AllLayers, QueryTriggerInteraction.Ignore);
+
+        Collider[] selfColliders = GetComponentsInChildren<Collider>(includeInactive: true);
+        Collider hipsCollider = _rb.GetComponent<Collider>();
+
+        Vector3 separationDir = Vector3.zero;
+        int hitCount = 0;
+
+        foreach (Collider other in nearby)
+        {
+            if (other == null || other.isTrigger) continue;
+
+            bool isSelf = false;
+            for (int i = 0; i < selfColliders.Length; i++)
+            {
+                if (selfColliders[i] == other) { isSelf = true; break; }
+            }
+            if (isSelf) continue;
+
+            if (hipsCollider != null && Physics.ComputePenetration(
+                hipsCollider, _rb.position, _rb.rotation,
+                other, other.transform.position, other.transform.rotation,
+                out Vector3 dir, out float dist))
+            {
+                separationDir += dir * dist;
+                hitCount++;
+            }
+        }
+
+        if (hitCount > 0)
+            _rb.AddForce(separationDir.normalized * SeparationImpulse, ForceMode.Impulse);
+
+        // Always nudge upward to help clear the geometry.
+        _rb.AddForce(Vector3.up * NudgeImpulse, ForceMode.Impulse);
     }
 
     /// <summary>
