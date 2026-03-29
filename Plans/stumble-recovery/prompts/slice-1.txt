@@ -1,0 +1,139 @@
+# Plan 11 Slice 1 — Passive Tilt Classification in LocomotionDirector
+
+## Context
+
+The catch-step and arm-brace pipeline already exists:
+- `LocomotionDirector.ClassifyRecoverySituation` → `RecoverySituation.Stumble`
+- `LegAnimator` → `LegStateType.CatchStep`
+- `ArmAnimator` → brace pose via `IsRecoveryActive`
+
+The gap: classification only fires on locomotion collapse (walking + not progressing + intent).
+A physics hit while standing or walking never triggers it.
+
+Confirmed from editor test: tilt went 0.2° → 66.8° (Fallen) in a handful of frames with
+RecoverySituation.None the whole time.
+
+## Goal for this slice
+
+Add two new classification paths to `LocomotionDirector.ClassifyRecoverySituation` so
+passive destabilisation (hit, push, collision) triggers `RecoverySituation.Stumble`:
+
+1. **Angular velocity spike** — fast impact rotates hips rapidly → fire immediately,
+   bypass debounce
+2. **Sustained tilt** — hips above 20° for normal debounce window → fire via normal path
+
+That's it. One file changed. No step planner changes in this slice.
+
+## Branch
+
+Create `plan/11-1-passive-stumble` from `master`.
+
+## File to change: `LocomotionDirector.cs`
+
+Path: `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`
+
+Read the full file before starting. Understand:
+- `UpdateObservationRecoveryState(float supportRisk)` — where debounce lives
+- `ClassifyRecoverySituation(float supportRisk)` — where to add new paths
+- `_transitionGuard.ShouldEnter(...)` — the debounce mechanism
+- `_balanceController.UprightAngle` — already read in this file
+- `_hipsBody` — already cached Rigidbody
+
+### New serialized fields (add near existing recovery threshold fields):
+
+```csharp
+[SerializeField, Range(1f, 15f)]
+[Tooltip("Hips angular velocity (rad/s) that immediately triggers Stumble recovery, "
+       + "bypassing the entry debounce. Catches fast impacts before tilt escalates. "
+       + "Normal walking peaks ~1-2 rad/s; a solid hit produces 4-8+ rad/s.")]
+private float _passiveTiltAngularVelocityTrigger = 4f;
+
+[SerializeField, Range(5f, 40f)]
+[Tooltip("UprightAngle (degrees) that triggers Stumble recovery after the normal debounce "
+       + "window. Catches slower pushes. Must be below fallenEnterAngleThreshold (65°).")]
+private float _passiveTiltAngleTrigger = 20f;
+```
+
+### New private fields:
+
+```csharp
+private float _previousHipsAngularSpeed;
+```
+
+### Sustained tilt path — add to `ClassifyRecoverySituation` BEFORE the `IsLocomotionCollapsed` check:
+
+Gates:
+- NOT intentional jump sequence (`isIntentionalJumpSequence` already computed in that method)
+- NOT `_balanceController.IsSurrendered`
+- NOT `_balanceController.IsFallen`
+- `_balanceController.IsGrounded`
+- `_characterState.CurrentState` is `Standing` or `Moving`
+  (cache `_characterState` in `Awake` — check if it's already cached; if not, add it)
+- `_balanceController.UprightAngle >= _passiveTiltAngleTrigger`
+
+When all gates pass: `return RecoverySituation.Stumble;`
+
+This goes through the normal `_transitionGuard` debounce — fine for slow pushes.
+
+### Angular velocity spike path — add to `UpdateObservationRecoveryState` BEFORE the `_transitionGuard.ShouldEnter` call:
+
+```csharp
+// Fast impact: angular velocity spike bypasses debounce and fires Stumble immediately.
+float hipsAngularSpeed = _hipsBody != null ? _hipsBody.angularVelocity.magnitude : 0f;
+float angularSpeedDelta = hipsAngularSpeed - _previousHipsAngularSpeed;
+_previousHipsAngularSpeed = hipsAngularSpeed;
+
+bool isPassiveTiltSpike = hipsAngularSpeed >= _passiveTiltAngularVelocityTrigger
+    && angularSpeedDelta >= _passiveTiltAngularVelocityTrigger * 0.5f; // require spike, not sustained spin
+
+if (isPassiveTiltSpike
+    && !_balanceController.IsSurrendered
+    && !_balanceController.IsFallen
+    && _balanceController.IsGrounded
+    && _characterState != null
+    && (_characterState.CurrentState == CharacterStateType.Standing
+        || _characterState.CurrentState == CharacterStateType.Moving))
+{
+    // Bypass debounce — set recovery state directly.
+    // Use the same pattern as existing forced-state transitions in this method.
+    // Set _currentRecoveryState to a new active Stumble state with appropriate values.
+    // Look at how _currentRecoveryState is set elsewhere in this method and follow that pattern exactly.
+}
+```
+
+**Important implementation note:** Look at how `_currentRecoveryState` is assigned elsewhere in
+`UpdateObservationRecoveryState` when a new situation is entered. Follow exactly the same pattern
+(same struct fields, same logging if debug is enabled). Do NOT invent a new assignment pattern.
+
+## What NOT to change
+
+- Do NOT touch LegAnimator, ArmAnimator, BalanceController (collision stuff is separate)
+- Do NOT change step planner — lean direction is Slice 2
+- Do NOT change fallen/surrender thresholds
+- Do NOT modify Run-UnityTests.ps1
+
+## Verification
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 1 -Unattended -TestFilter "StumbleStutterRegressionTests|JumpTests|GaitOutcomeTests|AirborneSpringTests|ImpactKnockdownTests"
+```
+
+All must pass. If `StumbleStutterRegressionTests` fail, raise `_passiveTiltAngleTrigger`
+to 22-25°. If jump tests fail, verify the `isIntentionalJumpSequence` gate is working.
+
+## Commit
+
+`feat(11-1): passive tilt stumble - angular velocity spike + sustained tilt classification`
+
+## On completion
+
+Write `agent-slice-status.json`:
+```json
+{"slice":"11-1-passive-stumble","status":"pass","branch":"plan/11-1-passive-stumble","notes":"angular vel trigger=X rad/s, tilt trigger=X deg, tests pass"}
+```
+
+Send Telegram:
+```powershell
+$body = @{ chat_id = "8630971080"; text = "[plan-11 slice 1] STATUS: pass/fail. Passive stumble classification in. Get hit with hammer - should throw a catch step." } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
+```

@@ -1,0 +1,50 @@
+You are reviewing a plan for a Unity physics game featuring an active-ragdoll character.
+The character uses physics forces and joint targets for all locomotion — there are no
+animation controllers. Everything is driven by FixedUpdate at 100Hz.
+
+Read the following plan in full before responding:
+H:\Work\PhysicsDrivenMovementDemo\Plans\stumble-recovery\11-stumble-recovery.md
+
+Also read these files to understand the existing systems:
+- H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\BalanceController.cs
+- H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\LegAnimator.cs (first 200 lines + search for _forcePlant)
+- H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\ArmAnimator.cs
+- H:\Work\PhysicsDrivenMovementDemo\Assets\Scripts\Character\CharacterState.cs
+
+Then answer these questions:
+
+1. **Lean direction calculation** — The plan proposes using hips rotation to compute lean
+   direction. Is `(Quaternion.Inverse(hipsRotation) * Vector3.up)` projected onto the XZ
+   plane a reliable lean axis for a ragdoll whose hips can be arbitrarily oriented? Is
+   there a more robust approach?
+
+2. **Step reach boost** — The plan proposes temporarily overriding `_stepAngle` in
+   LegAnimator for one step to exaggerate the catch step reach. Is this safe given the
+   existing step planning? Would passing urgency as a parameter to `TriggerCatchStep`
+   and computing a local override be cleaner?
+
+3. **Cooldown vs continuous** — Should the catch step fire repeatedly (with cooldown)
+   as long as tilt exceeds threshold, or arm-reset once per destabilisation event and
+   wait for recovery before re-arming? What are the failure modes of each?
+
+4. **Arm brace direction** — Should arms brace toward the world-space lean direction,
+   or the character's local facing direction? What happens when pushed sideways?
+
+5. **New component vs existing** — The plan puts StumbleRecovery in a new component.
+   Is there a strong reason to integrate it into BalanceController instead? What are
+   the tradeoffs?
+
+6. **Any risks or failure modes** you see in the plan that aren't already covered by
+   the open questions.
+
+7. **Slice ordering** — Do you agree with slices 1→2→3? Would you reorder or split
+   anything?
+
+Be direct. Flag anything that looks fragile or will require significant rework.
+Point out any interactions with existing systems (surrender, limbo dwell, airborne guard)
+that the plan might have missed.
+
+Write your response to:
+H:\Work\PhysicsDrivenMovementDemo\Plans\stumble-recovery\11-stumble-recovery-opus-review.md
+
+Keep it focused — no need to restate the plan, just answer the questions and flag risks.
