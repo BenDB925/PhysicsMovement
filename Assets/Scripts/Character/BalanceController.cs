@@ -879,19 +879,6 @@ namespace PhysicsDrivenMovement.Character
             _impactYieldTimer = duration;
             _impactYieldCooldownTimer = _impactYieldCooldown;
             _impactYieldActive = true;
-
-            // STEP 4: Apply outward launch impulse so the character sails rather than crumples.
-            // impulseVector points from the hips toward the hit direction — reverse it to get outward.
-            if (_impactLaunchImpulse > 0f && _rb != null && impulseVector.sqrMagnitude > 0.0001f)
-            {
-                // Outward = away from the incoming impulse direction.
-                Vector3 outwardDir = -impulseVector.normalized;
-                // Flatten to horizontal then blend in upward bias for a slight loft.
-                Vector3 horizontal = Vector3.ProjectOnPlane(outwardDir, Vector3.up).normalized;
-                if (horizontal.sqrMagnitude < 0.01f) horizontal = Vector3.forward; // degenerate guard
-                Vector3 launchDir = Vector3.Lerp(horizontal, Vector3.up, _impactLaunchUpBias).normalized;
-                _rb.AddForce(launchDir * (_impactLaunchImpulse * severity), ForceMode.Impulse);
-            }
         }
 
         /// <summary>
