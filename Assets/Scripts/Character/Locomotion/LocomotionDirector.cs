@@ -137,6 +137,18 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Frames over which recovery blend ramps from 0 to its natural value, preventing snap-on of support adjustments.")]
         private int _recoveryRampInFrames = 8;
 
+        [Header("Passive Tilt Recovery")]
+        [SerializeField, Range(1f, 15f)]
+        [Tooltip("Hips angular velocity (rad/s) that immediately triggers Stumble recovery, " +
+             "bypassing the entry debounce. Catches fast impacts before tilt escalates. " +
+             "Normal walking peaks ~1-2 rad/s; a solid hit produces 4-8+ rad/s.")]
+        private float _passiveTiltAngularVelocityTrigger = 4f;
+
+        [SerializeField, Range(5f, 40f)]
+        [Tooltip("UprightAngle (degrees) that triggers Stumble recovery after the normal debounce " +
+             "window. Catches slower pushes. Must be below fallenEnterAngleThreshold (65°).")]
+        private float _passiveTiltAngleTrigger = 20f;
+
         [Header("Recovery Telemetry")]
         [SerializeField]
         [Tooltip("Records structured recovery entry/change/exit events into an in-memory ring buffer for tests and post-run debugging.")]
@@ -195,6 +207,7 @@ namespace PhysicsDrivenMovement.Character
         private RecoveryTransitionGuard _transitionGuard;
         private float _recoveryAngleStuckTimer;
         private float _recoveryEntryTime;
+        private float _previousHipsAngularSpeed;
         private bool _hasRecoveryEntryTime;
         private bool? _recoveryTestOverride;
         private bool _jumpRecoverySuppressionActive;
@@ -324,6 +337,7 @@ namespace PhysicsDrivenMovement.Character
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
             _recoveryEntryTime = 0f;
+            _previousHipsAngularSpeed = 0f;
             _hasRecoveryEntryTime = false;
             _jumpRecoverySuppressionActive = false;
             _recoveryTelemetryLog.Clear();
@@ -780,6 +794,8 @@ namespace PhysicsDrivenMovement.Character
 
         private void UpdateObservationRecoveryState(float supportRisk)
         {
+            bool isIntentionalJumpSequence = _playerMovement != null &&
+                                             _playerMovement.CurrentJumpPhase != JumpPhase.None;
             bool suppressLowPriorityRecovery = UpdateJumpRecoverySuppressionState();
             if (suppressLowPriorityRecovery && IsJumpSuppressibleRecoverySituation(_currentRecoveryState.Situation))
             {
@@ -805,17 +821,34 @@ namespace PhysicsDrivenMovement.Character
                 _transitionGuard.OnRecoveryExpired(clearedSituation, _recoveryExitCooldownFrames);
             }
 
-            if (!_currentDesiredInput.HasMoveIntent || stateBlocksRecovery)
+            // STEP 2: Sample hips angular speed early so passive-impact recovery can enter
+            // even when locomotion intent is idle.
+            float hipsAngularSpeed = _hipsBody != null ? _hipsBody.angularVelocity.magnitude : 0f;
+            float angularSpeedDelta = hipsAngularSpeed - _previousHipsAngularSpeed;
+            _previousHipsAngularSpeed = hipsAngularSpeed;
+
+            bool passiveTiltStateEligible = IsPassiveTiltStateEligible();
+            bool hasPassiveTiltAngleTrigger = !isIntentionalJumpSequence &&
+                                              passiveTiltStateEligible &&
+                                              _balanceController.UprightAngle >= _passiveTiltAngleTrigger;
+            bool isPassiveTiltSpike = hipsAngularSpeed >= _passiveTiltAngularVelocityTrigger &&
+                                      angularSpeedDelta >= _passiveTiltAngularVelocityTrigger * 0.5f;
+
+            if ((!_currentDesiredInput.HasMoveIntent &&
+                 !_currentRecoveryState.IsActive &&
+                 !hasPassiveTiltAngleTrigger &&
+                 !isPassiveTiltSpike) ||
+                stateBlocksRecovery)
             {
                 // Feed None to the guard so candidate tracking resets.
                 _transitionGuard.ShouldEnter(RecoverySituation.None, _recoveryEntryDebounceFrames, _recoveryExitCooldownFrames);
                 return;
             }
 
-            // STEP 2: Classify the current situation.
+            // STEP 3: Classify the current situation.
             RecoverySituation situation = ClassifyRecoverySituation(supportRisk);
 
-            // STEP 3: When recovery is already active, allow direct extension or
+            // STEP 4: When recovery is already active, allow direct extension or
             // situation-priority upgrades without re-debouncing. The guard only
             // gates the initial entry from idle so the ramp-in counter can advance
             // uninterrupted. Reset the guard's candidate tracking so no stale
@@ -846,7 +879,23 @@ namespace PhysicsDrivenMovement.Character
                 return;
             }
 
-            // STEP 4: Recovery is not active — use the guard for debounce and cooldown.
+            // STEP 5: Fast impact: angular velocity spike bypasses debounce and fires
+            // Stumble recovery immediately.
+            if (isPassiveTiltSpike && passiveTiltStateEligible)
+            {
+                _transitionGuard.Reset();
+                int duration = GetRecoveryDuration(RecoverySituation.Stumble);
+                _currentRecoveryState = _currentRecoveryState.Enter(
+                    RecoverySituation.Stumble,
+                    duration,
+                    supportRisk,
+                    _currentObservation.TurnSeverity);
+                BeginRecoveryTiming();
+                EmitRecoveryTelemetry(_currentRecoveryState.Situation, GetRecoveryEntryReason(_currentRecoveryState.Situation));
+                return;
+            }
+
+            // STEP 6: Recovery is not active — use the guard for debounce and cooldown.
             bool shouldEnter = _transitionGuard.ShouldEnter(
                 situation,
                 _recoveryEntryDebounceFrames,
@@ -893,6 +942,16 @@ namespace PhysicsDrivenMovement.Character
                    situation == RecoverySituation.Slip;
         }
 
+        private bool IsPassiveTiltStateEligible()
+        {
+            return !_balanceController.IsSurrendered &&
+                   !_balanceController.IsFallen &&
+                   _balanceController.IsGrounded &&
+                   _characterState != null &&
+                   (_characterState.CurrentState == CharacterStateType.Standing ||
+                    _characterState.CurrentState == CharacterStateType.Moving);
+        }
+
         /// <summary>
         /// Classifies the current observation into a named recovery situation.
         /// Returns <see cref="RecoverySituation.None"/> when no recovery is needed.
@@ -901,52 +960,66 @@ namespace PhysicsDrivenMovement.Character
         private RecoverySituation ClassifyRecoverySituation(float supportRisk)
         {
             LocomotionObservation obs = _currentObservation;
+            bool hasMoveIntent = _currentDesiredInput.HasMoveIntent;
             bool isIntentionalJumpSequence = _playerMovement != null &&
                                              _playerMovement.CurrentJumpPhase != JumpPhase.None;
             bool suppressLowPriorityRecovery = _jumpRecoverySuppressionActive || isIntentionalJumpSequence;
 
-            // STEP 1: Confirmed collapse watchdog → Stumble (highest priority).
+            // STEP 1: Sustained passive tilt while grounded → Stumble.
+            if (!isIntentionalJumpSequence &&
+                IsPassiveTiltStateEligible() &&
+                _balanceController.UprightAngle >= _passiveTiltAngleTrigger)
+            {
+                return RecoverySituation.Stumble;
+            }
+
+            // STEP 2: Confirmed collapse watchdog → Stumble (highest priority).
             if (obs.IsLocomotionCollapsed)
             {
                 return RecoverySituation.Stumble;
             }
 
-            // STEP 2: Critical support deficit without collapse → NearFall.
+            // STEP 3: Critical support deficit without collapse → NearFall.
             // Uses a higher threshold than the general recovery entry to catch
             // the pre-collapse regime where an aggressive catch-step can still save the character.
             const float NearFallSupportRiskThreshold = 0.7f;
-            if (supportRisk >= NearFallSupportRiskThreshold && obs.SupportQuality < 0.3f)
+            if (hasMoveIntent &&
+                supportRisk >= NearFallSupportRiskThreshold &&
+                obs.SupportQuality < 0.3f)
             {
                 return RecoverySituation.NearFall;
             }
 
-            // STEP 3: High slip estimate while support is compromised → Slip.
+            // STEP 4: High slip estimate while support is compromised → Slip.
             // Intentional jump wind-up/launch can drag the planted feet relative to the
             // ground sensors while the body crouches. Treat that authored jump preload as
             // non-recovery motion so the director does not re-arm Slip immediately before
             // takeoff and carry a full recovery profile into the landing.
             const float SlipThreshold = 0.4f;
-            if (!suppressLowPriorityRecovery &&
+            if (hasMoveIntent &&
+                !suppressLowPriorityRecovery &&
                 obs.SlipEstimate >= SlipThreshold &&
                 supportRisk >= _supportRiskRecoveryThreshold)
             {
                 return RecoverySituation.Slip;
             }
 
-            // STEP 4: Near-180° reversal with degraded support → Reversal.
+            // STEP 5: Near-180° reversal with degraded support → Reversal.
             const float ReversalTurnSeverityThreshold = 0.85f;
-            if (!suppressLowPriorityRecovery &&
+            if (hasMoveIntent &&
+                !suppressLowPriorityRecovery &&
                 obs.TurnSeverity >= ReversalTurnSeverityThreshold &&
                 supportRisk >= _supportRiskRecoveryThreshold)
             {
                 return RecoverySituation.Reversal;
             }
 
-            // STEP 5: Sharp turn with combined risk → HardTurn.
+            // STEP 6: Sharp turn with combined risk → HardTurn.
             bool turnRiskExceedsThreshold = obs.TurnSeverity >= _turnRecoveryThreshold;
             bool supportRiskExceedsThreshold = supportRisk >= _supportRiskRecoveryThreshold;
 
-            if (!suppressLowPriorityRecovery &&
+            if (hasMoveIntent &&
+                !suppressLowPriorityRecovery &&
                 obs.IsComOutsideSupport &&
                 obs.ContactConfidence > 0f &&
                 turnRiskExceedsThreshold)
@@ -954,7 +1027,8 @@ namespace PhysicsDrivenMovement.Character
                 return RecoverySituation.HardTurn;
             }
 
-            if (!suppressLowPriorityRecovery &&
+            if (hasMoveIntent &&
+                !suppressLowPriorityRecovery &&
                 turnRiskExceedsThreshold && supportRiskExceedsThreshold)
             {
                 return RecoverySituation.HardTurn;
@@ -1308,6 +1382,7 @@ namespace PhysicsDrivenMovement.Character
             _currentRecoveryState = RecoveryState.Inactive;
             _recoveryAngleStuckTimer = 0f;
             _recoveryEntryTime = 0f;
+            _previousHipsAngularSpeed = 0f;
             _hasRecoveryEntryTime = false;
             LastRecoveryDuration = 0f;
             LastRecoveryEndedInSurrender = false;

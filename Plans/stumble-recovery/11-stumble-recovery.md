@@ -89,51 +89,26 @@ This confirms the gap is real before we spend agent time on it.
 
 ### Slice 1 — Passive tilt → Stumble classification
 
-**Files to change:**
+Status (2026-03-29): Complete on `plan/11-1-passive-stumble`
+
+**Files changed:**
 - `Assets/Scripts/Character/Locomotion/LocomotionDirector.cs`
-- `Assets/Scripts/Character/Locomotion/LocomotionObservation.cs` (or equivalent observation struct)
 
-**New serialized field in `LocomotionDirector`:**
-```csharp
-[SerializeField, Range(5f, 40f)]
-[Tooltip("UprightAngle threshold (degrees) at which a passive tilt (push/impact, no locomotion "
-       + "intent) triggers Stumble recovery. Must be below fallenEnterAngleThreshold (50°).")]
-private float _passiveTiltStumbleTriggerAngle = 18f;
-```
-
-**In `ClassifyRecoverySituation`, add before the existing `IsLocomotionCollapsed` check:**
-```csharp
-// Passive destabilisation: tilt from push/impact without locomotion collapse.
-// Fires when upright angle exceeds threshold regardless of move intent.
-// Gates: grounded, not fallen, not surrendered, not intentional jump.
-if (!isIntentionalJumpSequence
-    && !_balanceController.IsSurrendered
-    && !_balanceController.IsFallen
-    && _balanceController.IsGrounded
-    && _characterState != null
-    && (_characterState.CurrentState == CharacterStateType.Standing
-        || _characterState.CurrentState == CharacterStateType.Moving)
-    && _balanceController.UprightAngle >= _passiveTiltStumbleTriggerAngle)
-{
-    return RecoverySituation.Stumble;
-}
-```
-
-Note: `_characterState` needs to be cached in `Awake` (same pattern as other cached refs).
-
-**Lean direction:**
-Store `PassiveLeanDirection` in the observation when passive tilt fires. Use it in the
-existing step planner as the substitute requestedDirection when normal locomotion intent
-(`moveMagnitude`) is below `_moveIntentThreshold`.
+**Implemented:**
+- Added `_passiveTiltAngularVelocityTrigger = 4f` to fire `RecoverySituation.Stumble`
+   immediately on fast grounded hips-rotation spikes, bypassing the normal entry debounce.
+- Added `_passiveTiltAngleTrigger = 20f` to classify sustained grounded passive tilt as
+   `RecoverySituation.Stumble` through the existing debounce path.
+- Kept the no-move idle path from blocking passive stumble recovery while preserving
+   move-intent gating for the lower-priority locomotion-only recovery cases.
 
 **Verification:**
-```
-powershell -NoProfile -ExecutionPolicy Bypass -File "H:\Work\PhysicsDrivenMovementDemo\Tools\Run-UnityTests.ps1" -ProjectPath "H:\Work\PhysicsDrivenMovementDemo" -Platform PlayMode -MaxAttemptsPerPlatform 1 -Unattended -TestFilter "StumbleStutterRegressionTests|JumpTests|GaitOutcomeTests|AirborneSpringTests"
-```
-All must pass. Pay attention to `StumbleStutterRegressionTests` — the 18° threshold must
-not fire spuriously during normal walking.
+- 2026-03-29 PlayMode filter `StumbleStutterRegressionTests|JumpTests|GaitOutcomeTests|AirborneSpringTests|ImpactKnockdownTests` passed (37/37).
+- Artifacts: `TestResults/PlayMode.xml`, `TestResults/latest-summary.md`, `Logs/test_playmode_20260329_134757.log`.
 
-Also: manually verify in the editor that pushing the character triggers a catch step.
+**Follow-up kept out of this slice:**
+- No step-planner or lean-direction changes were made here; passive recovery still routes
+   through the existing catch-step pipeline exactly as-is.
 
 ### Slice 2 — Escalating cooldown + 3-step cap
 

@@ -1,6 +1,1 @@
-{
-    "slice": "11b-collision-impact",
-    "status": "fail",
-    "branch": "plan/11b-collision-impact",
-    "notes": "CollisionImpactReceiver wired on 6 bodies with fullSeverityImpulse=15 N·s; PlayerRagdollPrefabTests passed; exact PlayMode gate still fails baseline LandingRecovery_DampingDisabledWhenFactorIsOne and LandingRecovery_SpeedRecoveryAfterDamping"
-}
+{"slice":"11-1-passive-stumble","status":"pass","branch":"plan/11-1-passive-stumble","notes":"angular vel trigger=4 rad/s, tilt trigger=20 deg, tests pass"}
