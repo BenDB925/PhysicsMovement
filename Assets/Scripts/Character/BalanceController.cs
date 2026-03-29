@@ -164,7 +164,7 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Hips angular velocity (rad/s) that triggers impact yield. " +
              "Normal walking/turning peaks around 1-2 rad/s. " +
              "A solid cube hit produces 4-8+ rad/s.")]
-        private float _impactYieldAngularVelocityThreshold = 4f;
+        private float _impactYieldAngularVelocityThreshold = 5f;
 
         [SerializeField, Range(0f, 1f)]
         [Tooltip("UprightStrength/HeightMaintenance/Stabilization scale during impact yield window. " +
