@@ -1347,7 +1347,7 @@ MonoBehaviour:
   _snapRecoveryKdDurationFrames: 80
   _fallenEnterAngleThreshold: 65
   _fallenExitAngleThreshold: 55
-  _impactYieldAngularVelocityThreshold: 5
+  _impactYieldAngularVelocityThreshold: 4
   _impactYieldStrengthScale: 0.15
   _impactYieldDuration: 0.35
   _impactYieldCooldown: 0.5

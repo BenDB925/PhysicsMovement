@@ -1,1 +1,1 @@
-{"slice":"10-input-recorder","status":"pass","branch":"plan/10-input-recorder","notes":"InputRecorder + playback tests in place; recordings pending Benny's play-through"}
+{"slice":"11a-impact-yield","status":"fail","branch":"slice/11a-impact-yield","notes":"best-known state uses threshold=4 rad/s, yieldScale=0.15, duration=0.35s; ImpactYieldTests passed; exact PlayMode gate still fails LandingRecovery_RecoveryTimeImproved, and master baseline already fails LandingRecovery_DampingDisabledWhenFactorIsOne"}
