@@ -1140,14 +1140,15 @@ namespace PhysicsDrivenMovement.Character
             IsFallen  = nowFallen;
             _wasFallen = nowFallen;
 
-            float angularSpeed = _rb.angularVelocity.magnitude;
-            float angularSpeedSpike = angularSpeed - _previousImpactYieldAngularSpeed;
+            Vector3 impactYieldPitchRollAngVel = new Vector3(_rb.angularVelocity.x, 0f, _rb.angularVelocity.z);
+            float impactYieldAngularSpeed = GetTiltDirectionalAngularVelocity(currentUp, impactYieldPitchRollAngVel);
+            float angularSpeedSpike = impactYieldAngularSpeed - _previousImpactYieldAngularSpeed;
             float angularSpeedSpikeThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold * 0.5f);
             bool suppressImpactYieldForJumpLanding = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
             if (!IsFallen && !IsSurrendered && !suppressImpactYieldForJumpLanding &&
                 !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
             {
-                if (angularSpeed >= _impactYieldAngularVelocityThreshold &&
+                if (impactYieldAngularSpeed >= _impactYieldAngularVelocityThreshold &&
                     angularSpeedSpike >= angularSpeedSpikeThreshold)
                 {
                     RampUprightStrength(_impactYieldStrengthScale, 0.05f);
@@ -1159,7 +1160,7 @@ namespace PhysicsDrivenMovement.Character
                 }
             }
 
-            _previousImpactYieldAngularSpeed = angularSpeed;
+            _previousImpactYieldAngularSpeed = impactYieldAngularSpeed;
 
             // STEP 3.5: Apply startup stand assist while grounded and low.
             // HeightMaintenanceScale from the director command gates and modulates the

@@ -64,7 +64,10 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
 
             // Act
             _rig.HipsBody.angularVelocity = Vector3.forward * 4.5f;
-            yield return new WaitForFixedUpdate();
+            for (int frame = 0; frame < 3; frame++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
 
             // Remove the injected spin after the trigger frame so the test isolates the
             // yield window rather than a prolonged forced tumble.
