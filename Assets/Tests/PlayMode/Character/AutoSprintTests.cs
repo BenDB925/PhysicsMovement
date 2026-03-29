@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using PhysicsDrivenMovement.Character;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int SprintLeadInFrames = 60;
         private const int SprintMeasurementFrames = 80;
         private const int SprintFrames = PreSprintFrames + SprintLeadInFrames + SprintMeasurementFrames;
+        private const int TurningInputFrames = SprintFrames;
         private const int PreJumpSpeedSampleFrames = 5;
         private const int StopFrames = 20;
         private const int WalkJumpFrames = 30;
@@ -26,6 +28,13 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private const int JumpReadyStabilityFrames = 3;
         private const int LandIntoRunObservationFrames = 300;
         private const int WalkJumpObservationFrames = 200;
+        private const float TurningCameraYawStepDegrees = 18f;
+
+        private static readonly FieldInfo AutoSprintDelayField = typeof(PlayerMovement)
+            .GetField("_autoSprintDelay", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        private static readonly FieldInfo SprintHeldField = typeof(PlayerMovement)
+            .GetField("_sprintHeld", BindingFlags.NonPublic | BindingFlags.Instance);
 
         private static readonly Vector3 TestOrigin = new Vector3(2400f, 0f, 2400f);
 
@@ -33,6 +42,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         private float _savedFixedDeltaTime;
         private int _savedSolverIterations;
         private int _savedSolverVelocityIterations;
+        private GameObject _turningCamera;
 
         private sealed class JumpObservation
         {
@@ -62,6 +72,12 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
+            if (_turningCamera != null)
+            {
+                Object.Destroy(_turningCamera);
+                _turningCamera = null;
+            }
+
             _rig?.Dispose();
             _rig = null;
 
@@ -145,6 +161,110 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(speedAfterRestart, Is.LessThan(walkSpeedCap * 1.2f),
                 $"After stopping long enough to clear the grace window, the first {PreSprintFrames} restart frames should return to walk pace. " +
                 $"Observed {speedAfterRestart:F2} with walk cap {walkSpeedCap:F2}.");
+        }
+
+        [UnityTest]
+        public IEnumerator AutoSprint_HeldForwardWithoutSustainedVelocity_DoesNotRampToSprint()
+        {
+            // Arrange
+            float walkSpeedCap = _rig.PlayerMovement.MaxSpeed;
+            float sprintSpeedCap = walkSpeedCap * _rig.PlayerMovement.SprintSpeedMultiplier;
+            CreateTurningCamera();
+            yield return WarmUpForAutoSprint();
+
+            // Act
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+            Vector3 positionAtStart = Flatten(_rig.HipsBody.position);
+            float peakObservedSpeed = 0f;
+
+            for (int frame = 0; frame < TurningInputFrames; frame++)
+            {
+                if (_turningCamera != null)
+                {
+                    _turningCamera.transform.rotation *= Quaternion.Euler(0f, TurningCameraYawStepDegrees, 0f);
+                }
+
+                yield return new WaitForFixedUpdate();
+                peakObservedSpeed = Mathf.Max(peakObservedSpeed, GetHorizontalSpeed(_rig.HipsBody.linearVelocity));
+            }
+
+            float finalSpeed = GetHorizontalSpeed(_rig.HipsBody.linearVelocity);
+            float netDisplacement = GetHorizontalDistance(_rig.HipsBody.position, positionAtStart);
+
+            // Assert
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint TurningInput walkCap={walkSpeedCap:F2} sprintCap={sprintSpeedCap:F2}");
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint TurningInput peakSpeed={peakObservedSpeed:F2} finalSpeed={finalSpeed:F2} netDisplacement={netDisplacement:F2}");
+
+            Assert.That(peakObservedSpeed, Is.LessThan(walkSpeedCap * 1.15f),
+                $"Rapid heading churn with held forward should not build sustained walk-cap speed. " +
+                $"Observed peak speed {peakObservedSpeed:F2} with walk cap {walkSpeedCap:F2}.");
+            Assert.That(finalSpeed, Is.LessThan(sprintSpeedCap * 0.85f),
+                $"Holding forward without sustaining real travel speed should not ramp into sprint. " +
+                $"Observed final speed {finalSpeed:F2} with sprint cap {sprintSpeedCap:F2}.");
+        }
+
+        [UnityTest]
+        public IEnumerator AutoSprint_ReCrossingVelocityThreshold_RebuildsDelay()
+        {
+            // Arrange
+            yield return WarmUpForAutoSprint();
+            _rig.PlayerMovement.SetMoveInputForTest(Vector2.up);
+
+            float autoSprintDelay = GetAutoSprintDelay();
+            int delayFrames = Mathf.CeilToInt(autoSprintDelay / Time.fixedDeltaTime);
+            float qualifyingSpeed = _rig.PlayerMovement.MaxSpeed * 0.9f;
+            int firstBurstFrames = Mathf.Max(1, Mathf.CeilToInt(delayFrames * 0.6f));
+            int secondBurstFrames = Mathf.Max(1, Mathf.CeilToInt(delayFrames * 0.75f));
+
+            // Act
+            yield return DriveHorizontalSpeedForFrames(qualifyingSpeed, firstBurstFrames);
+            yield return DriveHorizontalSpeedForFrames(0f, 1);
+            yield return DriveHorizontalSpeedForFrames(qualifyingSpeed, secondBurstFrames);
+
+            bool sprintHeldBeforeFullRecharge = IsAutoSprintHeld();
+
+            yield return DriveHorizontalSpeedForFrames(qualifyingSpeed, delayFrames - secondBurstFrames + 2);
+            bool sprintHeldAfterFullRecharge = IsAutoSprintHeld();
+
+            // Assert
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint ReCross delayFrames={delayFrames} firstBurst={firstBurstFrames} secondBurst={secondBurstFrames}");
+            TestContext.Out.WriteLine($"[METRIC] AutoSprint ReCross beforeFullRecharge={sprintHeldBeforeFullRecharge} afterFullRecharge={sprintHeldAfterFullRecharge}");
+
+            Assert.That(sprintHeldBeforeFullRecharge, Is.False,
+                "Re-entering the qualifying speed band should restart the auto-sprint charge window instead of preserving earlier partial progress.");
+            Assert.That(sprintHeldAfterFullRecharge, Is.True,
+                "After re-entering the qualifying speed band, auto-sprint should only activate again once the full delay has been earned a second time.");
+        }
+
+        private void CreateTurningCamera()
+        {
+            _turningCamera = new GameObject("AutoSprintTurningCamera");
+            _turningCamera.tag = "MainCamera";
+            _turningCamera.transform.position = TestOrigin + new Vector3(0f, 5f, -10f);
+            _turningCamera.transform.rotation = Quaternion.identity;
+            _turningCamera.AddComponent<Camera>();
+        }
+
+        private float GetAutoSprintDelay()
+        {
+            Assert.That(AutoSprintDelayField, Is.Not.Null, "PlayerMovement must expose private field '_autoSprintDelay' for this regression test.");
+            return (float)AutoSprintDelayField.GetValue(_rig.PlayerMovement);
+        }
+
+        private bool IsAutoSprintHeld()
+        {
+            Assert.That(SprintHeldField, Is.Not.Null, "PlayerMovement must expose private field '_sprintHeld' for this regression test.");
+            return (bool)SprintHeldField.GetValue(_rig.PlayerMovement);
+        }
+
+        private IEnumerator DriveHorizontalSpeedForFrames(float speed, int frames)
+        {
+            for (int frame = 0; frame < frames; frame++)
+            {
+                Vector3 velocity = _rig.HipsBody.linearVelocity;
+                _rig.HipsBody.linearVelocity = new Vector3(0f, velocity.y, speed);
+                yield return new WaitForFixedUpdate();
+            }
         }
 
         [UnityTest]

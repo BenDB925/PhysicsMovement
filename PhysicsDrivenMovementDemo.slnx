@@ -1,5 +1,6 @@
 ﻿<Solution>
   <Project Path="Unity.InputSystem.csproj" />
+  <Project Path="PhysicsDrivenMovement.Tests.PlayMode.csproj" />
   <Project Path="Unity.Netcode.Runtime.csproj" />
   <Project Path="UnityEngine.TestRunner.csproj" />
   <Project Path="Unity.Mathematics.csproj" />
@@ -7,7 +8,6 @@
   <Project Path="Unity.Collections.csproj" />
   <Project Path="UnityEditor.TestRunner.csproj" />
   <Project Path="Unity.PerformanceTesting.Editor.csproj" />
-  <Project Path="PhysicsDrivenMovement.Tests.PlayMode.csproj" />
   <Project Path="Unity.Burst.csproj" />
   <Project Path="PhysicsDrivenMovement.Environment.csproj" />
   <Project Path="Unity.VisualStudio.Editor.csproj" />
@@ -30,5 +30,6 @@
   <Project Path="Unity.Collections.CodeGen.csproj" />
   <Project Path="Unity.Mathematics.Editor.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />
+  <Project Path="PhysicsDrivenMovement.Character.Debug.csproj" />
   <Project Path="Unity.Netcode.PackageChecker.Editor.csproj" />
 </Solution>

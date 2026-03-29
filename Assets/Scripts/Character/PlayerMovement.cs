@@ -55,8 +55,12 @@ namespace PhysicsDrivenMovement.Character
         [Tooltip("Seconds of sustained movement before sprint activates automatically.")]
         [SerializeField] private float _autoSprintDelay = 1.2f;
 
-        [Tooltip("Seconds of zero move input before the auto-sprint timer resets.")]
+        [Tooltip("Seconds of grace after speed drops below the auto-sprint threshold before the timer resets.")]
         [SerializeField] private float _autoSprintStopGraceWindow = 0.1f;
+
+        [Tooltip("Minimum fraction of walk max speed the character must sustain before the auto-sprint timer advances. " +
+             "Prevents held input from charging sprint when turning or circling never builds real travel speed.")]
+        [SerializeField, Range(0f, 1f)] private float _autoSprintMinimumVelocityNormalized = 0.8f;
 
         [SerializeField] private float _landIntoRunSprintThreshold = 0.9f;
 
@@ -280,7 +284,7 @@ namespace PhysicsDrivenMovement.Character
         private float _autoSprintTimer;
 
         /// <summary>
-        /// Remaining zero-input grace time before <see cref="_autoSprintTimer"/> resets.
+        /// Remaining low-speed grace time before <see cref="_autoSprintTimer"/> resets.
         /// </summary>
         private float _autoSprintStopGraceTimer;
 
@@ -289,6 +293,13 @@ namespace PhysicsDrivenMovement.Character
         /// <see cref="_sprintHeldThisPhysicsStep"/> for physics-owned sprint logic.
         /// </summary>
         private bool _sprintHeld;
+
+        /// <summary>
+        /// True when the previous FixedUpdate qualified for auto-sprint timer advancement.
+        /// Used to restart the delay window whenever the character re-enters the
+        /// qualifying-speed band after dropping below it.
+        /// </summary>
+        private bool _wasAboveAutoSprintVelocityThreshold;
 
         /// <summary>
         /// Sprint held state latched for the current physics step.
@@ -460,6 +471,7 @@ namespace PhysicsDrivenMovement.Character
             _sprintHeldThisPhysicsStep = false;
             _autoSprintTimer = 0f;
             _autoSprintStopGraceTimer = 0f;
+            _wasAboveAutoSprintVelocityThreshold = false;
         }
 
         /// <summary>
@@ -561,13 +573,19 @@ namespace PhysicsDrivenMovement.Character
                 CharacterStateType currentState = _characterState != null
                     ? _characterState.CurrentState
                     : CharacterStateType.Standing;
-                bool hasMoveInput = _currentMoveInput.magnitude > 0.1f;
-                bool canAdvanceAutoSprint = hasMoveInput &&
-                    currentState != CharacterStateType.Fallen &&
-                    currentState != CharacterStateType.GettingUp;
+                bool canAdvanceAutoSprint = ShouldAdvanceAutoSprintTimer(currentState);
+                // STEP 0b: Restart the charge window whenever velocity re-enters the qualifying
+                //          band. A fresh above-threshold run must earn the full delay again
+                //          instead of inheriting partial charge from an earlier burst.
+                if (canAdvanceAutoSprint && !_wasAboveAutoSprintVelocityThreshold)
+                {
+                    _autoSprintTimer = 0f;
+                }
 
-                // STEP 0b: Advance sprint in fixed time so the activation delay stays deterministic
+                // STEP 0c: Advance sprint in fixed time so the activation delay stays deterministic
                 //          and SetSprintInputForTest can still short-circuit this entire path.
+                //          The timer now keys off sustained real horizontal speed, not just held input,
+                //          so tight circles or constant turning do not charge sprint without momentum.
                 if (canAdvanceAutoSprint)
                 {
                     _autoSprintStopGraceTimer = _autoSprintStopGraceWindow;
@@ -583,6 +601,7 @@ namespace PhysicsDrivenMovement.Character
                 }
 
                 _sprintHeld = _autoSprintTimer >= _autoSprintDelay;
+                _wasAboveAutoSprintVelocityThreshold = canAdvanceAutoSprint;
             }
 
             // STEP 1: Snapshot button states sampled in Update for this physics tick.
@@ -646,6 +665,7 @@ namespace PhysicsDrivenMovement.Character
 
                 Vector3 velocity = _rb.linearVelocity;
                 Vector3 horizontalVelocity = new Vector3(velocity.x, 0f, velocity.z);
+                        _wasAboveAutoSprintVelocityThreshold = false;
                 Vector3 dampedHorizontalVelocity = horizontalVelocity * perFrameRetain;
                 Vector3 velocityDelta = dampedHorizontalVelocity - horizontalVelocity;
                 _rb.AddForce(velocityDelta, ForceMode.VelocityChange);
@@ -1481,6 +1501,33 @@ namespace PhysicsDrivenMovement.Character
             }
 
             return IsSprintSpeedTierActive() ? 1f : 0f;
+        }
+
+        private bool ShouldAdvanceAutoSprintTimer(CharacterStateType currentState)
+        {
+            if (_rb == null)
+            {
+                return false;
+            }
+
+            if (currentState == CharacterStateType.Fallen ||
+                currentState == CharacterStateType.GettingUp)
+            {
+                return false;
+            }
+
+            if (_currentMoveInput.magnitude <= 0.1f)
+            {
+                return false;
+            }
+
+            float minimumSpeed = _maxSpeed * _autoSprintMinimumVelocityNormalized;
+            return GetHorizontalSpeedMagnitude(_rb.linearVelocity) >= minimumSpeed;
+        }
+
+        private static float GetHorizontalSpeedMagnitude(Vector3 velocity)
+        {
+            return new Vector2(velocity.x, velocity.z).magnitude;
         }
 
         private bool ShouldSuppressLocomotion()

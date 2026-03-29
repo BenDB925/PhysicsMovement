@@ -903,6 +903,7 @@ MonoBehaviour:
   _surrenderAnglePlusMomentumThreshold: 65
   _surrenderAngularVelocityThreshold: 3
   _clearSurrenderRampDuration: 0.35
+  _surrenderCrumpleDuration: 0.25
   _enableStartupStandAssist: 1
   _startupStandAssistDuration: 4
   _enablePersistentSeatedRecovery: 0
@@ -938,6 +939,7 @@ MonoBehaviour:
   _decelStopLeanDecay: 0.2
   _landingAbsorbHeightOffset: 0.05
   _landingAbsorbLeanDeg: 3
+  _landingCounterLeanDeg: 2
   _landingAbsorbDuration: 0.15
   _landingAbsorbBlendOutDuration: 0.2
   _reversalWeightShiftMaxOffset: 0.035
@@ -1098,6 +1100,11 @@ MonoBehaviour:
   _maxSpeed: 5
   _sprintSpeedMultiplier: 1.8
   _sprintBlendDuration: 0.25
+  _autoSprintDelay: 3
+  _autoSprintStopGraceWindow: 0.1
+  _autoSprintMinimumVelocityNormalized: 0.25
+  _landIntoRunSprintThreshold: 0.9
+  _sprintLandingGraceDuration: 0.15
   _jumpForce: 175
   _jumpLaunchHorizontalImpulse: 150
   _jumpAirborneVelocityPreservationFactor: 0.9
@@ -1112,6 +1119,8 @@ MonoBehaviour:
   _jumpAirborneStateGraceDuration: 0.12
   _jumpAirborneStateVelocityThreshold: 0.1
   _jumpPostLandingGraceDuration: 0.2
+  _jumpLandingHorizontalDampingFactor: 0.75
+  _jumpLandingHorizontalDampingDuration: 0.08
   _maxFacingTurnRateDegPerSecond: 540
   _leanReductionStartAngle: 10
   _leanReductionFullAngle: 35
@@ -1135,6 +1144,7 @@ MonoBehaviour:
   _moveEnterThreshold: 0.1
   _moveExitThreshold: 0.05
   _getUpDelay: 0.5
+  _getUpMinDwellDuration: 0.4
   _knockoutDuration: 1.5
   _minFloorDwell: 1.5
   _maxFloorDwell: 3
@@ -1306,8 +1316,10 @@ MonoBehaviour:
   _standHeightFraction: 0.9
   _maxStandUpAttempts: 3
   _forcedStandImpulse: 350
+  _forcedStandFrames: 8
   _completionSpringResetDuration: 0.2
   _phaseSupportRampDuration: 0.15
+  _debugLog: 0
   _balanceController: {fileID: 8927490194607149143}
   _ragdollSetup: {fileID: 6052766930640939594}
 --- !u!1 &1889336342083505185
