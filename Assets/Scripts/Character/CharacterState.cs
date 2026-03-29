@@ -240,7 +240,7 @@ namespace PhysicsDrivenMovement.Character
                     {
                         nextState = CharacterStateType.Fallen;
                     }
-                    else if (shouldBeAirborne)
+                    else if (shouldBeAirborne && _limboForcedDwellTimer <= 0f)
                     {
                         nextState = CharacterStateType.Airborne;
                     }
