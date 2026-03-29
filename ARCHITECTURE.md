@@ -6,7 +6,7 @@
 ## Quick Load
 
 - **Game vision:** physics-driven active-ragdoll obstacle course (Wipeout/Only Up style). Handcrafted course, no respawns. See `Plans/GAME_VISION.md`.
-- Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label, `LocomotionCollapseDetector` as a watchdog input, and `ImpactKnockdownDetector` as the external-force entry point into the surrender/knockdown path.
+- Runtime locomotion authority currently flows through `PlayerMovement` intent into `LocomotionDirector`, then out to `BalanceController` and `LegAnimator`, with `CharacterState` as the high-level safety label, `LocomotionCollapseDetector` as a watchdog input, `CollisionImpactReceiver` as the per-limb external-hit entry point into balance-yield scaling, and `ImpactKnockdownDetector` as the external-force entry point into the surrender/knockdown path.
 - The main shipped runtime assemblies are `Core`, `Character`, `Input`, and `Environment`; editor builders live separately under `PhysicsDrivenMovement.Editor`, and EditMode / PlayMode tests are split into their own assemblies.
 - `RagdollBuilder` owns prefab composition for `PlayerRagdoll.prefab`, while `SceneBuilder` and `ArenaBuilder` generate `Arena_01.unity` and `Museum_01.unity`; both now share `TerrainScenarioBuilder` for Chapter 7 terrain galleries.
 - The `Environment` assembly now carries both room metadata (`ArenaRoom`) and terrain scenario metadata (`TerrainScenarioMarker`, `TerrainScenarioType`) so generated scenes expose stable query surfaces at runtime.
@@ -40,6 +40,7 @@
 │                                                                    │
 │  RagdollSetup.Awake()   ─── disables neighbour collisions         │
 │  BalanceController      ─── PD torque executor for body support   │
+│  CollisionImpactReceiver ─ per-limb collision → impact-yield      │
 │  GroundSensor           ─── foot ground detection                 │
 │  PlayerMovement         ─── input → AddForce on Hips + intent     │
 │  LocomotionDirector     ─── desired input + observations →        │
@@ -136,8 +137,18 @@
 | **What** | MonoBehaviour on the Hips; pure executor that applies PD torque every FixedUpdate to carry out the current `BodySupportCommand` — upright, yaw, height maintenance, and COM lean alignment. |
 | **Why** | Active ragdolls need continuous corrective torque to counteract gravity and perturbations. All locomotion-specific support intent now comes exclusively from `LocomotionDirector` via `BodySupportCommand`; the controller no longer introduces independent locomotion heuristics. |
 | **Public Surface** | `IsGrounded: bool`, `IsFallen: bool`, `UprightAngle: float`, `IsSurrendered: bool`, `SurrenderSeverity: float`, `StandingHipsHeight: float`, `TriggerSurrender(float)`, `ClearSurrender()`, `SetFacingDirection(Vector3)` [Obsolete — kept for test compatibility]. The runtime support-command path is consumed internally from `LocomotionDirector`. |
-| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector` (upright/yaw/stabilization strength, height maintenance scale, desired lean degrees); uses `CharacterState` for fallen/get-up yaw suppression and downstream knockdown state timing; feeds diagnostics through fallen/grounded state. |
+| **Collaborators** | Reads `GroundSensor.IsGrounded`; consumes `BodySupportCommand` from `LocomotionDirector` (upright/yaw/stabilization strength, height maintenance scale, desired lean degrees); accepts direct collision-impact yield triggers from `CollisionImpactReceiver`; uses `CharacterState` for fallen/get-up yaw suppression and downstream knockdown state timing; feeds diagnostics through fallen/grounded state. |
 | **Phase** | Unified locomotion roadmap C5 |
+
+### `Character.CollisionImpactReceiver` — `Assets/Scripts/Character/CollisionImpactReceiver.cs`
+
+| Concern | Detail |
+|---------|--------|
+| **What** | Lightweight MonoBehaviour attached to selected ragdoll rigidbodies that forwards external collision impulses into `BalanceController.ReceiveCollisionImpact(...)`. |
+| **Why** | Lets balance yield react on the exact body part that was hit instead of inferring impact later from hips angular velocity. |
+| **Public Surface** | None. Filters self and ground layers, then calls `BalanceController.ReceiveCollisionImpact(float, Vector3)`. |
+| **Collaborators** | Lives on the PlayerRagdoll and PlayerRagdoll_Skinned prefab body parts; resolves `BalanceController` from the ragdoll root and coexists with `ImpactKnockdownDetector` for heavier knockdown handling. |
+| **Phase** | Impact yield plan 11b |
 
 ### `Character.PlayerMovement` — `Assets/Scripts/Character/PlayerMovement.cs`
 

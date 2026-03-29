@@ -1,1 +1,6 @@
-{"slice":"11a-impact-yield","status":"fail","branch":"slice/11a-impact-yield","notes":"best-known state uses threshold=4 rad/s, yieldScale=0.15, duration=0.35s; ImpactYieldTests passed; exact PlayMode gate still fails LandingRecovery_RecoveryTimeImproved, and master baseline already fails LandingRecovery_DampingDisabledWhenFactorIsOne"}
+{
+    "slice": "11b-collision-impact",
+    "status": "fail",
+    "branch": "plan/11b-collision-impact",
+    "notes": "CollisionImpactReceiver wired on 6 bodies with fullSeverityImpulse=15 N·s; PlayerRagdollPrefabTests passed; exact PlayMode gate still fails baseline LandingRecovery_DampingDisabledWhenFactorIsOne and LandingRecovery_SpeedRecoveryAfterDamping"
+}

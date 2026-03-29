@@ -160,24 +160,30 @@ namespace PhysicsDrivenMovement.Character
 
         [Header("Impact Yield")]
 
-        [SerializeField, Range(1f, 20f)]
-        [Tooltip("Hips angular velocity (rad/s) that triggers impact yield. " +
-             "Normal walking/turning peaks around 1-2 rad/s. " +
-             "A solid cube hit produces 4-8+ rad/s.")]
-        private float _impactYieldAngularVelocityThreshold = 4f;
+           [SerializeField, Range(1f, 50f)]
+           [Tooltip("Impulse magnitude (N*s) that counts as a full hit and drives maximum yield. " +
+                  "Scale this to match your hammer or obstacle mass times velocity.")]
+           private float _impactYieldFullSeverityImpulse = 15f;
 
-        [SerializeField, Range(0f, 1f)]
-        [Tooltip("UprightStrength/HeightMaintenance/Stabilization scale during impact yield window. " +
-             "0 = fully limp, 1 = no yield. 0.1-0.2 gives visible reaction while still recovering.")]
-        private float _impactYieldStrengthScale = 0.15f;
+           [SerializeField, Range(0f, 1f)]
+           [Tooltip("Upright-strength scale for a light glancing hit. 0.4 = mild stagger.")]
+           private float _impactYieldStrengthScaleLight = 0.4f;
 
-        [SerializeField, Range(0.05f, 1f)]
-        [Tooltip("How long (seconds) the yield window lasts after an impact is detected.")]
-        private float _impactYieldDuration = 0.35f;
+           [SerializeField, Range(0f, 1f)]
+           [Tooltip("Upright-strength scale for a full heavy hit. 0 = character fully sails.")]
+           private float _impactYieldStrengthScaleHeavy = 0f;
+
+           [SerializeField, Range(0.05f, 0.3f)]
+           [Tooltip("Yield duration for a light hit in seconds.")]
+           private float _impactYieldDurationLight = 0.15f;
+
+           [SerializeField, Range(0.2f, 1f)]
+           [Tooltip("Yield duration for a full heavy hit in seconds.")]
+           private float _impactYieldDurationHeavy = 0.5f;
 
         [SerializeField, Range(0.1f, 2f)]
         [Tooltip("Minimum seconds between impact yield triggers. Prevents rapid re-triggering.")]
-        private float _impactYieldCooldown = 0.5f;
+        private float _impactYieldCooldown = 0.4f;
 
         [Header("Startup Stand Assist")]
         [SerializeField]
@@ -523,7 +529,6 @@ namespace PhysicsDrivenMovement.Character
         private float _impactYieldCooldownTimer;
         private float _impactYieldTimer;
         private float _impactYieldPostLandingSuppressTimer;
-        private float _previousImpactYieldAngularSpeed;
         private bool _impactYieldActive;
         private bool _previousIsRecentJumpAirborne;
 
@@ -702,7 +707,6 @@ namespace PhysicsDrivenMovement.Character
             _impactYieldCooldownTimer = 0f;
             _impactYieldTimer = 0f;
             _impactYieldPostLandingSuppressTimer = 0f;
-            _previousImpactYieldAngularSpeed = 0f;
             _impactYieldActive = false;
             CancelAllRamps();
             IsSurrendered = true;
@@ -765,7 +769,6 @@ namespace PhysicsDrivenMovement.Character
             _surrenderExtremeAngleFrameCount = 0;
             _impactYieldCooldownTimer = 0f;
             _impactYieldTimer = 0f;
-            _previousImpactYieldAngularSpeed = 0f;
             _impactYieldActive = false;
 
             // Prevent immediate re-trigger while the character transitions through
@@ -817,6 +820,55 @@ namespace PhysicsDrivenMovement.Character
         {
             _stabilizationRamp = CreateScaleRamp(StabilizationScale, targetScale, duration, out float nextValue);
             StabilizationScale = nextValue;
+        }
+
+        /// <summary>
+        /// Starts an impact-yield window from a direct external collision impulse routed by
+        /// <see cref="CollisionImpactReceiver"/>.
+        /// </summary>
+        /// <param name="impulseMagnitude">Collision impulse magnitude in N*s.</param>
+        /// <param name="impulseVector">World-space collision impulse vector.</param>
+        public void ReceiveCollisionImpact(float impulseMagnitude, Vector3 impulseVector)
+        {
+            // STEP 1: Ignore states where impact yield would be redundant or should stay suppressed.
+            if (IsFallen ||
+                IsSurrendered ||
+                _impactYieldActive ||
+                _impactYieldCooldownTimer > 0f ||
+                _impactYieldPostLandingSuppressTimer > 0f ||
+                _landingAbsorbTimer > 0f)
+            {
+                return;
+            }
+
+            if (_playerMovement == null)
+            {
+                TryGetComponent(out _playerMovement);
+            }
+
+            if (_playerMovement != null && _playerMovement.IsRecentJumpAirborne)
+            {
+                return;
+            }
+
+            // STEP 2: Resolve severity from the raw collision impulse and map it to support-scale loss.
+            float resolvedImpulseMagnitude = impulseMagnitude > 0f ? impulseMagnitude : impulseVector.magnitude;
+            if (resolvedImpulseMagnitude <= 0f)
+            {
+                return;
+            }
+
+            float severity = Mathf.Clamp01(resolvedImpulseMagnitude / _impactYieldFullSeverityImpulse);
+            float yieldScale = Mathf.Lerp(_impactYieldStrengthScaleLight, _impactYieldStrengthScaleHeavy, severity);
+            float duration = Mathf.Lerp(_impactYieldDurationLight, _impactYieldDurationHeavy, severity);
+
+            // STEP 3: Drop the local support scales immediately, then let the existing timer restore them.
+            RampUprightStrength(yieldScale, 0f);
+            RampHeightMaintenance(yieldScale, 0f);
+            RampStabilization(yieldScale, 0f);
+            _impactYieldTimer = duration;
+            _impactYieldCooldownTimer = _impactYieldCooldown;
+            _impactYieldActive = true;
         }
 
         /// <summary>
@@ -1007,9 +1059,21 @@ namespace PhysicsDrivenMovement.Character
                 _surrenderAngleThreshold);
             _surrenderAngularVelocityThreshold = Mathf.Max(0f, _surrenderAngularVelocityThreshold);
             _clearSurrenderRampDuration = Mathf.Max(0f, _clearSurrenderRampDuration);
-            _impactYieldAngularVelocityThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold);
-            _impactYieldStrengthScale = Mathf.Clamp01(_impactYieldStrengthScale);
-            _impactYieldDuration = Mathf.Max(0.05f, _impactYieldDuration);
+            _impactYieldFullSeverityImpulse = Mathf.Max(1f, _impactYieldFullSeverityImpulse);
+            _impactYieldStrengthScaleLight = Mathf.Clamp01(_impactYieldStrengthScaleLight);
+            _impactYieldStrengthScaleHeavy = Mathf.Clamp01(_impactYieldStrengthScaleHeavy);
+            if (_impactYieldStrengthScaleHeavy > _impactYieldStrengthScaleLight)
+            {
+                _impactYieldStrengthScaleHeavy = _impactYieldStrengthScaleLight;
+            }
+
+            _impactYieldDurationLight = Mathf.Clamp(_impactYieldDurationLight, 0.05f, 0.3f);
+            _impactYieldDurationHeavy = Mathf.Clamp(_impactYieldDurationHeavy, 0.2f, 1f);
+            if (_impactYieldDurationHeavy < _impactYieldDurationLight)
+            {
+                _impactYieldDurationHeavy = _impactYieldDurationLight;
+            }
+
             _impactYieldCooldown = Mathf.Max(0.1f, _impactYieldCooldown);
 
             _startupStandAssistDuration = Mathf.Max(0f, _startupStandAssistDuration);
@@ -1073,7 +1137,7 @@ namespace PhysicsDrivenMovement.Character
                 IsGrounded = leftGrounded || rightGrounded;
             }
 
-            // STEP 1.5: Yield balance support briefly when a large angular impact hits the hips.
+            // STEP 1.5: Count down the impact-yield timers and keep the landing-suppress window current.
             _impactYieldCooldownTimer = Mathf.Max(0f, _impactYieldCooldownTimer - Time.fixedDeltaTime);
 
             if (_impactYieldTimer > 0f)
@@ -1143,11 +1207,6 @@ namespace PhysicsDrivenMovement.Character
             IsFallen  = nowFallen;
             _wasFallen = nowFallen;
 
-            Vector3 impactYieldPitchRollAngVel = new Vector3(_rb.angularVelocity.x, 0f, _rb.angularVelocity.z);
-            float impactYieldAngularSpeed = GetTiltDirectionalAngularVelocity(currentUp, impactYieldPitchRollAngVel);
-            float angularSpeedSpike = impactYieldAngularSpeed - _previousImpactYieldAngularSpeed;
-            float angularSpeedSpikeThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold * 0.5f);
-
             // Detect landing transition (IsRecentJumpAirborne going from true → false) and
             // start a post-landing suppress window so the touchdown angular spike never triggers yield.
             bool currentIsRecentJumpAirborne = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
@@ -1155,26 +1214,6 @@ namespace PhysicsDrivenMovement.Character
                 _impactYieldPostLandingSuppressTimer = 0.3f; // 30 frames @ 100Hz covers the touchdown spike
             _previousIsRecentJumpAirborne = currentIsRecentJumpAirborne;
             _impactYieldPostLandingSuppressTimer = Mathf.Max(0f, _impactYieldPostLandingSuppressTimer - Time.fixedDeltaTime);
-
-            bool suppressImpactYieldForJumpLanding = currentIsRecentJumpAirborne
-                                                     || _impactYieldPostLandingSuppressTimer > 0f
-                                                     || _landingAbsorbTimer > 0f;
-            if (!IsFallen && !IsSurrendered && !suppressImpactYieldForJumpLanding &&
-                !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
-            {
-                if (impactYieldAngularSpeed >= _impactYieldAngularVelocityThreshold &&
-                    angularSpeedSpike >= angularSpeedSpikeThreshold)
-                {
-                    RampUprightStrength(_impactYieldStrengthScale, 0.05f);
-                    RampHeightMaintenance(_impactYieldStrengthScale, 0.05f);
-                    RampStabilization(_impactYieldStrengthScale, 0.05f);
-                    _impactYieldTimer = _impactYieldDuration;
-                    _impactYieldCooldownTimer = _impactYieldCooldown;
-                    _impactYieldActive = true;
-                }
-            }
-
-            _previousImpactYieldAngularSpeed = impactYieldAngularSpeed;
 
             // STEP 3.5: Apply startup stand assist while grounded and low.
             // HeightMaintenanceScale from the director command gates and modulates the

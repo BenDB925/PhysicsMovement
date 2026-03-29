@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7625213697705590229}
   - component: {fileID: 6325057963812778648}
   - component: {fileID: 2657471143705148208}
+  - component: {fileID: 4385931552847653803}
   m_Layer: 8
   m_Name: UpperArm_R
   m_TagString: Untagged
@@ -187,6 +188,18 @@ ConfigurableJoint:
   m_EnablePreprocessing: 1
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!114 &4385931552847653803
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 545393512186983329}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &1060856193404607595
 GameObject:
   m_ObjectHideFlags: 0
@@ -386,6 +399,7 @@ GameObject:
   - component: {fileID: 5716694374771521832}
   - component: {fileID: 6884137261335814547}
   - component: {fileID: 8070146263368285226}
+  - component: {fileID: 4385931552847653802}
   m_Layer: 8
   m_Name: Torso
   m_TagString: Untagged
@@ -561,6 +575,18 @@ ConfigurableJoint:
   m_EnablePreprocessing: 1
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!114 &4385931552847653802
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1343712126569074210}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &1632785032432014568
 GameObject:
   m_ObjectHideFlags: 0
@@ -769,6 +795,7 @@ GameObject:
   - component: {fileID: 4632267047828400493}
   - component: {fileID: 7243388157421600041}
   - component: {fileID: 5847293161038492753}
+  - component: {fileID: 4385931552847653801}
   m_Layer: 8
   m_Name: PlayerRagdoll_Skinned
   m_TagString: Untagged
@@ -904,6 +931,12 @@ MonoBehaviour:
   _surrenderAngularVelocityThreshold: 3
   _clearSurrenderRampDuration: 0.35
   _surrenderCrumpleDuration: 0.25
+  _impactYieldFullSeverityImpulse: 15
+  _impactYieldStrengthScaleLight: 0.4
+  _impactYieldStrengthScaleHeavy: 0
+  _impactYieldDurationLight: 0.15
+  _impactYieldDurationHeavy: 0.5
+  _impactYieldCooldown: 0.4
   _enableStartupStandAssist: 1
   _startupStandAssistDuration: 4
   _enablePersistentSeatedRecovery: 0
@@ -1322,6 +1355,18 @@ MonoBehaviour:
   _debugLog: 0
   _balanceController: {fileID: 8927490194607149143}
   _ragdollSetup: {fileID: 6052766930640939594}
+--- !u!114 &4385931552847653801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801282067977710084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &1889336342083505185
 GameObject:
   m_ObjectHideFlags: 0
@@ -1728,6 +1773,7 @@ GameObject:
   - component: {fileID: 2907851372082815428}
   - component: {fileID: 7679299268441789427}
   - component: {fileID: 386199501954179528}
+  - component: {fileID: 4385931552847653804}
   m_Layer: 8
   m_Name: UpperArm_L
   m_TagString: Untagged
@@ -1903,6 +1949,18 @@ ConfigurableJoint:
   m_EnablePreprocessing: 1
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!114 &4385931552847653804
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5383982986113063260}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &5492527229792768848
 GameObject:
   m_ObjectHideFlags: 0
@@ -1915,6 +1973,7 @@ GameObject:
   - component: {fileID: 3465528763728507532}
   - component: {fileID: 3986826321870950310}
   - component: {fileID: 6405150886276696201}
+  - component: {fileID: 4385931552847653805}
   m_Layer: 8
   m_Name: UpperLeg_L
   m_TagString: Untagged
@@ -2090,6 +2149,18 @@ ConfigurableJoint:
   m_EnablePreprocessing: 1
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!114 &4385931552847653805
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5492527229792768848}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &7407452008666707258
 GameObject:
   m_ObjectHideFlags: 0
@@ -2564,8 +2635,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.13
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.35
+  m_Center: {x: 0, y: 0.1, z: 0}
 --- !u!153 &4003915468810788432
 ConfigurableJoint:
   m_ObjectHideFlags: 0
@@ -2867,6 +2938,7 @@ GameObject:
   - component: {fileID: 4570370184917858932}
   - component: {fileID: 5048402422600655718}
   - component: {fileID: 3194518698794154288}
+  - component: {fileID: 4385931552847653806}
   m_Layer: 8
   m_Name: UpperLeg_R
   m_TagString: Untagged
@@ -3042,6 +3114,18 @@ ConfigurableJoint:
   m_EnablePreprocessing: 1
   m_MassScale: 1
   m_ConnectedMassScale: 1
+--- !u!114 &4385931552847653806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8658886918144273490}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cf8ab0a1d0543a1abfe0cbd4c61b4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhysicsDrivenMovement.Character::PhysicsDrivenMovement.Character.CollisionImpactReceiver
 --- !u!1 &8697772402156736498
 GameObject:
   m_ObjectHideFlags: 0

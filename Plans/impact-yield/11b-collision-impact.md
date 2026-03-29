@@ -200,3 +200,28 @@ Send Telegram:
 $body = @{ chat_id = "8630971080"; text = "[plan-11b] Collision impact done. Hit with hammer to test - should sail on full hit. STATUS: pass/fail." } | ConvertTo-Json
 Invoke-RestMethod -Uri "https://api.telegram.org/bot8733821405:AAHgYbzmTD7SiIrdkh_rVs7ujTxQtKdfpDg/sendMessage" -Method Post -Body $body -ContentType "application/json"
 ```
+
+## Execution Status
+
+- State: Blocked
+- Branch: `plan/11b-collision-impact`
+- Best known implementation state: `CollisionImpactReceiver` is wired on the ragdoll root, torso, both upper arms, and both upper legs in both `PlayerRagdoll.prefab` and `PlayerRagdoll_Skinned.prefab`; `BalanceController` now consumes direct collision impulses with `fullSeverityImpulse = 15 N·s`, light/heavy yield scaling, and the angular-velocity trigger path removed
+- Current blocker: the exact required PlayMode gate still fails `LandingRecovery_DampingDisabledWhenFactorIsOne` and `LandingRecovery_SpeedRecoveryAfterDamping`; a clean HEAD comparison worktree reproduces both failures, so the slice is blocked by pre-existing landing-recovery red rather than a new 11b-only failure
+- Current next step: perform the in-editor hammer/cube manual check, then rerun the exact PlayMode gate after the landing-recovery baseline red is resolved or explicitly waived
+
+## Quick Resume
+
+- Direct collision-impact yield is implemented through `CollisionImpactReceiver` plus `BalanceController.ReceiveCollisionImpact(...)`, and both source/runtime ragdoll prefabs are wired to the six intended receiver-bearing bodies
+- Focused prefab coverage is green: `PhysicsDrivenMovement.Tests.EditMode.Character.PlayerRagdollPrefabTests` passed 3/3 on 2026-03-29 after adding receiver-wiring assertions
+- The exact 11b PlayMode gate on the slice currently fails the same two landing-recovery tests reproduced from a clean base-commit worktree: `LandingRecovery_DampingDisabledWhenFactorIsOne` and `LandingRecovery_SpeedRecoveryAfterDamping`
+
+## Verified Artifacts
+
+- `Assets/Scripts/Character/CollisionImpactReceiver.cs`: direct collision impulse bridge into balance yield
+- `Assets/Scripts/Character/BalanceController.cs`: direct collision-impact yield implementation with severity-based scaling and the old angular trigger removed
+- `Assets/Prefabs/PlayerRagdoll.prefab`: source ragdoll receiver wiring and 11b impact-yield values
+- `Assets/Prefabs/PlayerRagdoll_Skinned.prefab`: runtime/test ragdoll receiver wiring and 11b impact-yield values
+- `Assets/Tests/EditMode/Character/PlayerRagdollPrefabTests.cs`: receiver-wiring regression coverage for both prefabs
+- `Logs/test_editmode_20260329_121250.log`: focused EditMode pass (`3 passed, 0 failed`)
+- `Logs/test_playmode_20260329_120254.log`: exact 11b PlayMode gate on the slice (`32 passed, 2 failed`)
+- `TestResults/EditMode.xml` and `TestResults/PlayMode.xml`: authoritative NUnit results for the focused EditMode run and exact PlayMode gate
