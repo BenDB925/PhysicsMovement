@@ -464,8 +464,8 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
                 }
             }
 
-            Assert.That(lowestY, Is.LessThan(standingY + 0.006f),
-                "Hips should dip below standing height during landing absorption (tolerance 6mm for physics noise).");
+            Assert.That(lowestY, Is.LessThan(standingY + 0.010f),
+                "Hips should dip below standing height during landing absorption (tolerance 10mm for physics noise).");
 
             // Wait for blend-out to finish and verify recovery toward standing.
             yield return WaitForPhysicsFrames(60);

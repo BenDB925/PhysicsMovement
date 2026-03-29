@@ -522,8 +522,10 @@ namespace PhysicsDrivenMovement.Character
         private float _surrenderCooldownTimer;
         private float _impactYieldCooldownTimer;
         private float _impactYieldTimer;
+        private float _impactYieldPostLandingSuppressTimer;
         private float _previousImpactYieldAngularSpeed;
         private bool _impactYieldActive;
+        private bool _previousIsRecentJumpAirborne;
 
         /// <summary>Lazily resolved reference to PlayerMovement for jump-airborne detection.</summary>
         private PlayerMovement _playerMovement;
@@ -699,6 +701,7 @@ namespace PhysicsDrivenMovement.Character
 
             _impactYieldCooldownTimer = 0f;
             _impactYieldTimer = 0f;
+            _impactYieldPostLandingSuppressTimer = 0f;
             _previousImpactYieldAngularSpeed = 0f;
             _impactYieldActive = false;
             CancelAllRamps();
@@ -1144,7 +1147,18 @@ namespace PhysicsDrivenMovement.Character
             float impactYieldAngularSpeed = GetTiltDirectionalAngularVelocity(currentUp, impactYieldPitchRollAngVel);
             float angularSpeedSpike = impactYieldAngularSpeed - _previousImpactYieldAngularSpeed;
             float angularSpeedSpikeThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold * 0.5f);
-            bool suppressImpactYieldForJumpLanding = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
+
+            // Detect landing transition (IsRecentJumpAirborne going from true → false) and
+            // start a post-landing suppress window so the touchdown angular spike never triggers yield.
+            bool currentIsRecentJumpAirborne = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
+            if (_previousIsRecentJumpAirborne && !currentIsRecentJumpAirborne)
+                _impactYieldPostLandingSuppressTimer = 0.3f; // 30 frames @ 100Hz covers the touchdown spike
+            _previousIsRecentJumpAirborne = currentIsRecentJumpAirborne;
+            _impactYieldPostLandingSuppressTimer = Mathf.Max(0f, _impactYieldPostLandingSuppressTimer - Time.fixedDeltaTime);
+
+            bool suppressImpactYieldForJumpLanding = currentIsRecentJumpAirborne
+                                                     || _impactYieldPostLandingSuppressTimer > 0f
+                                                     || _landingAbsorbTimer > 0f;
             if (!IsFallen && !IsSurrendered && !suppressImpactYieldForJumpLanding &&
                 !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
             {
