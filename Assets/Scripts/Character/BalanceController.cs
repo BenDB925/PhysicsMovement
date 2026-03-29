@@ -522,6 +522,7 @@ namespace PhysicsDrivenMovement.Character
         private float _surrenderCooldownTimer;
         private float _impactYieldCooldownTimer;
         private float _impactYieldTimer;
+        private float _previousImpactYieldAngularSpeed;
         private bool _impactYieldActive;
 
         /// <summary>Lazily resolved reference to PlayerMovement for jump-airborne detection.</summary>
@@ -698,6 +699,7 @@ namespace PhysicsDrivenMovement.Character
 
             _impactYieldCooldownTimer = 0f;
             _impactYieldTimer = 0f;
+            _previousImpactYieldAngularSpeed = 0f;
             _impactYieldActive = false;
             CancelAllRamps();
             IsSurrendered = true;
@@ -760,6 +762,7 @@ namespace PhysicsDrivenMovement.Character
             _surrenderExtremeAngleFrameCount = 0;
             _impactYieldCooldownTimer = 0f;
             _impactYieldTimer = 0f;
+            _previousImpactYieldAngularSpeed = 0f;
             _impactYieldActive = false;
 
             // Prevent immediate re-trigger while the character transitions through
@@ -1137,12 +1140,15 @@ namespace PhysicsDrivenMovement.Character
             IsFallen  = nowFallen;
             _wasFallen = nowFallen;
 
+            float angularSpeed = _rb.angularVelocity.magnitude;
+            float angularSpeedSpike = angularSpeed - _previousImpactYieldAngularSpeed;
+            float angularSpeedSpikeThreshold = Mathf.Max(1f, _impactYieldAngularVelocityThreshold * 0.5f);
             bool suppressImpactYieldForJumpLanding = _playerMovement != null && _playerMovement.IsRecentJumpAirborne;
             if (!IsFallen && !IsSurrendered && !suppressImpactYieldForJumpLanding &&
                 !_impactYieldActive && _impactYieldCooldownTimer <= 0f)
             {
-                float angularSpeed = _rb.angularVelocity.magnitude;
-                if (angularSpeed >= _impactYieldAngularVelocityThreshold)
+                if (angularSpeed >= _impactYieldAngularVelocityThreshold &&
+                    angularSpeedSpike >= angularSpeedSpikeThreshold)
                 {
                     RampUprightStrength(_impactYieldStrengthScale, 0.05f);
                     RampHeightMaintenance(_impactYieldStrengthScale, 0.05f);
@@ -1152,6 +1158,8 @@ namespace PhysicsDrivenMovement.Character
                     _impactYieldActive = true;
                 }
             }
+
+            _previousImpactYieldAngularSpeed = angularSpeed;
 
             // STEP 3.5: Apply startup stand assist while grounded and low.
             // HeightMaintenanceScale from the director command gates and modulates the
