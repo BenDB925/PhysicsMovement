@@ -521,15 +521,13 @@ namespace PhysicsDrivenMovement.Character
             _enteredFallenFromCollapse = false;
             ChangeState(CharacterStateType.Fallen);
         }
-    }
 
     /// <summary>
     /// Applies a physics nudge to escape geometry when the character is stuck in Airborne limbo.
     /// Uses ComputePenetration to push away from overlapping colliders, plus a small upward impulse.
     /// </summary>
     private void ApplyLimboEscapeNudge()
-    {
-        if (_rb == null) return;
+    {        if (_rb == null) return;
 
         const float NudgeImpulse   = 3f;   // upward impulse to clear geometry
         const float SeparationImpulse = 4f; // per-collider separation impulse
@@ -571,12 +569,13 @@ namespace PhysicsDrivenMovement.Character
         // Always nudge upward to help clear the geometry.
         _rb.AddForce(Vector3.up * NudgeImpulse, ForceMode.Impulse);
     }
+}
 
-    /// <summary>
-    /// High-level locomotion/posture states for ragdoll gameplay logic.
-    /// </summary>
-    public enum CharacterStateType
-    {
+/// <summary>
+/// High-level locomotion/posture states for ragdoll gameplay logic.
+/// </summary>
+public enum CharacterStateType
+{
         Standing = 0,
         Moving = 1,
         Airborne = 2,
