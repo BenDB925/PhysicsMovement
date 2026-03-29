@@ -66,6 +66,8 @@ namespace PhysicsDrivenMovement.Character
         private float _gettingUpTimer;
         private float _collapseDeferralTimer;
         private float _airborneLimboTimer;
+        private Vector3 _limboPositionSample;
+        private float _limboPositionSampleTimer;
         private float _limboForcedDwellTimer;
         private float _activeFloorDwellTargetTime;
         private int _getUpImpulseAppliedCount;
@@ -261,19 +263,29 @@ namespace PhysicsDrivenMovement.Character
                     else
                     {
                         // Limbo escape: stuck on geometry (e.g. knees on ledge, feet dangling).
-                        // Upright but not grounded, velocity near zero for an extended period.
-                        // Also fires when Airborne too long even with move input (covers cowboy-on-rocks
-                        // where move input applies force but the character can't actually go anywhere).
-                        float hipSpeed = _rb != null ? _rb.linearVelocity.magnitude : 0f;
-                        bool likelyStuck = hipSpeed < 0.3f && _balanceController.UprightAngle < 45f;
-                        if (likelyStuck)
-                            _airborneLimboTimer += Time.fixedDeltaTime;
-                        else
-                            _airborneLimboTimer = Mathf.Max(0f, _airborneLimboTimer - Time.fixedDeltaTime * 2f);
+                        // Checks displacement over a 0.5s window — catches cases where move input
+                        // keeps velocity above zero but the character isn't actually going anywhere.
+                        bool uprightEnough = _balanceController.UprightAngle < 45f;
+                        if (_limboPositionSampleTimer == 0f && _rb != null)
+                            _limboPositionSample = _rb.position; // seed on first frame
+                        _limboPositionSampleTimer += Time.fixedDeltaTime;
+                        if (_limboPositionSampleTimer >= 0.5f)
+                        {
+                            Vector3 currentPos = _rb != null ? _rb.position : transform.position;
+                            float displaced = Vector3.Distance(currentPos, _limboPositionSample);
+                            bool likelyStuck = displaced < 0.1f && uprightEnough; // <10cm in 0.5s = stuck
+                            if (likelyStuck)
+                                _airborneLimboTimer += 0.5f;
+                            else
+                                _airborneLimboTimer = Mathf.Max(0f, _airborneLimboTimer - 0.5f);
+                            _limboPositionSample = currentPos;
+                            _limboPositionSampleTimer = 0f;
+                        }
 
                         if (_airborneLimboTimer >= 1.5f)
                         {
                             _airborneLimboTimer = 0f;
+                            _limboPositionSampleTimer = 0f;
                             _limboForcedDwellTimer = 0.4f;
                             nextState = CharacterStateType.Standing;
                             ApplyLimboEscapeNudge();
