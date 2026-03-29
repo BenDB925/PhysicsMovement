@@ -48,7 +48,7 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator AngularVelocitySpike_YieldsBalanceThenRecovers()
+        public IEnumerator SideImpulse_YieldsBalanceThenRecovers()
         {
             // Arrange
             _rig = PlayerPrefabTestRig.Create(new PlayerPrefabTestRig.Options
@@ -63,14 +63,17 @@ namespace PhysicsDrivenMovement.Tests.PlayMode
             Assert.That(_rig.BalanceController.StabilizationScale, Is.EqualTo(1f).Within(0.001f));
 
             // Act
-            _rig.HipsBody.angularVelocity = Vector3.forward * 4.5f;
+            Rigidbody targetBody = _rig.TorsoBody != null ? _rig.TorsoBody : _rig.HipsBody;
+            Vector3 forcePoint = targetBody.worldCenterOfMass + Vector3.up * 0.1f;
+            targetBody.AddForceAtPosition(Vector3.left * 280f, forcePoint, ForceMode.Impulse);
+
             for (int frame = 0; frame < 3; frame++)
             {
                 yield return new WaitForFixedUpdate();
             }
 
-            // Remove the injected spin after the trigger frame so the test isolates the
-            // yield window rather than a prolonged forced tumble.
+            // Remove the peak angular motion after the trigger window so the test isolates
+            // the temporary balance-yield path rather than a prolonged forced tumble.
             _rig.HipsBody.angularVelocity = Vector3.zero;
 
             float minUprightScale = _rig.BalanceController.UprightStrengthScale;
